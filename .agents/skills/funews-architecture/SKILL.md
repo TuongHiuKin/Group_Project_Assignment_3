@@ -3,9 +3,14 @@ name: funews-architecture
 description: Apply AIVES MVC, BLL and DAL boundaries when implementing or reviewing features, entities, repositories or structure, with Group 6 viva-exam feedback and reporting as the current priority.
 ---
 
-# AIVES architecture — Group 6 feedback and reports
+# AIVES architecture — Historical / Group 6 reference
 
-The historical skill name is retained for compatibility. Current user-approved priority is student per-attempt reports and lecturer class statistics for a viva-exam system. Existing News code is not evidence that exam reporting works. Preserve it; do not migrate stacks or restore historical projects without authorization.
+> [!WARNING]
+> **SUPERSEDED FOR ASSIGNMENT 2:** This skill is retained for legacy compatibility only. For active development, refer to:
+> - Architecture: [`.agents/skills/aives-architecture/SKILL.md`](../aives-architecture/SKILL.md)
+> - Realtime SignalR: [`.agents/skills/aives-realtime-signalr/SKILL.md`](../aives-realtime-signalr/SKILL.md)
+> - AI Integration: [`.agents/skills/aives-ai-integration/SKILL.md`](../aives-ai-integration/SKILL.md)
+> - Shared Contracts: [`docs/ASM2-CONTRACTS.md`](../../docs/ASM2-CONTRACTS.md)
 
 ## Read only the relevant project context
 
