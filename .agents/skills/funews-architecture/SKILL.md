@@ -3,9 +3,14 @@ name: funews-architecture
 description: Apply AIVES MVC, BLL and DAL boundaries when implementing or reviewing features, entities, repositories or structure, with Group 6 viva-exam feedback and reporting as the current priority.
 ---
 
-# AIVES architecture — Group 6 feedback and reports
+# AIVES architecture — Historical / Group 6 reference
 
-The historical skill name is retained for compatibility. Current user-approved priority is student per-attempt reports and lecturer class statistics for a viva-exam system. Existing News code is not evidence that exam reporting works. Preserve it; do not migrate stacks or restore historical projects without authorization.
+> [!WARNING]
+> **SUPERSEDED FOR ASSIGNMENT 2:** This skill is retained for legacy compatibility only. For active development, refer to:
+> - Architecture: [`.agents/skills/aives-architecture/SKILL.md`](../aives-architecture/SKILL.md)
+> - Realtime SignalR: [`.agents/skills/aives-realtime-signalr/SKILL.md`](../aives-realtime-signalr/SKILL.md)
+> - AI Integration: [`.agents/skills/aives-ai-integration/SKILL.md`](../aives-ai-integration/SKILL.md)
+> - Shared Contracts: [`docs/ASM2-CONTRACTS.md`](../../docs/ASM2-CONTRACTS.md)
 
 ## Read only the relevant project context
 
@@ -18,12 +23,22 @@ The historical skill name is retained for compatibility. Current user-approved p
 
 ## Enforce architectural boundaries
 
-Use MVC → BLL → DAL project references, with MVC referencing DAL at startup for DI.
-The real data flow is View → Controller → Service → Repository → DAO → scoped DbContext → SQL Server.
-Controllers use BLL interfaces, never repositories, DAOs, DbContext/DbSet or SQL. Keep ViewModels in MVC, business/report calculations in BLL, entity mapping and EF/LINQ persistence in DAL.
-Service code must not use HTTP/View types or DbContext. Do not duplicate calculations independently in Views/charts.
-Preserve Repository and DAO boundaries; don't add empty CRUD classes just to match examples.
-DAOs use thread-safe Singleton instances without retaining scoped contexts. Scoped repositories pass context per operation. Do not run concurrent queries on the same context.
+Use MVC → BLL → DAL project references, with MVC referencing DAL at startup for DI. `StudentNameMVC` is the physical Presentation project.
+The official request path is:
+Razor View → MVC Controller → BLL Service → DAL Repository → AIVESDbContext → SQL Server.
+
+Controllers use BLL interfaces, never repositories, DbContext/DbSet or SQL. Keep ViewModels in MVC, business/report calculations in BLL, entity mapping and EF/LINQ persistence in DAL.
+Service code must not use HTTP/View types or DbContext. Do not duplicate calculations independently in Views/charts. Services depend on Repository interfaces.
+
+Repository rules:
+1. Repository lives in DAL (`AIVES.DAL/Repositories/`).
+2. Repository implementation directly uses scoped `AIVESDbContext`.
+3. Repository contains EF Core/LINQ data-access logic (includes, filters, projections, and persistence).
+4. Repository interface is consumed by BLL.
+5. Repository must never contain presentation logic.
+6. Repository should not contain business-policy decisions (BLL applies business rules; Repository provides data access).
+7. Repository and `AIVESDbContext` must remain Scoped. Repository must never be Singleton while holding a Scoped DbContext.
+8. Controller must never call Repository directly. No redundant DAO pass-through layer is used.
 
 ## Protect semantics and integration boundaries
 

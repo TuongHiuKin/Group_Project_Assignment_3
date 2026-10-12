@@ -1,33 +1,87 @@
-# AIVES — Agent & Team Instructions
+# AIVES — Agent & Team Governance Instructions
 
-## Mục tiêu hiện hành
+## 1. Project Identity & Assignment 2 Scope
 
-Ưu tiên **nhóm 6 — Phản hồi & báo cáo thi vấn đáp**: báo cáo cá nhân theo lượt thi, thống kê lớp và biểu đồ. Đây là định hướng mới người dùng đã xác nhận; News Management là module/lịch sử còn trong source, không phải tiêu chí nghiệm thu nhóm 6.
+**AIVES — AI-powered Viva Examination System** is a 3-layer enterprise ASP.NET Core .NET 8 application.
 
-Nền kỹ thuật hiện hành vẫn là ASP.NET Core MVC .NET 8 + BLL + DAL, EF Core, LINQ, SQL Server. Không suy ra việc đổi nghiệp vụ cho phép đổi stack, tự đổi schema hoặc phục hồi project khác từ Git history.
+* **Current Active Goal (Assignment 2):** **Group 3 — AI Interview Core**.
+  - Interactive viva examination flow in **Razor Pages** (`/Viva/Exam/{sessionId}`).
+  - Question presentation & **Text-to-Speech (TTS)** audio playback.
+  - Student voice recording via microphone & **Speech-to-Text (STT)** transcription.
+  - Realtime event broadcasting via **SignalR** (`VivaHub`).
+  - Contextual **AI Follow-up Question** generation (LLM) & limits enforcement.
+  - Turn transcript and follow-up persistence in **SQL Server via EF Core Repositories**.
+* **Pre-existing Modules:** Group 6 (Feedback & Reports) is already implemented and must be preserved. Legacy News Management remains in source code history only; it is not a criteria for Assignment 2.
+* **Out of Scope for ASM2:** Group 4 (AI Scoring & Grading) is strictly reserved for a future assignment. Do NOT implement automated scoring in Assignment 2.
 
-## Đọc đúng tài liệu trước khi làm
+---
 
-- Architecture, feature, review: đọc `.agents/skills/funews-architecture/SKILL.md`. Tên skill được giữ để tương thích các lời gọi cũ, nội dung đã theo nhóm 6.
-- Git tasks: đọc `.agents/skills/team-git-workflow/SKILL.md`.
-- Nghiệp vụ đã duyệt: `docs/business-rules.md` (DEC-01..DEC-12).
-- Kiến trúc/trạng thái: `docs/ARCHITECTURE.md`.
-- Task/phụ thuộc: `docs/TASKS.md`; nghiệm thu: `docs/CODE-REVIEW-CHECKLIST.md`.
-- Phạm vi triển khai, contract và fixture: `docs/G6-IMPLEMENTATION-HANDOFF.md`. Phân biệt quyết định đã duyệt với phương án kỹ thuật/fixture đề xuất.
-- `docs/archive/` chỉ lưu lịch sử News; không dùng làm hướng dẫn nghiệp vụ nhóm 6.
+## 2. Agent Skill Routing
 
-## Ranh giới và an toàn
+Every agent working on this repository must read and follow the designated skill for their assigned domain:
 
-- Luồng dữ liệu thật: View → Controller → Service → Repository → DAO → DbContext → SQL Server. Controller không gọi DB/Repository/DAO; BLL không dùng DbContext.
-- MVC → BLL → DAL; MVC cấu hình DAL tại Program.cs. Không reference vòng. DAO Singleton thread-safe, không giữ scoped DbContext; context/repositories scoped.
-- Không tự map Staff thành Sinh viên hoặc đổi mã role News; kiểm tra principal và phạm vi dữ liệu theo contract được duyệt.
-- Chỉ trong workspace hiện tại. Bảo toàn module cũ và thay đổi teammate; không reset/clean/discard để thuận tiện.
-- Review chỉ đọc/test; implement cần yêu cầu riêng nêu task/phạm vi. Không coi tài liệu này là quyền tự triển khai tất cả.
-- Không tự chạy script DB, migration, seed, test ghi DB hoặc đổi framework/package. Thay đổi schema/Auth/file chung phải có owner và phạm vi cho phép.
-- Mock chỉ ở test/harness được nhận diện; không bypass production authentication hoặc tuyên bố mock là AI/SQL thật.
-- Build/test phần sửa trước bàn giao; công khai phần chưa kiểm chứng và snapshot review.
+* **Architecture, Boundaries & Razor Pages:** [`.agents/skills/aives-architecture/SKILL.md`](.agents/skills/aives-architecture/SKILL.md)
+* **Realtime SignalR Hubs & Events:** [`.agents/skills/aives-realtime-signalr/SKILL.md`](.agents/skills/aives-realtime-signalr/SKILL.md)
+* **AI Integrations (STT, TTS, LLM):** [`.agents/skills/aives-ai-integration/SKILL.md`](.agents/skills/aives-ai-integration/SKILL.md)
+* **Git Tasks, Branching & PRs:** [`.agents/skills/team-git-workflow/SKILL.md`](.agents/skills/team-git-workflow/SKILL.md)
+* *(Note: `.agents/skills/funews-architecture/SKILL.md` is deprecated and superseded by `aives-architecture`).*
 
-## Git
+---
 
-Nhánh task theo `<member-name>/<feature-name>`; xác định người làm trước khi tạo nhánh. Kiểm tra status và bảo toàn thay đổi sẵn có; chỉ stage file đúng task.
-Không tự commit/push/PR/merge nếu chưa có yêu cầu rõ. Không force-push hoặc push thẳng main. Unit tests phải pass trước PR; không merge main không qua review.
+## 3. Approved Authoritative Documents
+
+Before implementing code or creating tasks, agents must consult:
+
+1. **Shared Contracts & Events:** [`docs/ASM2-CONTRACTS.md`](docs/ASM2-CONTRACTS.md) (The single source of truth for DTOs, SignalR events, Hub routes, and service interfaces).
+2. **Team Task Board (29 Issues):** [`docs/ASM2-TASK-BOARD.md`](docs/ASM2-TASK-BOARD.md) (Task definitions, dependencies, and assigned roles).
+3. **Architecture Overview:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+4. **Code Review Checklist:** [`docs/CODE-REVIEW-CHECKLIST.md`](docs/CODE-REVIEW-CHECKLIST.md).
+
+---
+
+## 4. Architecture Boundaries & Constraints
+
+* **3-Layer Physical Architecture:**
+  - **Presentation Layer:** `StudentNameMVC` (hosts Razor Pages, MVC Controllers, SignalR Hubs, ViewModels).
+  - **Business Logic Layer:** `AIVES.BLL` (Services, Orchestration, Business Rules, AI Abstractions).
+  - **Data Access Layer:** `AIVES.DAL` (Entities, Scoped Repositories, Scoped `AIVESDbContext`).
+* **Request Flow:**
+  - `Razor Page / MVC Controller / SignalR Hub → BLL Service → DAL Repository → AIVESDbContext → SQL Server`.
+* **Zero Direct Database Access:**
+  - Razor Pages, Controllers, and SignalR Hubs must **NEVER** inject `AIVESDbContext` or Repositories directly.
+  - BLL Services must **NEVER** reference `AIVESDbContext` or EF Core.
+* **Scoped Lifetimes:**
+  - Repositories and `AIVESDbContext` are always **Scoped**. Never register Repositories as Singleton.
+  - DAO pass-through layer has been consolidated into Repositories; do not recreate separate DAO classes.
+* **Persistence First for Realtime:**
+  - Authoritative state must be persisted to SQL Server via `SaveChangesAsync` before broadcasting SignalR events.
+
+---
+
+## 5. Team Roles & Shared-File Governance
+
+The team consists of 5 members:
+1. **Tech Lead / Reviewer (Member 1):** Owns architectural boundaries, shared contracts (`ASM2-CONTRACTS.md`), BLL orchestration (`IVivaSessionOrchestrator`), dependency injection, and PR reviews.
+2. **Razor Pages Frontend (Member 2):** Owns UI (`/Viva/Exam`), WebAudio recording, client SignalR JS.
+3. **SignalR Realtime (Member 3):** Owns `VivaHub`, session group security, and `IVivaRealtimePublisher`.
+4. **Database & Repositories (Member 4):** Owns Viva domain entities, EF Core configurations, and Repositories.
+5. **AI Integration (Member 5):** Owns STT, TTS, and LLM follow-up service adapters and mocks.
+
+**Shared-File Rule:**
+Only the Tech Lead is authorized to modify or approve modifications to:
+- `Program.cs` (application-wide DI and middleware).
+- `AIVESDbContext.cs` and core database migration scripts.
+- Shared interface contracts in `AIVES.BLL.Interfaces` and `AIVES.DAL.Repositories.Interfaces`.
+- SignalR event names and payload definitions.
+
+---
+
+## 6. Task Scope & Git Safety Rules
+
+* **Task-Scoped Work:** Agents must implement only the assigned issue. Never create unrelated features or rewrite working modules.
+* **Branch Convention:** `<member-name>/<feature-name>` (e.g. `kien/asm2-lead-04-orchestrator`, `member2/asm2-ui-03-microphone`).
+* **1-Issue-1-Branch-1-PR Rule:** Each issue is isolated on its own feature branch and submitted via a Pull Request with the issue ID clearly referenced.
+* **Explicit User Authorization Required:**
+  - Never commit, push, create a PR, or merge automatically.
+  - Never run destructive git commands (`git reset --hard`, `git clean -fd`, `git checkout -- .`, force-push).
+  - Unit tests (`dotnet test`) must pass with 0 errors before submitting any PR.

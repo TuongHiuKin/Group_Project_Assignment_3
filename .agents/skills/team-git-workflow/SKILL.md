@@ -13,7 +13,14 @@ Git publishing operations (committing, pushing, creating Pull Requests, and merg
 - Every member works on a task branch following the convention:
   `<member-name>/<feature-name>`
   Format rules: lowercase ASCII, words separated by hyphens, no spaces.
-  Examples: `kien/news-management`, `vy/category-management`, `an/authentication`, `minh/account-management`.
+  Examples for Assignment 2:
+  - `kien/asm2-lead-04-orchestrator` (Tech Lead)
+  - `member2/asm2-ui-03-microphone` (Razor Pages Frontend)
+  - `member3/asm2-rt-01-viva-hub` (SignalR Realtime)
+  - `member4/asm2-db-03-session-repository` (Database & Repositories)
+  - `member5/asm2-ai-02-stt` (AI Integration)
+  *(Note: Resolve actual member names before creating branches).*
+- **1-Issue-1-Branch-1-PR Rule:** One issue should normally correspond to one feature branch and one Pull Request.
 - Never commit directly to `main`. Create feature branches from an up-to-date, agreed base.
 
 ## 2. Preflight Inspection (Before Any Git State Change)
