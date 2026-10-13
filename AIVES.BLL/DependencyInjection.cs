@@ -27,11 +27,12 @@ public static class DependencyInjection
     }
 
     /// <summary>
-    /// Registers AI services according to AiServiceOptions configuration (Whisper STT or Mock fallback).
+    /// Registers AI services according to AiServiceOptions configuration (Whisper STT, OpenAI TTS, or Mock fallback).
     /// </summary>
     public static IServiceCollection AddAiServices(this IServiceCollection services)
     {
         services.AddHttpClient<AIVES.BLL.Services.Ai.WhisperSpeechToTextService>();
+        services.AddHttpClient<AIVES.BLL.Services.Ai.OpenAiTextToSpeechService>();
         services.AddScoped<AIVES.BLL.Services.Ai.Mocks.MockSpeechToTextService>();
         services.AddScoped<AIVES.BLL.Services.Ai.Mocks.MockTextToSpeechService>();
         services.AddScoped<AIVES.BLL.Services.Ai.Mocks.MockFollowUpGeneratorService>();
@@ -50,7 +51,20 @@ public static class DependencyInjection
             return ActivatorUtilities.CreateInstance<AIVES.BLL.Services.Ai.WhisperSpeechToTextService>(sp, mock);
         });
 
-        services.AddScoped<AIVES.BLL.Interfaces.Ai.ITextToSpeechService, AIVES.BLL.Services.Ai.Mocks.MockTextToSpeechService>();
+        services.AddScoped<AIVES.BLL.Interfaces.Ai.ITextToSpeechService>(sp =>
+        {
+            var options = sp.GetService<Microsoft.Extensions.Options.IOptions<AIVES.BLL.Options.AiServiceOptions>>()?.Value
+                ?? new AIVES.BLL.Options.AiServiceOptions();
+            var mock = sp.GetRequiredService<AIVES.BLL.Services.Ai.Mocks.MockTextToSpeechService>();
+
+            if (options.UseMock || string.IsNullOrWhiteSpace(options.OpenAI.ApiKey))
+            {
+                return mock;
+            }
+
+            return ActivatorUtilities.CreateInstance<AIVES.BLL.Services.Ai.OpenAiTextToSpeechService>(sp, mock);
+        });
+
         services.AddScoped<AIVES.BLL.Interfaces.Ai.IFollowUpGeneratorService, AIVES.BLL.Services.Ai.Mocks.MockFollowUpGeneratorService>();
 
         return services;
