@@ -33,6 +33,7 @@ public static class DependencyInjection
     {
         services.AddHttpClient<AIVES.BLL.Services.Ai.WhisperSpeechToTextService>();
         services.AddHttpClient<AIVES.BLL.Services.Ai.OpenAiTextToSpeechService>();
+        services.AddHttpClient<AIVES.BLL.Services.Ai.OpenAiFollowUpGeneratorService>();
         services.AddScoped<AIVES.BLL.Services.Ai.Mocks.MockSpeechToTextService>();
         services.AddScoped<AIVES.BLL.Services.Ai.Mocks.MockTextToSpeechService>();
         services.AddScoped<AIVES.BLL.Services.Ai.Mocks.MockFollowUpGeneratorService>();
@@ -65,7 +66,19 @@ public static class DependencyInjection
             return ActivatorUtilities.CreateInstance<AIVES.BLL.Services.Ai.OpenAiTextToSpeechService>(sp, mock);
         });
 
-        services.AddScoped<AIVES.BLL.Interfaces.Ai.IFollowUpGeneratorService, AIVES.BLL.Services.Ai.Mocks.MockFollowUpGeneratorService>();
+        services.AddScoped<AIVES.BLL.Interfaces.Ai.IFollowUpGeneratorService>(sp =>
+        {
+            var options = sp.GetService<Microsoft.Extensions.Options.IOptions<AIVES.BLL.Options.AiServiceOptions>>()?.Value
+                ?? new AIVES.BLL.Options.AiServiceOptions();
+            var mock = sp.GetRequiredService<AIVES.BLL.Services.Ai.Mocks.MockFollowUpGeneratorService>();
+
+            if (options.UseMock || string.IsNullOrWhiteSpace(options.OpenAI.ApiKey))
+            {
+                return mock;
+            }
+
+            return ActivatorUtilities.CreateInstance<AIVES.BLL.Services.Ai.OpenAiFollowUpGeneratorService>(sp, mock);
+        });
 
         return services;
     }
