@@ -10,10 +10,18 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
 using StudentNameMVC.Security;
+using StudentNameMVC;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
+// Enable after DB/AI members register the real Viva dependencies. No production mocks are added.
+var vivaEnabled = builder.Configuration.GetValue<bool>("VivaInterview:Enabled");
+if (vivaEnabled)
+{
+    builder.Services.AddVivaRealtime();
+    AIVES.BLL.DependencyInjection.AddVivaInterviewServices(builder.Services);
+}
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is required.");
 builder.Services.AddAivesDataAccess(connectionString);
@@ -97,9 +105,13 @@ app.UseRouting();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+if (vivaEnabled) app.MapVivaRealtime();
 
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Account}/{action=Login}/{id?}");
 
 app.Run();
+
+// Entry point for WebApplicationFactory integration tests.
+public partial class Program { }

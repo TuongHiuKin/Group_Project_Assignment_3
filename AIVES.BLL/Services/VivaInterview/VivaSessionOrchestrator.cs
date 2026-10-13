@@ -29,6 +29,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
     private readonly IFollowUpGeneratorService _followUpService;
     private readonly IVivaRealtimePublisher _publisher;
     private readonly ILogger<VivaSessionOrchestrator> _logger;
+    private readonly VivaTimerManager? _timers;
 
     public VivaSessionOrchestrator(
         IVivaSessionRepository sessionRepo,
@@ -38,7 +39,8 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         ITextToSpeechService ttsService,
         IFollowUpGeneratorService followUpService,
         IVivaRealtimePublisher publisher,
-        ILogger<VivaSessionOrchestrator> logger)
+        ILogger<VivaSessionOrchestrator> logger,
+        VivaTimerManager? timers = null)
     {
         _sessionRepo = sessionRepo ?? throw new ArgumentNullException(nameof(sessionRepo));
         _questionRepo = questionRepo ?? throw new ArgumentNullException(nameof(questionRepo));
@@ -48,6 +50,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         _followUpService = followUpService ?? throw new ArgumentNullException(nameof(followUpService));
         _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _timers = timers;
     }
 
     /// <inheritdoc />
@@ -108,12 +111,13 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
     /// <inheritdoc />
     public async Task<VivaQuestionDto> StartSessionAsync(Guid sessionId, CancellationToken ct = default)
     {
+        using var lease = _timers is null ? null : await _timers.LockSessionAsync(sessionId, ct);
         _logger.LogInformation("Starting viva session {SessionId}", sessionId);
 
         var session = await _sessionRepo.GetByIdAsync(sessionId, ct)
             ?? throw new KeyNotFoundException($"Session {sessionId} was not found.");
 
-        if (session.State == (byte)VivaSessionState.Completed || session.State == (byte)VivaSessionState.Failed)
+        if (session.State is not ((byte)VivaSessionState.Created) and not ((byte)VivaSessionState.Ready))
         {
             throw new InvalidOperationException($"Cannot start session {sessionId} in state {(VivaSessionState)session.State}.");
         }
@@ -125,7 +129,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
             throw new InvalidOperationException($"No questions available for Exam '{session.ExamId}'.");
         }
 
-        var initialQuestion = questions[0];
+        var initialQuestion = questions.OrderBy(q => q.QuestionId, StringComparer.Ordinal).First();
 
         // Synthesize TTS audio if not already available
         string? audioUrl = initialQuestion.AudioUrl;
@@ -139,6 +143,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
                     audioUrl = ttsResult.AudioUrl;
                 }
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "TTS generation failed for initial question {QuestionId}, continuing without audio URL.", initialQuestion.QuestionId);
@@ -186,11 +191,33 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         _logger.LogInformation("Processing answer audio submission for Session: {SessionId}, Question: {QuestionId}, Bytes: {ByteCount}",
             submission.SessionId, submission.QuestionId, submission.AudioData.Length);
 
-        var session = await _sessionRepo.GetByIdAsync(submission.SessionId, ct)
-            ?? throw new KeyNotFoundException($"Session {submission.SessionId} was not found.");
-
-        // 1. Persistence First: Update state to Transcribing
-        await _sessionRepo.UpdateStateAsync(submission.SessionId, (byte)VivaSessionState.Transcribing, ct);
+        VivaSession session;
+        VivaTimerManager.Deadline? acceptedDeadline = null;
+        var persistedQuestionId = submission.QuestionId;
+        // Serialize the accepting transition with timeout. Release before the slow STT call.
+        using (var lease = _timers is null ? null : await _timers.LockSessionAsync(submission.SessionId, ct))
+        {
+            session = await _sessionRepo.GetByIdAsync(submission.SessionId, ct)
+                ?? throw new KeyNotFoundException($"Session {submission.SessionId} was not found.");
+            if (_timers is not null)
+            {
+                var deadline = _timers.GetDeadline(submission.SessionId);
+                acceptedDeadline = deadline;
+                if (session.State != (byte)VivaSessionState.Answering || deadline is null ||
+                    _timers.GetRemaining(submission.SessionId)!.SecondsRemaining == 0)
+                    throw new InvalidOperationException("The answering period is not active or has expired.");
+                if (!string.Equals(deadline.QuestionId, submission.QuestionId, StringComparison.Ordinal))
+                    throw new ArgumentException("The answer does not match the active question.", nameof(submission));
+                // Follow-ups are stored on a turn; preserve the FK to the primary question.
+                var details = await _sessionRepo.GetWithDetailsAsync(submission.SessionId, ct)
+                    ?? throw new KeyNotFoundException("Examination session was not found.");
+                var latest = details.Turns.OrderByDescending(t => t.TurnOrdinal).FirstOrDefault();
+                if (latest?.FollowUpQuestionText is { Length: > 0 }) persistedQuestionId = latest.QuestionId;
+            }
+            // Only stop the timer after the answering transition is persisted.
+            await _sessionRepo.UpdateStateAsync(submission.SessionId, (byte)VivaSessionState.Transcribing, ct);
+            _timers?.Stop(submission.SessionId);
+        }
         await _publisher.PublishStatusChangedAsync(new VivaSessionStatusDto(
             SessionId: submission.SessionId,
             ExamId: session.ExamId,
@@ -211,12 +238,28 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
 
         if (!sttResult.IsSuccess)
         {
+            var canRetry = true;
+            if (_timers is not null && acceptedDeadline is not null)
+            {
+                using var lease = await _timers.LockSessionAsync(submission.SessionId, ct);
+                var current = await _sessionRepo.GetByIdAsync(submission.SessionId, ct)
+                    ?? throw new KeyNotFoundException("Examination session was not found.");
+                canRetry = current.State == (byte)VivaSessionState.Transcribing && _timers.SecondsRemaining(acceptedDeadline) > 0;
+                var retryState = canRetry ? VivaSessionState.Answering : VivaSessionState.TimedOut;
+                if (current.State == (byte)VivaSessionState.Transcribing)
+                {
+                    await _sessionRepo.UpdateStateAsync(submission.SessionId, (byte)retryState, ct);
+                    if (canRetry) _timers.Restore(acceptedDeadline);
+                    await _publisher.PublishStatusChangedAsync(new(submission.SessionId, session.ExamId, session.StudentId,
+                        retryState, 1, DefaultMaxTurnsAllowed, DateTime.UtcNow), ct);
+                }
+            }
             _logger.LogError("STT processing failed for Session: {SessionId}. Error: {Error}", submission.SessionId, sttResult.ErrorMessage);
             await _publisher.PublishErrorAsync(new VivaErrorDto(
                 SessionId: submission.SessionId,
                 ErrorCode: "STT_PROCESSING_FAILED",
                 ErrorMessage: sttResult.ErrorMessage ?? "Speech-to-text transcription failed.",
-                CanRetry: true
+                CanRetry: canRetry
             ), ct);
 
             throw new InvalidOperationException($"Speech-to-text processing failed: {sttResult.ErrorMessage}");
@@ -230,7 +273,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         {
             TurnId = Guid.NewGuid(),
             SessionId = submission.SessionId,
-            QuestionId = submission.QuestionId,
+            QuestionId = persistedQuestionId,
             TurnOrdinal = turnOrdinal,
             TranscriptText = sttResult.TranscriptText,
             ConfidenceScore = sttResult.ConfidenceScore,
@@ -276,6 +319,8 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
 
         var turn = await _turnRepo.GetByIdAsync(turnId, ct)
             ?? throw new KeyNotFoundException($"Turn {turnId} was not found.");
+        if (turn.SessionId != sessionId)
+            throw new InvalidOperationException("Turn does not belong to this examination session.");
 
         // Rule: Follow-Up Count Limit (Max 1-2 turns)
         var turnCount = await _turnRepo.GetTurnCountForSessionAsync(sessionId, ct);
@@ -328,6 +373,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
                 audioUrl = ttsResult.AudioUrl;
             }
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "TTS generation failed for follow-up question. Proceeding without audio URL.");
@@ -366,15 +412,20 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
     /// <inheritdoc />
     public async Task<VivaSessionStatusDto> CompleteSessionAsync(Guid sessionId, CancellationToken ct = default)
     {
+        using var lease = _timers is null ? null : await _timers.LockSessionAsync(sessionId, ct);
         _logger.LogInformation("Completing viva session {SessionId}", sessionId);
 
         var session = await _sessionRepo.GetByIdAsync(sessionId, ct)
             ?? throw new KeyNotFoundException($"Session {sessionId} was not found.");
 
+        if (session.State is (byte)VivaSessionState.TimedOut or (byte)VivaSessionState.Failed)
+            throw new InvalidOperationException("Cannot complete an expired or failed examination session.");
+
         var completedAt = DateTime.UtcNow;
 
         // 1. Persistence First
         await _sessionRepo.CompleteSessionAsync(sessionId, completedAt, ct);
+        _timers?.Stop(sessionId);
 
         var turnCount = await _turnRepo.GetTurnCountForSessionAsync(sessionId, ct);
 

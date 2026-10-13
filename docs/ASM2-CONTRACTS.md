@@ -195,7 +195,7 @@ public sealed record VivaErrorDto(
 
 ### 4.1 Hub Information
 * **Hub Route:** `/hubs/viva`
-* **Hub Class Name:** `AIVES.Presentation.Hubs.VivaHub` (located in `StudentNameMVC/Hubs/VivaHub.cs`).
+* **Hub Class Name:** `StudentNameMVC.Hubs.VivaHub` (located in `StudentNameMVC/Hubs/VivaHub.cs`).
 * **Hub Group Naming:** `viva-session-{sessionId:D}` (e.g. `viva-session-a1b2c3d4-e5f6-7890-abcd-ef1234567890`).
 
 ### 4.2 Approved Event Names
@@ -262,14 +262,20 @@ Published periodically (e.g. every second) during active recording.
 
 #### 5. `SessionCompleted`
 Broadcasted when all viva questions and follow-ups have completed.
+The payload is `VivaSessionStatusDto`, matching the existing `IVivaClientEvents.SessionCompleted`
+signature and RT-02 task acceptance criteria. No `SessionCompletedDto` is defined.
+`UpdatedAtUtc` carries the persisted completion time; `CurrentTurnOrdinal` is the saved turn count.
+Report navigation remains the frontend/reporting integration's responsibility; no attempt ID is invented.
 ```json
 {
   "sessionId": "b47e2213-9f8a-45c2-9e8c-8c7a840e6912",
-  "studentId": "SV01",
   "examId": "EXAM01",
-  "totalTurns": 2,
-  "completedAtUtc": "2026-10-12T09:35:00Z",
-  "redirectUrl": "/StudentReports/AttemptDetails?attemptId=ATT-001"
+  "studentId": "SV01",
+  "state": "Completed",
+  "currentTurnOrdinal": 2,
+  "maxTurnsAllowed": 2,
+  "updatedAtUtc": "2026-10-12T09:35:00Z",
+  "message": null
 }
 ```
 
@@ -413,7 +419,7 @@ public sealed record FollowUpResult(
 3. **No Group 4 AI Scoring in Assignment 2:**
    * In Assignment 2, the AI only generates follow-up questions (`IFollowUpGeneratorService`). No scoring, grade assignment, or rubric evaluation is calculated in Group 3.
 4. **Group Authorization Rule:**
-   * When a client invokes `JoinSession(sessionId)` on `VivaHub`, the Hub validates that `Context.UserIdentifier == session.StudentId` or that the user has a Lecturer/Admin role. If unauthorized, the connection is aborted with `HubException("Unauthorized session access")`.
+   * When a client invokes `JoinSession(sessionId)` on `VivaHub`, the Hub requires authentication, obtains `ClaimTypes.NameIdentifier`, and calls `IVivaSessionOrchestrator.AuthorizeUserForSessionAsync`. The current implementation authorizes the session owner only. Lecturer/Admin role alone is not a blanket exemption; examiner access requires a confirmed assignment policy in BLL. Unauthorized enrollment throws `HubException("Unauthorized to join this examination session.")` without adding the connection to a group.
 5. **Rate Limiting & Audio Validation:**
    * Audio submissions must not exceed 25MB and duration must be within the configured question time limit (e.g., 180 seconds).
 
@@ -428,3 +434,79 @@ public sealed record FollowUpResult(
 | **SignalR** | Member 3 | `VivaHub`, `IVivaRealtimePublisher` implementation, Session group authorization, Reconnect resilience | Direct EF Core persistence, UI styling |
 | **Database** | Member 4 | `VivaSession`, `VivaQuestion`, `VivaSessionTurn` entities, EF Core configurations, Repositories | Direct SignalR broadcasting, AI HTTP calls |
 | **AI Integration** | Member 5 | `ISpeechToTextService`, `ITextToSpeechService`, `IFollowUpGeneratorService` + Mock/Adapters | Business policy decisions, Scoring logic |
+
+---
+
+## 9. RT-01–RT-06 Recovery and Countdown Integration (2026-10-13)
+
+The realtime module uses the existing interfaces without adding event names.
+Startup registers the module and `/hubs/viva` when `VivaInterview:Enabled=true`.
+The flag defaults to false until the real Viva repositories and AI adapters are registered by the team.
+No production Viva mocks are registered by the realtime module.
+
+### 9.1 Hub methods
+
+* `JoinSession(Guid sessionId)` returns `VivaSessionSnapshotDto` after authorization and group enrollment.
+  It also replays current status, latest persisted transcript, active follow-up and remaining time
+  to `Clients.Caller`, never to the whole group. A completed session replays `SessionCompleted`.
+  `Created -> Ready` is persisted through BLL before the Ready snapshot is sent.
+* `LeaveSession(Guid sessionId)` removes only the caller's connection from the named group.
+  It does not stop an exam or timer; disconnect does not stop a timer either.
+* `BeginAnswering(Guid sessionId)` forwards to BLL after authorization. The server selects the
+  current question and its allowed duration. Repeated calls during Answering return the original
+  deadline's remaining time and cannot extend the answering period.
+
+```csharp
+namespace AIVES.BLL.Models.VivaInterview;
+
+public sealed record VivaSessionSnapshotDto(
+    VivaSessionStatusDto Status,
+    VivaQuestionDto? CurrentQuestion,
+    VivaTranscriptDto? LatestTranscript,
+    VivaFollowUpDto? CurrentFollowUp,
+    VivaTimeRemainingDto? Timer);
+```
+
+JSON uses camelCase properties and string enum values. Frontend registers listeners before
+connecting, invokes JoinSession on each new connection/reconnection, and renders the returned
+snapshot according to its state. It must not call StartSession to perform recovery.
+After TTS ends it invokes BeginAnswering, then enables recording. Audio is still submitted through
+an authorized HTTP/Razor Pages handler, not through the Hub. The submitted question ID matches
+the current question, including a follow-up ID; BLL preserves the primary question FK when saving.
+
+### 9.2 Timer/persistence boundary
+
+The BLL manager owns server deadlines; the hosted worker creates a fresh scope each tick.
+Repositories remain scoped. The answering/timeout state transition is persisted before any
+authoritative status event. Early accepted submission stops the timer after persisting Transcribing.
+Late submissions are rejected before STT. Timeout and accepting an answer share a session lock.
+An STT result with IsSuccess=false restores the original deadline for retry only while time remains.
+
+This release supports **one server process**, including browser disconnect/reconnect.
+Per-turn deadlines are currently held in memory because the existing DAL contract has no durable
+deadline fields. Server restart or multi-node recovery requires a DAL deadline/concurrency contract;
+the module does not claim support for either. An Answering session with no known deadline emits
+`VivaError` with `ANSWERING_DEADLINE_UNAVAILABLE` and `CanRetry=false`, and cannot start a new timer
+or accept an answer. It does not silently give the student additional time.
+
+Primary question audio recovery uses the stored VivaQuestion.AudioUrl; generated URLs must be
+persisted by the AI/orchestrator integration if they should survive recovery.
+The existing two-turn/first-primary-question orchestrator policy is preserved.
+
+Presentation depends on this scoped BLL service contract, not on repositories or a concrete BLL implementation:
+
+```csharp
+namespace AIVES.BLL.Interfaces.VivaInterview;
+
+public interface IVivaRealtimeSessionService
+{
+    Task<VivaSessionSnapshotDto> GetSnapshotAsync(Guid sessionId, CancellationToken ct = default);
+    Task<VivaSessionSnapshotDto> PrepareJoinAsync(Guid sessionId, string userId, CancellationToken ct = default);
+    Task<VivaTimeRemainingDto> BeginAnsweringAsync(Guid sessionId, string userId,
+        IVivaRealtimePublisher publisher, CancellationToken ct = default);
+    Task TickAsync(Guid sessionId, IVivaRealtimePublisher publisher, CancellationToken ct = default);
+}
+```
+
+See [SIGNALR-HANDOFF.md](SIGNALR-HANDOFF.md) for file ownership, dependency registrations,
+verification results, client integration and remaining production checks.
