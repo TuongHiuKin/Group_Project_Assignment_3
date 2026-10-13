@@ -34,6 +34,7 @@ public static class DependencyInjection
         services.AddHttpClient<AIVES.BLL.Services.Ai.WhisperSpeechToTextService>();
         services.AddHttpClient<AIVES.BLL.Services.Ai.OpenAiTextToSpeechService>();
         services.AddHttpClient<AIVES.BLL.Services.Ai.OpenAiFollowUpGeneratorService>();
+        services.AddSingleton<AIVES.BLL.Services.Ai.FollowUpPolicyValidator>();
         services.AddScoped<AIVES.BLL.Services.Ai.Mocks.MockSpeechToTextService>();
         services.AddScoped<AIVES.BLL.Services.Ai.Mocks.MockTextToSpeechService>();
         services.AddScoped<AIVES.BLL.Services.Ai.Mocks.MockFollowUpGeneratorService>();
