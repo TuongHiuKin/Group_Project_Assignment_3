@@ -44,6 +44,7 @@ public class OpenAiOptions
 {
     public string? ApiKey { get; set; }
     public string Model { get; set; } = "gpt-4o-mini";
+    public string WhisperModel { get; set; } = "whisper-1";
     public string? BaseUrl { get; set; }
     public string? OrganizationId { get; set; }
 }
