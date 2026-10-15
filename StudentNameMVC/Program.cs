@@ -15,6 +15,7 @@ using StudentNameMVC;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
+builder.Services.AddRazorPages();
 // Enable after DB/AI members register the real Viva dependencies. No production mocks are added.
 var vivaEnabled = builder.Configuration.GetValue<bool>("VivaInterview:Enabled");
 if (vivaEnabled)
@@ -106,6 +107,7 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 if (vivaEnabled) app.MapVivaRealtime();
+app.MapRazorPages();
 
 app.MapControllerRoute(
     name: "default",
