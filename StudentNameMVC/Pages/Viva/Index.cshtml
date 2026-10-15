@@ -1,0 +1,128 @@
+@page
+@model StudentNameMVC.Pages.Viva.IndexModel
+@{
+    ViewData["Title"] = "Cổng phòng thi Vấn đáp AI";
+}
+
+<div class="row justify-content-center mt-3">
+    <div class="col-lg-8">
+        <div class="card viva-card shadow-sm border-0 mb-4">
+            <div class="card-header bg-primary text-white py-3 rounded-top">
+                <h4 class="mb-0 fw-bold">
+                    <i class="bi bi-mortarboard me-2"></i>Chào mừng bạn đến với Phòng thi Vấn đáp AI (AIVES Viva)
+                </h4>
+            </div>
+            <div class="card-body p-4">
+                @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+                {
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>@Model.ErrorMessage
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Đóng"></button>
+                    </div>
+                }
+
+                <div class="mb-4">
+                    <h5 class="fw-bold text-dark border-bottom pb-2">
+                        <i class="bi bi-info-circle text-primary me-2"></i>Quy trình thi vấn đáp AI
+                    </h5>
+                    <ol class="list-group list-group-numbered list-group-flush mb-3">
+                        <li class="list-group-item d-flex justify-content-between align-items-start">
+                            <div class="ms-2 me-auto">
+                                <div class="fw-bold">Kết nối phòng thi & Điểm danh</div>
+                                Hệ thống tự động xác thực và tham gia phòng thi realtime thông qua SignalR.
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start">
+                            <div class="ms-2 me-auto">
+                                <div class="fw-bold">Lắng nghe câu hỏi (TTS)</div>
+                                Câu hỏi được hiển thị và tự động phát âm thanh giọng đọc AI chuẩn tiếng Việt.
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start">
+                            <div class="ms-2 me-auto">
+                                <div class="fw-bold">Ghi âm câu trả lời qua Microphone</div>
+                                Thí sinh bật microphone và trả lời trực tiếp trong thời gian quy định (đếm ngược server-side).
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start">
+                            <div class="ms-2 me-auto">
+                                <div class="fw-bold">Chuyển giọng nói thành văn bản (STT)</div>
+                                Hệ thống nhận diện giọng nói và truyền transcript trực tiếp lên màn hình mà không cần tải lại trang.
+                            </div>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-start">
+                            <div class="ms-2 me-auto">
+                                <div class="fw-bold">Trả lời câu hỏi phụ của AI (Follow-up)</div>
+                                AI tự động phân tích câu trả lời và đưa ra câu hỏi phụ đào sâu hoặc làm rõ.
+                            </div>
+                        </li>
+                    </ol>
+                </div>
+
+                <!-- Test Microphone Widget -->
+                <div class="card bg-light border-0 mb-4 p-3 rounded-3">
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <div>
+                            <h6 class="fw-bold mb-1"><i class="bi bi-mic-fill text-danger me-2"></i>Kiểm tra thiết bị Microphone</h6>
+                            <small class="text-muted" id="micStatusText">Nhấn nút bên cạnh để kiểm tra quyền truy cập microphone trước khi vào thi.</small>
+                        </div>
+                        <button type="button" id="btnTestMic" class="btn btn-outline-primary btn-sm px-3 rounded-pill">
+                            <i class="bi bi-soundwave me-1"></i>Kiểm tra Micro
+                        </button>
+                    </div>
+                    <div id="micFeedbackAlert" class="mt-2 d-none"></div>
+                </div>
+
+                <!-- Enter Session Form -->
+                <div class="card border border-primary border-opacity-25 rounded-3 p-3 bg-white shadow-sm">
+                    <h5 class="fw-bold text-primary mb-3">
+                        <i class="bi bi-door-open-fill me-2"></i>Tham gia phòng thi theo mã phiên
+                    </h5>
+                    <form method="post">
+                        @Html.AntiForgeryToken()
+                        <div class="input-group mb-3">
+                            <span class="input-group-text bg-light text-muted">
+                                <i class="bi bi-key-fill"></i>
+                            </span>
+                            <input asp-for="SessionIdInput" class="form-control form-control-lg" placeholder="Ví dụ: 11111111-1111-1111-1111-111111111111" required />
+                            <button type="submit" class="btn btn-primary btn-lg px-4 fw-semibold">
+                                <i class="bi bi-box-arrow-in-right me-1"></i> Vào phòng thi
+                            </button>
+                        </div>
+                        <div class="form-text text-muted">
+                            <i class="bi bi-lightbulb me-1"></i>Bạn có thể lấy mã phiên từ email lịch thi hoặc danh sách bài thi được phân công.
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById('btnTestMic')?.addEventListener('click', async function () {
+            const feedback = document.getElementById('micFeedbackAlert');
+            const statusText = document.getElementById('micStatusText');
+            feedback.className = 'mt-2 alert alert-info py-2 small';
+            feedback.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Đang yêu cầu quyền truy cập micro...';
+            feedback.classList.remove('d-none');
+
+            try {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('Trình duyệt không hỗ trợ MediaDevices API.');
+                }
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                // Clean up tracks
+                stream.getTracks().forEach(t => t.stop());
+                feedback.className = 'mt-2 alert alert-success py-2 small';
+                feedback.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Microphone hoạt động tốt! Bạn đã sẵn sàng tham gia phòng thi.';
+                statusText.textContent = 'Microphone đã được cấp quyền thành công.';
+            } catch (err) {
+                feedback.className = 'mt-2 alert alert-danger py-2 small';
+                feedback.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i> Lỗi micro: ' + (err.message || 'Không thể truy cập microphone. Vui lòng cho phép quyền trong cài đặt trình duyệt.');
+                statusText.textContent = 'Chưa cấp quyền microphone.';
+            }
+        });
+    </script>
+}
