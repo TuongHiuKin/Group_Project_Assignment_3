@@ -13,6 +13,9 @@ public class AIVESDbContext : DbContext
     public DbSet<NewsArticle> NewsArticles => Set<NewsArticle>();
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<NewsTag> NewsTags => Set<NewsTag>();
+    public DbSet<VivaQuestion> VivaQuestions => Set<VivaQuestion>();
+    public DbSet<VivaSession> VivaSessions => Set<VivaSession>();
+    public DbSet<VivaSessionTurn> VivaSessionTurns => Set<VivaSessionTurn>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
