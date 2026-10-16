@@ -35,6 +35,9 @@ public class SqlServerReadOnlyTests
             .Include(x => x.Category).Include(x => x.CreatedBy).Include(x => x.UpdatedBy)
             .Include(x => x.NewsTags).ThenInclude(x => x.Tag)
             .OrderByDescending(x => x.CreatedDate).Take(1).ToListAsync();
+        await context.VivaQuestions.AsNoTracking().Take(1).ToListAsync();
+        await context.VivaSessions.AsNoTracking().Include(x => x.Turns).Take(1).ToListAsync();
+        await context.VivaSessionTurns.AsNoTracking().Include(x => x.Question).Take(1).ToListAsync();
         Assert.Empty(context.ChangeTracker.Entries());
         // Never call EnsureCreated, Migrate, SaveChanges, seed, or execute write SQL here.
     }

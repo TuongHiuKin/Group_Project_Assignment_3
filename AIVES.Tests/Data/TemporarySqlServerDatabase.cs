@@ -46,6 +46,8 @@ public sealed class TemporarySqlServerDatabase : IAsyncLifetime
         {
             await RunScriptAsync("001-create-schema.sql");
             await RunScriptAsync("002-add-system-account-soft-delete.sql");
+            await RunScriptAsync("003-create-viva-exam-core.sql");
+            await RunScriptAsync("004-seed-viva-questions.sql");
         }
         catch
         {
@@ -57,8 +59,8 @@ public sealed class TemporarySqlServerDatabase : IAsyncLifetime
     public async Task RunScriptAsync(string fileName)
     {
         if (!created) throw new InvalidOperationException("No fixture-owned test DB.");
-        if (fileName is not ("001-create-schema.sql" or "002-add-system-account-soft-delete.sql"))
-            throw new ArgumentException("Only the two reviewed schema scripts are permitted.", nameof(fileName));
+        if (fileName is not ("001-create-schema.sql" or "002-add-system-account-soft-delete.sql" or "003-create-viva-exam-core.sql" or "004-seed-viva-questions.sql"))
+            throw new ArgumentException("Only reviewed schema and seed scripts are permitted.", nameof(fileName));
         ValidateName();
         var sql = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Sql", fileName));
         // Redirect both USE/database creation and DB_NAME guards to our generated name.

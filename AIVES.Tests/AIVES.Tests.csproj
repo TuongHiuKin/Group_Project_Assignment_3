@@ -23,6 +23,8 @@
   <ItemGroup>
     <None Include="..\database\001-create-schema.sql" Link="Sql\001-create-schema.sql" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\database\002-add-system-account-soft-delete.sql" Link="Sql\002-add-system-account-soft-delete.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\database\003-create-viva-exam-core.sql" Link="Sql\003-create-viva-exam-core.sql" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\database\004-seed-viva-questions.sql" Link="Sql\004-seed-viva-questions.sql" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
