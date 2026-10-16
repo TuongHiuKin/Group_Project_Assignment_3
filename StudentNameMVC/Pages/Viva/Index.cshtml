@@ -73,6 +73,37 @@
                     <div id="micFeedbackAlert" class="mt-2 d-none"></div>
                 </div>
 
+                <!-- Create Session Form -->
+                <div class="card border border-success border-opacity-25 rounded-3 p-3 bg-white shadow-sm mb-4">
+                    <h5 class="fw-bold text-success mb-3">
+                        <i class="bi bi-plus-circle-fill me-2"></i>Tạo phiên thi mới
+                    </h5>
+                    @if (Model.IsOrchestratorAvailable)
+                    {
+                        <form method="post" asp-page-handler="Create">
+                            @Html.AntiForgeryToken()
+                            <div class="input-group mb-3">
+                                <span class="input-group-text bg-light text-muted">
+                                    <i class="bi bi-journal-text"></i>
+                                </span>
+                                <input asp-for="ExamIdInput" class="form-control form-control-lg" placeholder="Nhập mã đề thi (ví dụ: EXAM01)" required />
+                                <button type="submit" class="btn btn-success btn-lg px-4 fw-semibold">
+                                    <i class="bi bi-play-circle me-1"></i> Tạo phiên thi mới
+                                </button>
+                            </div>
+                            <div class="form-text text-muted">
+                                <i class="bi bi-info-circle me-1"></i>Hệ thống sẽ tạo phiên thi và chuyển trực tiếp tới phòng thi để bạn bắt đầu làm bài.
+                            </div>
+                        </form>
+                    }
+                    else
+                    {
+                        <div class="alert alert-warning mb-0" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>Chức năng thi vấn đáp chưa được bật.
+                        </div>
+                    }
+                </div>
+
                 <!-- Enter Session Form -->
                 <div class="card border border-primary border-opacity-25 rounded-3 p-3 bg-white shadow-sm">
                     <h5 class="fw-bold text-primary mb-3">
