@@ -105,3 +105,6 @@ dotnet run --project StudentNameMVC/StudentNameMVC.csproj
 ```
 
 Mở trình duyệt truy cập đường dẫn hiển thị (ví dụ: `https://localhost:7123`). Ứng dụng sẽ tự động chuyển hướng về trang đăng nhập mặc định: `/Account/Login`.
+
+> [!TIP]
+> **Cấu hình OpenAI thật (tuỳ chọn cho Viva Interview):** Môi trường Development mặc định sử dụng mock offline (`AiServices:UseMock = true`). Để dùng OpenAI thật, cấu hình qua user-secrets hoặc biến môi trường `AiServices__OpenAI__ApiKey=<your-api-key>` và `AiServices__UseMock=false`.

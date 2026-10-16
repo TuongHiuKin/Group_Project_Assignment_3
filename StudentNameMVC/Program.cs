@@ -22,6 +22,10 @@ if (vivaEnabled)
 {
     builder.Services.AddVivaRealtime();
     AIVES.BLL.DependencyInjection.AddVivaInterviewServices(builder.Services);
+    builder.Services
+        .AddOptions<AiServiceOptions>()
+        .Bind(builder.Configuration.GetSection(AiServiceOptions.SectionName));
+    AIVES.BLL.DependencyInjection.AddAiServices(builder.Services);
 }
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is required.");

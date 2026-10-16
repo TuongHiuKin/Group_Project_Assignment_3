@@ -47,3 +47,7 @@ TestResults/
 docs/ASM2-INTEGRATION-AUDIT-AND-FIX-PLAN.md
 docs/Plan_AGY_fix.md
 docs/Claude_Communication.md
+
+## Audio cache
+StudentNameMVC/wwwroot/audio/cache/
+
