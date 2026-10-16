@@ -105,5 +105,54 @@ public class AIVESDbContext : DbContext
                 .OnDelete(DeleteBehavior.ClientNoAction).HasConstraintName("FK_NewsTag_Tag");
             entity.HasIndex(x => x.TagId).HasDatabaseName("IX_NewsTag_TagId");
         });
+
+        modelBuilder.Entity<VivaQuestion>(entity =>
+        {
+            entity.ToTable("VivaQuestion");
+            entity.HasKey(x => x.QuestionId).HasName("PK_VivaQuestion");
+            entity.Property(x => x.QuestionId).HasMaxLength(50).IsUnicode(false).ValueGeneratedNever();
+            entity.Property(x => x.ExamId).HasMaxLength(50).IsUnicode(false).IsRequired();
+            entity.Property(x => x.Title).HasMaxLength(250).IsRequired();
+            entity.Property(x => x.Content).HasColumnType("nvarchar(max)").IsRequired();
+            entity.Property(x => x.TimeLimitSeconds).HasDefaultValue(90);
+            entity.Property(x => x.AudioUrl).HasMaxLength(500);
+            entity.HasIndex(x => x.ExamId).HasDatabaseName("IX_VivaQuestion_ExamId");
+        });
+
+        modelBuilder.Entity<VivaSession>(entity =>
+        {
+            entity.ToTable("VivaSession");
+            entity.HasKey(x => x.SessionId).HasName("PK_VivaSession");
+            entity.Property(x => x.SessionId).ValueGeneratedNever();
+            entity.Property(x => x.ExamId).HasMaxLength(50).IsUnicode(false).IsRequired();
+            entity.Property(x => x.StudentId).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.State).HasColumnType("tinyint");
+            entity.Property(x => x.StartedAtUtc).HasPrecision(3);
+            entity.Property(x => x.CompletedAtUtc).HasPrecision(3);
+            entity.HasIndex(x => new { x.StudentId, x.ExamId }).HasDatabaseName("IX_VivaSession_StudentId_ExamId");
+        });
+
+        modelBuilder.Entity<VivaSessionTurn>(entity =>
+        {
+            entity.ToTable("VivaSessionTurn");
+            entity.HasKey(x => x.TurnId).HasName("PK_VivaSessionTurn");
+            entity.Property(x => x.TurnId).ValueGeneratedNever();
+            entity.Property(x => x.QuestionId).HasMaxLength(50).IsUnicode(false).IsRequired();
+            entity.Property(x => x.AudioUrl).HasMaxLength(500);
+            entity.Property(x => x.TranscriptText).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.ConfidenceScore).HasPrecision(5, 2);
+            entity.Property(x => x.FollowUpQuestionText).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.FollowUpAudioUrl).HasMaxLength(500);
+            entity.Property(x => x.CreatedAtUtc).HasPrecision(3);
+            entity.Property(x => x.CompletedAtUtc).HasPrecision(3);
+            entity.HasOne(x => x.Session).WithMany(x => x.Turns).HasForeignKey(x => x.SessionId)
+                .OnDelete(DeleteBehavior.Cascade).HasConstraintName("FK_VivaSessionTurn_VivaSession");
+            entity.HasOne(x => x.Question).WithMany(x => x.Turns).HasForeignKey(x => x.QuestionId)
+                .OnDelete(DeleteBehavior.ClientNoAction).HasConstraintName("FK_VivaSessionTurn_VivaQuestion");
+            entity.HasIndex(x => new { x.SessionId, x.TurnOrdinal }).IsUnique()
+                .HasDatabaseName("UQ_VivaSessionTurn_SessionId_TurnOrdinal");
+            entity.HasIndex(x => x.QuestionId).HasDatabaseName("IX_VivaSessionTurn_QuestionId");
+        });
     }
 }
+

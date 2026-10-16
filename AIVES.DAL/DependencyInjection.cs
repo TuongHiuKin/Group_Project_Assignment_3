@@ -16,6 +16,10 @@ public static class DependencyInjection
         services.AddScoped<ICategoryRepository, CategoryRepository>();
         services.AddScoped<INewsArticleRepository, NewsArticleRepository>();
         services.AddScoped<ITagRepository, TagRepository>();
+        services.AddScoped<IVivaSessionRepository, VivaSessionRepository>();
+        services.AddScoped<IVivaQuestionRepository, VivaQuestionRepository>();
+        services.AddScoped<IVivaTurnRepository, VivaTurnRepository>();
         return services;
     }
 }
+
