@@ -103,6 +103,79 @@ public sealed class VivaPageModelUnitTests
         Assert.Equal(validGuid, redirect.RouteValues?["sessionId"]);
     }
 
+    private sealed class StubOrchestrator : IVivaSessionOrchestrator
+    {
+        public string? CapturedExamId { get; private set; }
+        public string? CapturedStudentId { get; private set; }
+        public Guid ExpectedSessionId { get; set; } = Guid.NewGuid();
+
+        public Task<VivaSessionStatusDto> InitializeSessionAsync(string examId, string studentId, CancellationToken ct = default)
+        {
+            CapturedExamId = examId;
+            CapturedStudentId = studentId;
+            return Task.FromResult(new VivaSessionStatusDto(ExpectedSessionId, examId, studentId, VivaSessionState.Created, 0, 2, DateTime.UtcNow, null));
+        }
+
+        public Task<bool> AuthorizeUserForSessionAsync(Guid sessionId, string userId, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<VivaQuestionDto> StartSessionAsync(Guid sessionId, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<VivaTranscriptDto> SubmitAnswerAudioAsync(VivaAnswerSubmissionDto submission, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<VivaFollowUpDto?> GenerateFollowUpAsync(Guid sessionId, Guid turnId, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<VivaSessionStatusDto> CompleteSessionAsync(Guid sessionId, CancellationToken ct = default) => throw new NotImplementedException();
+    }
+
+    [Fact]
+    public async Task IndexModel_OnPostCreateAsync_WhenOrchestratorIsNull_ReturnsPageWithErrorMessage()
+    {
+        var model = new IndexModel(NullLogger<IndexModel>.Instance)
+        {
+            PageContext = CreatePageContext(),
+            ExamIdInput = "EXAM01"
+        };
+
+        var result = await model.OnPostCreateAsync();
+
+        Assert.IsType<PageResult>(result);
+        Assert.False(model.IsOrchestratorAvailable);
+        Assert.Equal("Chức năng thi vấn đáp chưa được bật.", model.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task IndexModel_OnPostCreateAsync_WhenUserHasNoNameIdentifier_ReturnsChallengeResult()
+    {
+        var stub = new StubOrchestrator();
+        var sp = CreateServiceProvider(stub);
+        var httpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity()) };
+        var model = new IndexModel(NullLogger<IndexModel>.Instance, sp)
+        {
+            PageContext = new PageContext { HttpContext = httpContext },
+            ExamIdInput = "EXAM01"
+        };
+
+        var result = await model.OnPostCreateAsync();
+
+        Assert.IsType<ChallengeResult>(result);
+    }
+
+    [Fact]
+    public async Task IndexModel_OnPostCreateAsync_WhenSuccessful_RedirectsToExamWithSessionId()
+    {
+        var stub = new StubOrchestrator();
+        var sp = CreateServiceProvider(stub);
+        var model = new IndexModel(NullLogger<IndexModel>.Instance, sp)
+        {
+            PageContext = CreatePageContext(userId: "SV_TEST_01"),
+            ExamIdInput = "EXAM99"
+        };
+
+        var result = await model.OnPostCreateAsync();
+
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.Equal("/Viva/Exam", redirect.PageName);
+        Assert.Equal(stub.ExpectedSessionId, redirect.RouteValues?["sessionId"]);
+        Assert.Equal("EXAM99", stub.CapturedExamId);
+        Assert.Equal("SV_TEST_01", stub.CapturedStudentId);
+    }
+
     [Fact]
     public async Task ExamModel_OnGetAsync_WithNullOrEmptySessionId_RedirectsToIndex()
     {
