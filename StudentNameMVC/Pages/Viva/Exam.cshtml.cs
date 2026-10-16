@@ -242,6 +242,17 @@ public class ExamModel : PageModel
 
             var transcript = await _orchestrator.SubmitAnswerAudioAsync(submission, ct);
 
+            try
+            {
+                // Tạo câu hỏi phụ cho lượt vừa nộp; khi đủ số lượt, orchestrator tự hoàn thành phiên.
+                await _orchestrator.GenerateFollowUpAsync(sessionId, transcript.TurnId, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Follow-up generation failed for session {SessionId}, turn {TurnId}",
+                    sessionId, transcript.TurnId);
+            }
+
             return new JsonResult(new
             {
                 success = true,
