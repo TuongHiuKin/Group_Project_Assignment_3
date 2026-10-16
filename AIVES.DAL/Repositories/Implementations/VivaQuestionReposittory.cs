@@ -25,9 +25,9 @@ namespace AIVES.DAL.Repositories.Implementations
             }
         }
 
-        public Task<VivaQuestion?> GetByIdAsync(string questionId, CancellationToken ct = default)
+        public async Task<VivaQuestion?> GetByIdAsync(string questionId, CancellationToken ct = default)
         {
-            return context.VivaQuestions.AsNoTracking().SingleOrDefaultAsync(x => x.QuestionId == questionId, ct);
+            return await context.VivaQuestions.AsNoTracking().SingleOrDefaultAsync(x => x.QuestionId == questionId, ct);
         }
 
         public async Task<List<VivaQuestion>> GetQuestionsByExamAsync(string examId, CancellationToken ct = default)
@@ -39,7 +39,7 @@ namespace AIVES.DAL.Repositories.Implementations
 
         public async Task<bool> UpdateAsync(string questionId, string title, string content, string audioUrl, int timeLimitSecond, CancellationToken ct = default)
         {
-            var entity = await context.VivaQuestions.SingleOrDefaultAsync(x => x.QuestionId == questionId, ct);
+            var entity = await GetByIdAsync(questionId, ct);
             if (entity is null) return false;
             entity.Title = title;
             entity.Content = content;
