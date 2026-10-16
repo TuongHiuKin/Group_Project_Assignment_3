@@ -42,3 +42,8 @@ Thumbs.db
 ## Workspace-local tools and test artifacts
 .local/
 TestResults/
+
+## Local agent working notes (do not push)
+docs/ASM2-INTEGRATION-AUDIT-AND-FIX-PLAN.md
+docs/Plan_AGY_fix.md
+docs/Claude_Communication.md

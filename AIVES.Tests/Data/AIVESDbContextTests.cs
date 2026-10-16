@@ -19,20 +19,24 @@ public class AIVESDbContextTests
             .Options);
 
     [Fact]
-    public void Model_has_exactly_five_tables_and_no_shadow_columns()
+    public void Model_has_news_and_viva_tables_and_no_shadow_columns()
     {
         using var context = CreateContext();
         var tables = context.Model.GetEntityTypes().ToArray();
-        Assert.Equal(new[] { "Category", "NewsArticle", "NewsTag", "SystemAccount", "Tag" },
+        Assert.Equal(new[] { "Category", "NewsArticle", "NewsTag", "SystemAccount", "Tag", "VivaQuestion", "VivaSession", "VivaSessionTurn" },
             tables.Select(x => x.GetTableName()).OrderBy(x => x));
         Assert.All(tables, table =>
         {
             Assert.Equal("dbo", table.GetSchema());
             Assert.DoesNotContain(table.GetProperties(), x => x.IsShadowProperty());
         });
-        Assert.Equal(4, tables.Count(x => x.FindPrimaryKey()!.Properties.Count == 1));
-        Assert.All(tables.Where(x => x.ClrType != typeof(NewsTag)), table =>
+        Assert.Equal(7, tables.Count(x => x.FindPrimaryKey()!.Properties.Count == 1));
+        var newsIdentityTables = new[] { typeof(Category), typeof(NewsArticle), typeof(SystemAccount), typeof(Tag) };
+        Assert.All(tables.Where(x => newsIdentityTables.Contains(x.ClrType)), table =>
             Assert.Equal(ValueGenerated.OnAdd, table.FindPrimaryKey()!.Properties.Single().ValueGenerated));
+        var vivaNeverTables = new[] { typeof(VivaQuestion), typeof(VivaSession), typeof(VivaSessionTurn) };
+        Assert.All(tables.Where(x => vivaNeverTables.Contains(x.ClrType)), table =>
+            Assert.Equal(ValueGenerated.Never, table.FindPrimaryKey()!.Properties.Single().ValueGenerated));
     }
 
     [Fact]
@@ -68,11 +72,12 @@ public class AIVESDbContextTests
         var join = context.Model.FindEntityType(typeof(NewsTag))!;
         Assert.Equal(new[] { "NewsArticleId", "TagId" }, join.FindPrimaryKey()!.Properties.Select(x => x.Name));
         var foreignKeys = context.Model.GetEntityTypes().SelectMany(x => x.GetForeignKeys()).ToArray();
-        Assert.Equal(5, foreignKeys.Length);
-        var cascade = Assert.Single(foreignKeys, x => x.DeleteBehavior == DeleteBehavior.Cascade);
-        Assert.Equal(typeof(NewsTag), cascade.DeclaringEntityType.ClrType);
-        Assert.Equal(typeof(NewsArticle), cascade.PrincipalEntityType.ClrType);
-        Assert.All(foreignKeys.Where(x => x != cascade), x => Assert.Equal(DeleteBehavior.ClientNoAction, x.DeleteBehavior));
+        Assert.Equal(7, foreignKeys.Length);
+        var cascades = foreignKeys.Where(x => x.DeleteBehavior == DeleteBehavior.Cascade).ToArray();
+        Assert.Equal(2, cascades.Length);
+        Assert.Contains(cascades, x => x.DeclaringEntityType.ClrType == typeof(NewsTag) && x.PrincipalEntityType.ClrType == typeof(NewsArticle));
+        Assert.Contains(cascades, x => x.DeclaringEntityType.ClrType == typeof(VivaSessionTurn) && x.PrincipalEntityType.ClrType == typeof(VivaSession));
+        Assert.All(foreignKeys.Where(x => !cascades.Contains(x)), x => Assert.Equal(DeleteBehavior.ClientNoAction, x.DeleteBehavior));
     }
 
     [Fact]
@@ -87,6 +92,39 @@ public class AIVESDbContextTests
         var account = model.FindEntityType(typeof(SystemAccount))!;
         Assert.Equal("Latin1_General_100_CI_AS", account.FindProperty(nameof(SystemAccount.AccountEmail))!.GetCollation());
         Assert.True(Assert.Single(account.GetIndexes()).IsUnique);
+    }
+
+    [Fact]
+    public void Viva_columns_match_sql_script()
+    {
+        using var context = CreateContext();
+        var question = context.Model.FindEntityType(typeof(VivaQuestion))!;
+        Assert.Equal("VivaQuestion", question.GetTableName());
+        Assert.Equal(50, question.FindProperty(nameof(VivaQuestion.QuestionId))!.GetMaxLength());
+        Assert.False(question.FindProperty(nameof(VivaQuestion.QuestionId))!.IsUnicode());
+        Assert.Equal(50, question.FindProperty(nameof(VivaQuestion.ExamId))!.GetMaxLength());
+        Assert.False(question.FindProperty(nameof(VivaQuestion.ExamId))!.IsUnicode());
+        Assert.Equal(250, question.FindProperty(nameof(VivaQuestion.Title))!.GetMaxLength());
+        Assert.Equal("nvarchar(max)", question.FindProperty(nameof(VivaQuestion.Content))!.GetColumnType());
+        Assert.Equal(90, question.FindProperty(nameof(VivaQuestion.TimeLimitSeconds))!.GetDefaultValue());
+
+        var session = context.Model.FindEntityType(typeof(VivaSession))!;
+        Assert.Equal("VivaSession", session.GetTableName());
+        Assert.Equal(50, session.FindProperty(nameof(VivaSession.ExamId))!.GetMaxLength());
+        Assert.False(session.FindProperty(nameof(VivaSession.ExamId))!.IsUnicode());
+        Assert.Equal(50, session.FindProperty(nameof(VivaSession.StudentId))!.GetMaxLength());
+        Assert.Equal("tinyint", session.FindProperty(nameof(VivaSession.State))!.GetColumnType());
+        Assert.Equal(3, session.FindProperty(nameof(VivaSession.StartedAtUtc))!.GetPrecision());
+
+        var turn = context.Model.FindEntityType(typeof(VivaSessionTurn))!;
+        Assert.Equal("VivaSessionTurn", turn.GetTableName());
+        Assert.Equal(50, turn.FindProperty(nameof(VivaSessionTurn.QuestionId))!.GetMaxLength());
+        Assert.False(turn.FindProperty(nameof(VivaSessionTurn.QuestionId))!.IsUnicode());
+        Assert.Equal(5, turn.FindProperty(nameof(VivaSessionTurn.ConfidenceScore))!.GetPrecision());
+        Assert.Equal(2, turn.FindProperty(nameof(VivaSessionTurn.ConfidenceScore))!.GetScale());
+        Assert.Equal("nvarchar(max)", turn.FindProperty(nameof(VivaSessionTurn.TranscriptText))!.GetColumnType());
+        Assert.Equal("nvarchar(max)", turn.FindProperty(nameof(VivaSessionTurn.FollowUpQuestionText))!.GetColumnType());
+        Assert.Equal(3, turn.FindProperty(nameof(VivaSessionTurn.CreatedAtUtc))!.GetPrecision());
     }
 
     [Fact]
@@ -114,7 +152,16 @@ public class AIVESDbContextTests
         var context = first.ServiceProvider.GetRequiredService<AIVESDbContext>();
         Assert.Same(context, first.ServiceProvider.GetRequiredService<AIVESDbContext>());
         Assert.NotSame(context, second.ServiceProvider.GetRequiredService<AIVESDbContext>());
-        foreach (var type in new[] { typeof(ISystemAccountRepository), typeof(ICategoryRepository), typeof(INewsArticleRepository), typeof(ITagRepository) })
+        foreach (var type in new[]
+        {
+            typeof(ISystemAccountRepository),
+            typeof(ICategoryRepository),
+            typeof(INewsArticleRepository),
+            typeof(ITagRepository),
+            typeof(IVivaSessionRepository),
+            typeof(IVivaQuestionRepository),
+            typeof(IVivaTurnRepository)
+        })
         {
             Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, x => x.ServiceType == type).Lifetime);
             Assert.Same(first.ServiceProvider.GetRequiredService(type), first.ServiceProvider.GetRequiredService(type));
@@ -130,7 +177,10 @@ public class AIVESDbContextTests
             typeof(SystemAccountRepository),
             typeof(CategoryRepository),
             typeof(NewsArticleRepository),
-            typeof(TagRepository)
+            typeof(TagRepository),
+            typeof(VivaSessionRepository),
+            typeof(VivaQuestionRepository),
+            typeof(VivaTurnRepository)
         };
 
         foreach (var type in repoTypes)
