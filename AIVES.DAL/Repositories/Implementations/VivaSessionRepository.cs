@@ -25,19 +25,15 @@ namespace AIVES.DAL.Repositories.Implementations
             }
         }
 
-        public async Task<bool> CompleteSessionAsync(Guid sessionId, DateTime completedAtUtc, CancellationToken ct = default)
+        public async Task CompleteSessionAsync(Guid sessionId, DateTime completedAtUtc, CancellationToken ct = default)
         {
-            var entity = await GetByIdAsync(sessionId, ct);
-            if (entity is null) return false;
+            var entity = await GetByIdAsync(sessionId, ct) ?? throw new NullReferenceException("Cannot find the session to update");
             entity.CompletedAtUtc = completedAtUtc;
             await SaveChangesSafeAsync(ct);
-            return true;
         }
 
         public async Task<Guid> CreateSessionAsync(VivaSession session, CancellationToken ct = default)
         {
-            var entity = await GetByIdAsync(session.SessionId, ct);
-            if (entity is not null) return session.SessionId;
             context.VivaSessions.Add(session);
             await SaveChangesSafeAsync(ct);
             return session.SessionId;
@@ -53,13 +49,11 @@ namespace AIVES.DAL.Repositories.Implementations
             return await context.VivaSessions.AsNoTracking().SingleOrDefaultAsync(x => x.SessionId == sessionId, ct);
         }
 
-        public async Task<bool> UpdateStateAsync(Guid sessionId, byte state, CancellationToken ct = default)
+        public async Task UpdateStateAsync(Guid sessionId, byte state, CancellationToken ct = default)
         {
-            var entity = await GetByIdAsync(sessionId, ct);
-            if (entity is null) return false;
+            var entity = await GetByIdAsync(sessionId, ct) ?? throw new NullReferenceException("Cannot find the session to update");
             entity.State = state;
             await SaveChangesSafeAsync(ct);
-            return true;
         }
     }
 }
