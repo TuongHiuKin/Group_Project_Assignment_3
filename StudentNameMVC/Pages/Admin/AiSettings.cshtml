@@ -1,0 +1,181 @@
+@page "/Admin/AiSettings"
+@model StudentNameMVC.Pages.Admin.AiSettingsModel
+@{
+    ViewData["Title"] = "Cấu hình AI & OpenAI API Key";
+}
+
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="d-flex align-items-center mb-4">
+                <i class="bi bi-robot text-primary fs-2 me-3"></i>
+                <div>
+                    <h2 class="mb-0 fw-bold">Cấu hình AI & OpenAI API Key</h2>
+                    <p class="text-muted mb-0 small">Quản lý tích hợp AI cho kỳ thi vấn đáp Viva (Whisper STT, OpenAI TTS, GPT Follow-up)</p>
+                </div>
+            </div>
+
+            @if (TempData["SuccessMessage"] != null)
+            {
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            }
+
+            @if (TempData["TestSuccessMessage"] != null)
+            {
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="bi bi-cloud-check-fill me-2"></i>@TempData["TestSuccessMessage"]
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            }
+
+            @if (TempData["TestErrorMessage"] != null)
+            {
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["TestErrorMessage"]
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            }
+
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title mb-0 fw-bold">
+                        <i class="bi bi-info-circle text-primary me-2"></i>Trạng thái hoạt động
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-sm-6">
+                            <label class="text-muted small d-block">Chế độ hiện tại:</label>
+                            @if (Model.Status.HasApiKey && Model.Status.UseRealAi)
+                            {
+                                <span class="badge bg-success fs-6 py-2 px-3">
+                                    <i class="bi bi-lightning-charge-fill me-1"></i>OpenAI thật
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary fs-6 py-2 px-3">
+                                    <i class="bi bi-cpu me-1"></i>Mô phỏng (mock)
+                                </span>
+                            }
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="text-muted small d-block">Khóa API:</label>
+                            @if (Model.Status.HasApiKey)
+                            {
+                                <span class="text-success fw-semibold">
+                                    <i class="bi bi-key-fill me-1"></i>Đã lưu (@Model.Status.KeyHint)
+                                </span>
+                                @if (Model.Status.UpdatedAtUtc.HasValue)
+                                {
+                                    <div class="text-muted small mt-1">
+                                        Cập nhật lúc: @Model.Status.UpdatedAtUtc.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <span class="text-muted">
+                                    <i class="bi bi-dash-circle me-1"></i>Chưa có key
+                                </span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title mb-0 fw-bold">
+                        <i class="bi bi-sliders text-primary me-2"></i>Cài đặt API Key
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" asp-page-handler="Save">
+                        <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">OpenAI API Key:</label>
+                            <input type="password"
+                                   name="ApiKey"
+                                   id="ApiKey"
+                                   class="form-control"
+                                   placeholder="@(Model.Status.HasApiKey ? "Để trống nếu muốn giữ nguyên key đã lưu" : "sk-proj-...")"
+                                   autocomplete="off"
+                                   value="" />
+                            <span asp-validation-for="ApiKey" class="text-danger small"></span>
+                            <div class="form-text text-muted">
+                                @if (Model.Status.HasApiKey)
+                                {
+                                    <span>Để trống ô này nếu bạn chỉ muốn bật/tắt công tắc bên dưới mà không đổi key.</span>
+                                }
+                                else
+                                {
+                                    <span>Nhập OpenAI API key (bắt đầu bằng <code>sk-</code> hoặc khóa dự án).</span>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="form-check form-switch mb-4">
+                            <input class="form-check-input"
+                                   type="checkbox"
+                                   role="switch"
+                                   id="UseRealAi"
+                                   name="UseRealAi"
+                                   value="true"
+                                   @(Model.UseRealAi ? "checked" : "") />
+                            <label class="form-check-label fw-semibold" for="UseRealAi">
+                                Dùng AI thật (Whisper STT, OpenAI TTS, GPT Follow-up)
+                            </label>
+                            <div class="form-text text-muted">
+                                Khi tắt, hệ thống sẽ sử dụng các dịch vụ mô phỏng (mock) để không tốn chi phí gọi API.
+                            </div>
+                        </div>
+
+                        <div class="d-flex flex-wrap gap-2">
+                            <button type="submit" class="btn btn-primary px-4">
+                                <i class="bi bi-save me-1"></i>Lưu cấu hình
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title mb-0 fw-bold">
+                        <i class="bi bi-tools text-primary me-2"></i>Thao tác bổ sung
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <form method="post" asp-page-handler="Test" class="d-inline">
+                            <button type="submit" class="btn btn-outline-info">
+                                <i class="bi bi-cloud-arrow-up me-1"></i>Kiểm tra kết nối
+                            </button>
+                        </form>
+
+                        @if (Model.Status.HasApiKey)
+                        {
+                            <form method="post" asp-page-handler="Clear" class="d-inline"
+                                  onsubmit="return confirm('Bạn có chắc chắn muốn xoá OpenAI API key khỏi máy chủ? Hệ thống sẽ quay về chế độ mô phỏng.');">
+                                <button type="submit" class="btn btn-outline-danger">
+                                    <i class="bi bi-trash3 me-1"></i>Xoá key
+                                </button>
+                            </form>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="alert alert-secondary border-0 small" role="note">
+                <i class="bi bi-shield-lock-fill text-secondary me-2"></i>
+                <strong>Lưu ý bảo mật:</strong> Key được mã hoá bằng ASP.NET Data Protection và chỉ lưu trên máy chạy server (<code>App_Data/ai-credentials.json</code>).
+                Không bao giờ commit key lên git hoặc chia sẻ ra bên ngoài. Đặt giới hạn chi tiêu trên trang quản trị OpenAI trước khi demo.
+            </div>
+        </div>
+    </div>
+</div>

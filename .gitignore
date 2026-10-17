@@ -51,3 +51,5 @@ docs/Claude_Communication.md
 ## Audio cache
 StudentNameMVC/wwwroot/audio/cache/
 
+## AI credentials store (encrypted local file)
+StudentNameMVC/App_Data/

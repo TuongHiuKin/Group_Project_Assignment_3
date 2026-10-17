@@ -74,6 +74,12 @@
                                         <span>Thử nghiệm Viva</span>
                                     </a>
                                 </li>
+                                <li class="sidebar-nav-item @(currentPage != null && currentPage.StartsWith("/Admin/AiSettings", StringComparison.OrdinalIgnoreCase) ? "active" : "")">
+                                    <a asp-page="/Admin/AiSettings">
+                                        <i class="bi bi-robot"></i>
+                                        <span>Cấu hình AI</span>
+                                    </a>
+                                </li>
                             </ul>
                         }
                         else if (User.IsInRole(ApplicationRoles.Lecturer))
@@ -213,7 +219,7 @@
                             <div class="topbar-user-profile">
                                 <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80" alt="Avatar" class="topbar-user-avatar" />
                                 <div class="d-none d-md-block">
-                                    <div class="topbar-user-name">@User.Identity.Name</div>
+                                    <div class="topbar-user-name">@(User.Identity?.Name ?? "Người dùng")</div>
                                     <div class="topbar-user-role">@friendlyRole</div>
                                 </div>
                             </div>

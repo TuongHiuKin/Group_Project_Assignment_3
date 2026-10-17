@@ -1,11 +1,28 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
+using AIVES.BLL.Interfaces.Ai;
 using AIVES.BLL.Interfaces.VivaInterview;
+using AIVES.BLL.Options;
+using AIVES.BLL.Services.Ai;
+using AIVES.BLL.Services.Ai.Mocks;
 using AIVES.BLL.Services.VivaInterview;
 
 namespace AIVES.BLL;
 
 public static class DependencyInjection
 {
+    /// <summary>
+    /// Registers credential storage and connection testing for AI settings management.
+    /// Available regardless of whether the viva interview engine is actively enabled.
+    /// </summary>
+    public static IServiceCollection AddAiCredentialManagement(this IServiceCollection services)
+    {
+        services.TryAddSingleton<IAiCredentialStore, ProtectedAiCredentialStore>();
+        services.AddHttpClient<IAiConnectionTester, OpenAiConnectionTester>();
+        return services;
+    }
+
     /// <summary>
     /// Registers BLL services for Group 3 AI Viva Interview Core.
     /// </summary>
@@ -20,9 +37,9 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddMockAiServices(this IServiceCollection services)
     {
-        services.AddScoped<AIVES.BLL.Interfaces.Ai.ISpeechToTextService, AIVES.BLL.Services.Ai.Mocks.MockSpeechToTextService>();
-        services.AddScoped<AIVES.BLL.Interfaces.Ai.ITextToSpeechService, AIVES.BLL.Services.Ai.Mocks.MockTextToSpeechService>();
-        services.AddScoped<AIVES.BLL.Interfaces.Ai.IFollowUpGeneratorService, AIVES.BLL.Services.Ai.Mocks.MockFollowUpGeneratorService>();
+        services.AddScoped<ISpeechToTextService, MockSpeechToTextService>();
+        services.AddScoped<ITextToSpeechService, MockTextToSpeechService>();
+        services.AddScoped<IFollowUpGeneratorService, MockFollowUpGeneratorService>();
         return services;
     }
 
@@ -31,54 +48,67 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddAiServices(this IServiceCollection services)
     {
-        services.AddHttpClient<AIVES.BLL.Services.Ai.WhisperSpeechToTextService>();
-        services.AddHttpClient<AIVES.BLL.Services.Ai.OpenAiTextToSpeechService>();
-        services.AddHttpClient<AIVES.BLL.Services.Ai.OpenAiFollowUpGeneratorService>();
-        services.AddSingleton<AIVES.BLL.Services.Ai.FollowUpPolicyValidator>();
-        services.AddScoped<AIVES.BLL.Services.Ai.Mocks.MockSpeechToTextService>();
-        services.AddScoped<AIVES.BLL.Services.Ai.Mocks.MockTextToSpeechService>();
-        services.AddScoped<AIVES.BLL.Services.Ai.Mocks.MockFollowUpGeneratorService>();
+        services.AddAiCredentialManagement();
 
-        services.AddScoped<AIVES.BLL.Interfaces.Ai.ISpeechToTextService>(sp =>
+        services.AddHttpClient<WhisperSpeechToTextService>();
+        services.AddHttpClient<OpenAiTextToSpeechService>();
+        services.AddHttpClient<OpenAiFollowUpGeneratorService>();
+        services.AddSingleton<FollowUpPolicyValidator>();
+        services.AddScoped<MockSpeechToTextService>();
+        services.AddScoped<MockTextToSpeechService>();
+        services.AddScoped<MockFollowUpGeneratorService>();
+
+        services.AddScoped<ISpeechToTextService>(sp =>
         {
-            var options = sp.GetService<Microsoft.Extensions.Options.IOptions<AIVES.BLL.Options.AiServiceOptions>>()?.Value
-                ?? new AIVES.BLL.Options.AiServiceOptions();
-            var mock = sp.GetRequiredService<AIVES.BLL.Services.Ai.Mocks.MockSpeechToTextService>();
+            var configured = sp.GetService<IOptionsMonitor<AiServiceOptions>>()?.CurrentValue
+                ?? sp.GetService<IOptions<AiServiceOptions>>()?.Value
+                ?? new AiServiceOptions();
+            var options = AiSettingsResolver.Resolve(configured, sp.GetService<IAiCredentialStore>());
+            var mock = sp.GetRequiredService<MockSpeechToTextService>();
 
-            if (options.UseMock || string.IsNullOrWhiteSpace(options.OpenAI.ApiKey))
+            if (!options.UsesRealProviders)
             {
                 return mock;
             }
 
-            return ActivatorUtilities.CreateInstance<AIVES.BLL.Services.Ai.WhisperSpeechToTextService>(sp, mock);
+            var resolved = Microsoft.Extensions.Options.Options.Create(options);
+            return ActivatorUtilities.CreateInstance<WhisperSpeechToTextService>(sp, resolved, mock);
         });
 
-        services.AddScoped<AIVES.BLL.Interfaces.Ai.ITextToSpeechService>(sp =>
+        services.AddScoped<ITextToSpeechService>(sp =>
         {
-            var options = sp.GetService<Microsoft.Extensions.Options.IOptions<AIVES.BLL.Options.AiServiceOptions>>()?.Value
-                ?? new AIVES.BLL.Options.AiServiceOptions();
-            var mock = sp.GetRequiredService<AIVES.BLL.Services.Ai.Mocks.MockTextToSpeechService>();
+            var configured = sp.GetService<IOptionsMonitor<AiServiceOptions>>()?.CurrentValue
+                ?? sp.GetService<IOptions<AiServiceOptions>>()?.Value
+                ?? new AiServiceOptions();
+            var options = AiSettingsResolver.Resolve(configured, sp.GetService<IAiCredentialStore>());
+            var mock = sp.GetRequiredService<MockTextToSpeechService>();
 
-            if (options.UseMock || string.IsNullOrWhiteSpace(options.OpenAI.ApiKey))
+            if (!options.UsesRealProviders)
             {
                 return mock;
             }
 
-            return ActivatorUtilities.CreateInstance<AIVES.BLL.Services.Ai.OpenAiTextToSpeechService>(sp, mock);
+            var resolved = Microsoft.Extensions.Options.Options.Create(options);
+            return string.IsNullOrWhiteSpace(options.TtsCacheDirectory)
+                ? ActivatorUtilities.CreateInstance<OpenAiTextToSpeechService>(sp, resolved, mock)
+                : ActivatorUtilities.CreateInstance<OpenAiTextToSpeechService>(sp, resolved, mock, options.TtsCacheDirectory);
         });
 
-        services.AddScoped<AIVES.BLL.Interfaces.Ai.IFollowUpGeneratorService>(sp =>
+        services.AddScoped<IFollowUpGeneratorService>(sp =>
         {
-            var options = sp.GetService<Microsoft.Extensions.Options.IOptions<AIVES.BLL.Options.AiServiceOptions>>()?.Value
-                ?? new AIVES.BLL.Options.AiServiceOptions();
-            var mock = sp.GetRequiredService<AIVES.BLL.Services.Ai.Mocks.MockFollowUpGeneratorService>();
+            var configured = sp.GetService<IOptionsMonitor<AiServiceOptions>>()?.CurrentValue
+                ?? sp.GetService<IOptions<AiServiceOptions>>()?.Value
+                ?? new AiServiceOptions();
+            var options = AiSettingsResolver.Resolve(configured, sp.GetService<IAiCredentialStore>());
+            var mock = sp.GetRequiredService<MockFollowUpGeneratorService>();
 
-            if (options.UseMock || string.IsNullOrWhiteSpace(options.OpenAI.ApiKey))
+            if (!options.UsesRealProviders)
             {
                 return mock;
             }
 
-            return ActivatorUtilities.CreateInstance<AIVES.BLL.Services.Ai.OpenAiFollowUpGeneratorService>(sp, mock);
+            var resolved = Microsoft.Extensions.Options.Options.Create(options);
+            return ActivatorUtilities.CreateInstance<OpenAiFollowUpGeneratorService>(sp, resolved, mock);
         });
 
         return services;

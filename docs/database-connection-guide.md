@@ -107,4 +107,35 @@ dotnet run --project StudentNameMVC/StudentNameMVC.csproj
 Mở trình duyệt truy cập đường dẫn hiển thị (ví dụ: `https://localhost:7123`). Ứng dụng sẽ tự động chuyển hướng về trang đăng nhập mặc định: `/Account/Login`.
 
 > [!TIP]
-> **Cấu hình OpenAI thật (tuỳ chọn cho Viva Interview):** Môi trường Development mặc định sử dụng mock offline (`AiServices:UseMock = true`). Để dùng OpenAI thật, cấu hình qua user-secrets hoặc biến môi trường `AiServices__OpenAI__ApiKey=<your-api-key>` và `AiServices__UseMock=false`.
+> **Cấu hình OpenAI thật (tuỳ chọn cho Viva Interview):** Môi trường Development mặc định sử dụng mock offline (`AiServices:UseMock = true`). Để dùng OpenAI thật, cấu hình qua giao diện Admin `/Admin/AiSettings` hoặc biến môi trường `AiServices__OpenAI__ApiKey=<your-api-key>` và `AiServices__UseMock=false`.
+
+---
+
+## 5. Bật AI Thật Cho Demo (OpenAI)
+
+Để trình diễn tính năng thi vấn đáp với AI thật (Whisper STT, OpenAI TTS, GPT Follow-up):
+
+### Cách 1: Cấu hình trực tiếp trên giao diện Admin (Khuyến nghị)
+1. Đăng nhập với tài khoản Administrator (`admin@AIVESSystem.org` / `@@abc123@@`).
+2. Trên thanh điều hướng, chọn menu **"Cấu hình AI"** (hoặc truy cập trực tiếp `/Admin/AiSettings`).
+3. Dán OpenAI API key vào ô **OpenAI API Key**.
+4. Bật công tắc **"Dùng AI thật (Whisper STT, OpenAI TTS, GPT Follow-up)"**.
+5. Nhấn **"Lưu cấu hình"**.
+6. Nhấn nút **"Kiểm tra kết nối"** để đảm bảo key hoạt động (hệ thống sẽ gọi endpoint `/v1/models` miễn phí để kiểm tra).
+7. Vào menu **"Thi vấn đáp"** để tạo phiên thi và trải nghiệm với giọng đọc và nhận diện giọng nói thật.
+8. **Sau khi demo:** Nhấn **"Xoá key"** hoặc tắt công tắc "Dùng AI thật" để hệ thống quay về chế độ mô phỏng (mock).
+
+> [!CAUTION]
+> **Bảo mật API Key:**
+> - Đặt giới hạn chi tiêu (usage limit) trên trang quản trị OpenAI trước khi demo.
+> - Key được mã hoá bằng ASP.NET Data Protection và chỉ lưu cục bộ tại `StudentNameMVC/App_Data/ai-credentials.json` (đã được gitignore).
+> - Tuyệt đối không dán key vào tin nhắn, issue, PR hoặc commit vào repository.
+> - Nếu nghi ngờ lộ key, hãy thu hồi (Revoke) ngay lập tức trên bảng điều khiển OpenAI.
+
+### Cách 2: Sử dụng biến môi trường (Cho máy chủ / CI)
+Bạn cũng có thể cấu hình thông qua biến môi trường hoặc .NET User Secrets:
+```powershell
+$env:AiServices__OpenAI__ApiKey="sk-..."
+$env:AiServices__UseMock="false"
+```
+*(Lưu ý: Cấu hình lưu qua giao diện Admin sẽ được ưu tiên hơn so với biến môi trường).*

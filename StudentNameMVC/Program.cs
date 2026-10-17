@@ -16,15 +16,24 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
 builder.Services.AddRazorPages();
+builder.Services
+    .AddOptions<AiServiceOptions>()
+    .Bind(builder.Configuration.GetSection(AiServiceOptions.SectionName))
+    .PostConfigure(options =>
+    {
+        if (string.IsNullOrWhiteSpace(options.TtsCacheDirectory) && builder.Environment.WebRootPath is not null)
+            options.TtsCacheDirectory = Path.Combine(builder.Environment.WebRootPath, "audio", "cache");
+        if (string.IsNullOrWhiteSpace(options.CredentialStorePath))
+            options.CredentialStorePath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "ai-credentials.json");
+    });
+AIVES.BLL.DependencyInjection.AddAiCredentialManagement(builder.Services);
+
 // Enable after DB/AI members register the real Viva dependencies. No production mocks are added.
 var vivaEnabled = builder.Configuration.GetValue<bool>("VivaInterview:Enabled");
 if (vivaEnabled)
 {
     builder.Services.AddVivaRealtime();
     AIVES.BLL.DependencyInjection.AddVivaInterviewServices(builder.Services);
-    builder.Services
-        .AddOptions<AiServiceOptions>()
-        .Bind(builder.Configuration.GetSection(AiServiceOptions.SectionName));
     AIVES.BLL.DependencyInjection.AddAiServices(builder.Services);
 }
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
@@ -97,6 +106,13 @@ builder.Services.AddAuthorization(options =>
 });
 
 var app = builder.Build();
+
+if (vivaEnabled)
+{
+    var configured = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<AiServiceOptions>>().CurrentValue;
+    var ai = AIVES.BLL.Services.Ai.AiSettingsResolver.Resolve(configured, app.Services.GetRequiredService<AIVES.BLL.Interfaces.Ai.IAiCredentialStore>());
+    app.Logger.LogInformation("AI mode at startup: {Mode}", ai.UsesRealProviders ? "OpenAI (real providers)" : "Mock");
+}
 
 if (!app.Environment.IsDevelopment())
 {
