@@ -291,4 +291,109 @@ public class WhisperSpeechToTextServiceTests
         Assert.False(result.IsSuccess);
         Assert.Contains("timed out", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public async Task TranscribeAsync_ContentTypeWithCodecs_SendsRequest()
+    {
+        var handler = new DelegatingHandlerStub((req, ct) =>
+        {
+            var res = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"text":"hello"}""", Encoding.UTF8, "application/json")
+            };
+            return Task.FromResult(res);
+        });
+
+        using var client = new HttpClient(handler);
+        var options = CreateOptions(apiKey: "sk-test-valid");
+        var service = new WhisperSpeechToTextService(client, options);
+
+        using var audioStream = new MemoryStream(new byte[] { 1, 2, 3 });
+        var result = await service.TranscribeAsync(audioStream, "audio/webm;codecs=opus");
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_SendsVietnameseLanguage_ByDefault()
+    {
+        DelegatingHandlerStub? handler = null;
+        handler = new DelegatingHandlerStub(async (req, ct) =>
+        {
+            var content = req.Content as MultipartFormDataContent;
+            Assert.NotNull(content);
+            var parts = new System.Collections.Generic.Dictionary<string, string>();
+            foreach (var part in content)
+            {
+                if (part.Headers.ContentDisposition?.Name != null)
+                {
+                    var name = part.Headers.ContentDisposition.Name.Trim('"');
+                    if (part is StringContent strContent)
+                    {
+                        parts[name] = await strContent.ReadAsStringAsync(ct);
+                    }
+                }
+            }
+            Assert.True(parts.ContainsKey("language"));
+            Assert.Equal("vi", parts["language"]);
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"text":"chào bạn"}""", Encoding.UTF8, "application/json")
+            };
+        });
+
+        using var client = new HttpClient(handler);
+        var options = CreateOptions(apiKey: "sk-test-valid");
+        var service = new WhisperSpeechToTextService(client, options);
+
+        using var audioStream = new MemoryStream(new byte[] { 1, 2, 3 });
+        var result = await service.TranscribeAsync(audioStream, "audio/webm");
+
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_EmptyLanguage_OmitsLanguagePart()
+    {
+        DelegatingHandlerStub? handler = null;
+        handler = new DelegatingHandlerStub(async (req, ct) =>
+        {
+            var content = req.Content as MultipartFormDataContent;
+            Assert.NotNull(content);
+            var hasLanguage = false;
+            foreach (var part in content)
+            {
+                if (part.Headers.ContentDisposition?.Name?.Trim('"') == "language")
+                {
+                    hasLanguage = true;
+                }
+            }
+            Assert.False(hasLanguage);
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"text":"hello"}""", Encoding.UTF8, "application/json")
+            };
+        });
+
+        using var client = new HttpClient(handler);
+        var options = Microsoft.Extensions.Options.Options.Create(new AiServiceOptions
+        {
+            UseMock = false,
+            SpeechToTextTimeoutSeconds = 15,
+            OpenAI = new OpenAiOptions
+            {
+                ApiKey = "sk-test-valid",
+                WhisperModel = "whisper-1",
+                TranscriptionLanguage = null
+            }
+        });
+        var service = new WhisperSpeechToTextService(client, options);
+
+        using var audioStream = new MemoryStream(new byte[] { 1, 2, 3 });
+        var result = await service.TranscribeAsync(audioStream, "audio/webm");
+
+        Assert.True(result.IsSuccess);
+    }
 }

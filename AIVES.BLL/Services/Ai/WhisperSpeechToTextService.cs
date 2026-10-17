@@ -92,12 +92,18 @@ public class WhisperSpeechToTextService : ISpeechToTextService
         using var streamContent = new StreamContent(audioStream);
 
         var validContentType = string.IsNullOrWhiteSpace(contentType) ? "audio/webm" : contentType;
-        streamContent.Headers.ContentType = new MediaTypeHeaderValue(validContentType);
+        var mediaType = validContentType.Split(';')[0].Trim();
+        streamContent.Headers.ContentType = new MediaTypeHeaderValue(mediaType);
 
-        var fileExtension = ResolveFileExtension(validContentType);
+        var fileExtension = ResolveFileExtension(mediaType);
         form.Add(streamContent, "file", $"audio.{fileExtension}");
         form.Add(new StringContent(config.OpenAI.WhisperModel ?? "whisper-1"), "model");
         form.Add(new StringContent("verbose_json"), "response_format");
+
+        if (!string.IsNullOrWhiteSpace(config.OpenAI.TranscriptionLanguage))
+        {
+            form.Add(new StringContent(config.OpenAI.TranscriptionLanguage), "language");
+        }
 
         request.Content = form;
 
