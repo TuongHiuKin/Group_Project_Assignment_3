@@ -139,18 +139,30 @@ public class AccountController : Controller
     [HttpGet]
     public IActionResult Dashboard()
     {
+        if (User.IsInRole(ApplicationRoles.Admin))
+        {
+            return RedirectToAction(nameof(AdminDashboard));
+        }
+
         if (User.IsInRole(ApplicationRoles.Lecturer))
         {
-            return RedirectToAction("Index", "ClassReports");
+            return RedirectToAction(nameof(LecturerDashboard));
         }
 
-        if (User.IsInRole(ApplicationRoles.Staff))
-        {
-            return RedirectToAction("Index", "StudentReports");
-        }
-
-        return View();
+        return RedirectToAction(nameof(StudentDashboard));
     }
+
+    [Authorize(Roles = ApplicationRoles.Admin)]
+    [HttpGet]
+    public IActionResult AdminDashboard() => View();
+
+    [Authorize(Roles = ApplicationRoles.Lecturer)]
+    [HttpGet]
+    public IActionResult LecturerDashboard() => View();
+
+    [Authorize(Roles = ApplicationRoles.Staff)]
+    [HttpGet]
+    public IActionResult StudentDashboard() => View();
 
     [Authorize]
     [HttpPost]
@@ -169,20 +181,15 @@ public class AccountController : Controller
     {
         if (User.IsInRole(ApplicationRoles.Admin))
         {
-            return RedirectToAction(nameof(Dashboard));
+            return RedirectToAction(nameof(AdminDashboard));
         }
 
         if (User.IsInRole(ApplicationRoles.Lecturer))
         {
-            return RedirectToAction("Index", "ClassReports");
+            return RedirectToAction(nameof(LecturerDashboard));
         }
 
-        if (User.IsInRole(ApplicationRoles.Staff))
-        {
-            return RedirectToAction("Index", "StudentReports");
-        }
-
-        return RedirectToAction(nameof(Dashboard));
+        return RedirectToAction(nameof(StudentDashboard));
     }
 
     #endregion

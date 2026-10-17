@@ -1,6 +1,6 @@
 @model AIVES.BLL.Models.ExamReporting.StudentReportDto
 @{
-    ViewData["Title"] = "Báo cáo Kết quả Học tập & Thi Vấn Đáp (Sinh viên)";
+    ViewData["Title"] = "Báo cáo Kết quả Học tập & Thi Vấn Đáp";
     var availableExams = ViewBag.AvailableExams as List<AIVES.BLL.Models.ExamReporting.ExamSettingsSnapshot> ?? new();
     string selectedExamId = ViewBag.SelectedExamId as string ?? "EXAM01";
     string selectedStudentId = ViewBag.SelectedStudentId as string ?? "SV01";
@@ -11,49 +11,57 @@
     }
 }
 
-<div class="container-fluid py-4">
-    <!-- Header & Switcher Bar -->
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom gap-3">
-        <div>
-            <h2 class="fw-bold mb-1 text-primary">
-                <i class="bi bi-mortarboard-fill me-2"></i>Báo Cáo Học Tập & Phản Hồi Thi Vấn Đáp AI
-            </h2>
-            <p class="text-muted mb-0">Hệ thống khảo thí thông minh AIVES · Xem lại chi tiết Transcript vấn đáp, câu hỏi đào sâu của AI và nhận xét nâng cao năng lực.</p>
-        </div>
-        <div class="d-flex flex-wrap align-items-center gap-3">
-            <!-- Exam Switcher (Hỗ trợ chuyển đổi nhanh giữa Score Mode & Pass/Fail Mode) -->
-            <div class="d-flex align-items-center gap-2">
-                <span class="fw-semibold text-secondary small"><i class="bi bi-journal-bookmark me-1"></i>Kỳ thi:</span>
-                <div class="btn-group shadow-sm" role="group">
-                    @foreach (var ex in availableExams)
-                    {
-                        bool isCurrentExam = ex.ExamId == selectedExamId;
-                        string modeLabel = ex.EvaluationMode == AIVES.BLL.Models.ExamReporting.ExamEvaluationMode.PassFail ? "Pass/Fail" : "Điểm";
-                        <a asp-action="Index" asp-route-studentId="@selectedStudentId" asp-route-examId="@ex.ExamId"
-                           class="btn btn-sm @(isCurrentExam ? "btn-primary fw-bold" : "btn-outline-primary")"
-                           title="@ex.ExamTitle">
-                            @ex.ExamId <span class="badge @(isCurrentExam ? "bg-white text-primary" : "bg-primary-subtle text-primary") ms-1">@modeLabel</span>
-                        </a>
-                    }
+<div class="viva-exam-shell">
+    <!-- 1. Header Banner & Switchers -->
+    <div class="viva-header-card">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <span class="badge tag-purple">BÁO CÁO CÁ NHÂN</span>
+                    <span class="badge tag-cyan">NHÓM 6 REPORTING</span>
                 </div>
+                <h3 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;">
+                    <i class="bi bi-mortarboard-fill text-primary me-2"></i>Báo Cáo Học Tập & Phản Hồi Vấn Đáp AI
+                </h3>
+                <p class="text-secondary small mb-0">Hệ thống khảo thí thông minh AIVES · Xem lại chi tiết Transcript, câu hỏi đào sâu của AI và nhận xét nâng cao năng lực.</p>
             </div>
 
-            <!-- Student Profile Switcher -->
-            <div class="d-flex align-items-center gap-2">
-                <span class="fw-semibold text-secondary small"><i class="bi bi-person-bounding-box me-1"></i>Hồ sơ SV:</span>
-                <div class="btn-group shadow-sm" role="group">
-                    <a asp-action="Index" asp-route-studentId="SV01" asp-route-examId="@selectedExamId"
-                       class="btn btn-sm @(selectedStudentId == "SV01" ? "btn-primary fw-bold" : "btn-outline-primary")">
-                        SV01 (Nguyễn Văn A)
-                    </a>
-                    <a asp-action="Index" asp-route-studentId="SV02" asp-route-examId="@selectedExamId"
-                       class="btn btn-sm @(selectedStudentId == "SV02" ? "btn-primary fw-bold" : "btn-outline-primary")">
-                        SV02 (Trần Thị B)
-                    </a>
-                    <a asp-action="Index" asp-route-studentId="SV03" asp-route-examId="@selectedExamId"
-                       class="btn btn-sm @(selectedStudentId == "SV03" ? "btn-primary fw-bold" : "btn-outline-primary")">
-                        SV03 (Lê Văn C)
-                    </a>
+            <!-- Switcher Controls -->
+            <div class="d-flex flex-wrap align-items-center gap-3">
+                <!-- Exam Switcher -->
+                <div class="d-flex align-items-center gap-2">
+                    <span class="fw-bold text-secondary small"><i class="bi bi-journal-bookmark me-1"></i>Đề thi:</span>
+                    <div class="d-flex gap-1">
+                        @foreach (var ex in availableExams)
+                        {
+                            bool isCurrentExam = ex.ExamId == selectedExamId;
+                            string modeLabel = ex.EvaluationMode == AIVES.BLL.Models.ExamReporting.ExamEvaluationMode.PassFail ? "P/F" : "Điểm";
+                            <a asp-action="Index" asp-route-studentId="@selectedStudentId" asp-route-examId="@ex.ExamId"
+                               class="btn btn-sm rounded-pill px-3 fw-bold @(isCurrentExam ? "btn-primary" : "btn-light border")"
+                               title="@ex.ExamTitle">
+                                @ex.ExamId <span class="badge bg-white text-dark ms-1" style="font-size: 10px;">@modeLabel</span>
+                            </a>
+                        }
+                    </div>
+                </div>
+
+                <!-- Student Profile Switcher -->
+                <div class="d-flex align-items-center gap-2">
+                    <span class="fw-bold text-secondary small"><i class="bi bi-person-bounding-box me-1"></i>Hồ sơ SV:</span>
+                    <div class="d-flex gap-1">
+                        <a asp-action="Index" asp-route-studentId="SV01" asp-route-examId="@selectedExamId"
+                           class="btn btn-sm rounded-pill px-3 fw-bold @(selectedStudentId == "SV01" ? "btn-primary" : "btn-light border")">
+                            SV01
+                        </a>
+                        <a asp-action="Index" asp-route-studentId="SV02" asp-route-examId="@selectedExamId"
+                           class="btn btn-sm rounded-pill px-3 fw-bold @(selectedStudentId == "SV02" ? "btn-primary" : "btn-light border")">
+                            SV02
+                        </a>
+                        <a asp-action="Index" asp-route-studentId="SV03" asp-route-examId="@selectedExamId"
+                           class="btn btn-sm rounded-pill px-3 fw-bold @(selectedStudentId == "SV03" ? "btn-primary" : "btn-light border")">
+                            SV03
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -61,101 +69,127 @@
 
     @if (Model != null)
     {
-        <!-- Summary Cards -->
-        <div class="row g-3 mb-4">
-            <div class="col-md-3">
-                <div class="card shadow-sm border-0 bg-primary text-white h-100">
-                    <div class="card-body py-3">
-                        <small class="text-white-50 text-uppercase fw-bold">Học viên</small>
-                        <h4 class="fw-bold mb-1">@Model.StudentName</h4>
-                        <div class="d-flex align-items-center gap-2 mt-1">
-                            <span class="badge bg-light text-primary">MSSV: @Model.StudentId</span>
-                            <span class="badge bg-white text-dark border">
-                                @(Model.EvaluationMode == AIVES.BLL.Models.ExamReporting.ExamEvaluationMode.PassFail ? "Chế độ Đạt/K.Đạt" : "Chế độ Điểm số")
-                            </span>
-                        </div>
+        <!-- 2. Four Top Metric Cards -->
+        <div class="report-metric-grid">
+            <!-- Metric 1: Student Information -->
+            <div class="report-metric-card">
+                <div class="report-metric-header">
+                    <span class="stat-mini-metric text-uppercase fw-bold">Thí sinh</span>
+                    <div class="stat-mini-icon-box icon-purple">
+                        <i class="bi bi-person-fill"></i>
+                    </div>
+                </div>
+                <div>
+                    <div class="report-metric-value text-primary fs-4">@Model.StudentName</div>
+                    <div class="d-flex align-items-center gap-2 mt-2">
+                        <span class="badge tag-purple m-0">MSSV: @Model.StudentId</span>
+                        <span class="badge tag-cyan m-0">@(Model.EvaluationMode == AIVES.BLL.Models.ExamReporting.ExamEvaluationMode.PassFail ? "Pass/Fail" : "Điểm số")</span>
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card shadow-sm border-0 bg-white h-100 border-start border-4 border-info">
-                    <div class="card-body py-3">
-                        <small class="text-muted text-uppercase fw-bold">Số lượt thi hoàn thành</small>
-                        <h3 class="fw-bold text-dark mb-1">
-                            @Model.CompletedAttemptsCount / @Model.MaxAllowedAttemptsCount
-                        </h3>
-                        <small class="text-muted">
-                            (Đã chấm: <strong>@Model.GradedAttemptsCount</strong>, Chờ chấm: <strong>@Model.PendingAttemptsCount</strong>)
-                        </small>
+
+            <!-- Metric 2: Completed Attempts -->
+            <div class="report-metric-card">
+                <div class="report-metric-header">
+                    <span class="stat-mini-metric text-uppercase fw-bold">Lượt thi hoàn thành</span>
+                    <div class="stat-mini-icon-box icon-cyan">
+                        <i class="bi bi-clock-history"></i>
+                    </div>
+                </div>
+                <div>
+                    <div class="report-metric-value">@Model.CompletedAttemptsCount / @Model.MaxAllowedAttemptsCount</div>
+                    <div class="report-metric-sub">
+                        Đã chấm: <strong class="text-dark">@Model.GradedAttemptsCount</strong> &bull; Chờ chấm: <strong class="text-primary">@Model.PendingAttemptsCount</strong>
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card shadow-sm border-0 bg-white h-100 border-start border-4 border-success">
-                    <div class="card-body py-3">
-                        <small class="text-muted text-uppercase fw-bold">Điểm trung bình học tập</small>
-                        <h3 class="fw-bold text-success mb-1">
-                            @if (Model.EvaluationMode == AIVES.BLL.Models.ExamReporting.ExamEvaluationMode.PassFail)
-                            {
-                                <span class="fs-5 text-dark fw-bold">Không áp dụng</span>
-                            }
-                            else
-                            {
-                                @(Model.AverageScore.HasValue ? Model.AverageScore.Value.ToString("0.00") : "Chưa có")
-                            }
-                        </h3>
-                        <small class="text-muted">
-                            @if (Model.EvaluationMode == AIVES.BLL.Models.ExamReporting.ExamEvaluationMode.PassFail)
-                            {
-                                <span>Chế độ Đạt/Không đạt (DEC-04)</span>
-                            }
-                            else
-                            {
-                                <span>Tính từ @Model.GradedAttemptsCount lượt có kết quả đầy đủ</span>
-                            }
-                        </small>
+
+            <!-- Metric 3: Average Score -->
+            <div class="report-metric-card">
+                <div class="report-metric-header">
+                    <span class="stat-mini-metric text-uppercase fw-bold">Điểm trung bình</span>
+                    <div class="stat-mini-icon-box icon-pink">
+                        <i class="bi bi-award-fill"></i>
+                    </div>
+                </div>
+                <div>
+                    <div class="report-metric-value text-success">
+                        @if (Model.EvaluationMode == AIVES.BLL.Models.ExamReporting.ExamEvaluationMode.PassFail)
+                        {
+                            <span class="fs-5 text-dark fw-bold">Đạt tiêu chuẩn</span>
+                        }
+                        else
+                        {
+                            @(Model.AverageScore.HasValue ? Model.AverageScore.Value.ToString("0.00") : "Chưa có")
+                        }
+                    </div>
+                    <div class="report-metric-sub">
+                        @if (Model.EvaluationMode == AIVES.BLL.Models.ExamReporting.ExamEvaluationMode.PassFail)
+                        {
+                            <span>Chế độ Đạt/Không đạt (DEC-04)</span>
+                        }
+                        else
+                        {
+                            <span>Tính từ @Model.GradedAttemptsCount lượt có kết quả đầy đủ</span>
+                        }
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card shadow-sm border-0 bg-white h-100 border-start border-4" style="border-left-color: #d97706 !important;">
-                    <div class="card-body py-3">
-                        <small class="text-muted text-uppercase fw-bold">Tỷ lệ đạt chuẩn</small>
-                        <h3 class="fw-bold text-amber-contrast mb-1">
-                            @(Model.PassRatePercentage.HasValue ? $"{Model.PassRatePercentage.Value:0.#}%" : "Chưa có")
-                        </h3>
-                        <small class="text-muted">Căn cứ Rubric & Chuẩn đầu ra</small>
+
+            <!-- Metric 4: Pass Rate -->
+            <div class="report-metric-card">
+                <div class="report-metric-header">
+                    <span class="stat-mini-metric text-uppercase fw-bold">Tỷ lệ đạt chuẩn</span>
+                    <div class="stat-mini-icon-box icon-purple">
+                        <i class="bi bi-pie-chart-fill"></i>
                     </div>
+                </div>
+                <div>
+                    <div class="report-metric-value text-primary">
+                        @(Model.PassRatePercentage.HasValue ? $"{Model.PassRatePercentage.Value:0.#}%" : "Chưa có")
+                    </div>
+                    <div class="report-metric-sub">Căn cứ Rubric chuẩn đầu ra</div>
                 </div>
             </div>
         </div>
 
-        <!-- Attempts Details -->
-        <h4 class="fw-bold text-dark mb-3">
-            <i class="bi bi-journal-check text-primary me-2"></i>Chi Tiết Bài Thi & Nhận Xét Của AI Từng Lượt
-        </h4>
+        <!-- 3. Attempts Details Section -->
+        <div class="section-header">
+            <h3 class="section-title">
+                <i class="bi bi-journal-check text-primary me-2"></i>Chi tiết từng lượt thi & Nhận xét của AI
+            </h3>
+        </div>
 
         @if (!Model.Attempts.Any())
         {
-            <div class="alert alert-info">Chưa có bản ghi lượt thi nào cho sinh viên này trong kỳ thi @Model.ExamTitle.</div>
+            <div class="viva-panel-card p-5 text-center">
+                <i class="bi bi-info-circle display-4 text-muted mb-3"></i>
+                <h5 class="fw-bold text-dark">Chưa có bản ghi lượt thi nào</h5>
+                <p class="text-muted">Chưa có bản ghi lượt thi nào cho sinh viên này trong kỳ thi @Model.ExamTitle.</p>
+                <div>
+                    <a asp-page="/Viva/Index" class="btn btn-primary px-4 py-2">
+                        <i class="bi bi-play-circle me-1"></i> Bắt đầu thi vấn đáp ngay
+                    </a>
+                </div>
+            </div>
         }
         else
         {
-            <div class="accordion shadow-sm" id="attemptsAccordion">
+            <div class="accordion" id="attemptsAccordion">
                 @foreach (var attempt in Model.Attempts)
                 {
                     bool isExpanded = attempt.AttemptOrdinal == 1;
                     string collapseId = $"collapseAttempt_{attempt.AttemptId}";
                     string headingId = $"headingAttempt_{attempt.AttemptId}";
 
-                    <div class="accordion-item mb-3 border rounded-3 overflow-hidden shadow-sm">
+                    <div class="report-accordion-item">
                         <h2 class="accordion-header" id="@headingId">
-                            <button class="accordion-button @(isExpanded ? "" : "collapsed") bg-light" type="button"
+                            <button class="accordion-button report-accordion-btn @(isExpanded ? "" : "collapsed")" type="button"
                                     data-bs-toggle="collapse" data-bs-target="#@collapseId"
                                     aria-expanded="@(isExpanded ? "true" : "false")" aria-controls="@collapseId">
                                 <div class="d-flex flex-wrap align-items-center justify-content-between w-100 me-3">
-                                    <div>
-                                        <span class="badge bg-secondary me-2">Lượt thi #@attempt.AttemptOrdinal</span>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge tag-purple fs-6">Lượt thi #@attempt.AttemptOrdinal</span>
                                         <span class="fw-bold text-dark">
                                             @(attempt.CompletedAt.HasValue ? attempt.CompletedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm") : "Chưa hoàn thành")
                                         </span>
@@ -163,26 +197,26 @@
                                     <div class="mt-2 mt-md-0 d-flex gap-2 align-items-center">
                                         @if (attempt.ExamState == AIVES.BLL.Models.ExamReporting.ExamState.Abandoned)
                                         {
-                                            <span class="badge bg-danger">Bỏ dở (DEC-01: Không tính lượt)</span>
+                                            <span class="badge bg-danger rounded-pill px-3">Bỏ dở (DEC-01)</span>
                                         }
                                         else if (attempt.GradingState == AIVES.BLL.Models.ExamReporting.GradingState.Pending)
                                         {
-                                            <span class="badge badge-amber-contrast"><i class="bi bi-hourglass-split me-1"></i>Đang chờ AI chấm</span>
+                                            <span class="badge tag-pink rounded-pill px-3"><i class="bi bi-hourglass-split me-1"></i>Đang chờ AI chấm</span>
                                         }
                                         else
                                         {
-                                            <span class="badge @(attempt.IsPassed ? "bg-success" : "bg-danger")">
+                                            <span class="badge @(attempt.IsPassed ? "bg-success" : "bg-danger") rounded-pill px-3">
                                                 @(attempt.IsPassed ? "ĐẠT CHUẨN" : "CHƯA ĐẠT")
                                             </span>
                                             @if (Model.EvaluationMode == AIVES.BLL.Models.ExamReporting.ExamEvaluationMode.PassFail)
                                             {
-                                                <span class="badge bg-info-subtle text-info-emphasis border border-info">
+                                                <span class="badge tag-cyan rounded-pill px-3">
                                                     Pass/Fail Mode
                                                 </span>
                                             }
                                             else
                                             {
-                                                <span class="badge bg-primary">
+                                                <span class="badge bg-primary text-white rounded-pill px-3">
                                                     Điểm: @attempt.TotalEarnedScore / @attempt.TotalMaxScore (@attempt.NormalizedScore.ToString("0.0")/10)
                                                 </span>
                                             }
@@ -193,20 +227,19 @@
                         </h2>
                         <div id="@collapseId" class="accordion-collapse collapse @(isExpanded ? "show" : "")"
                              aria-labelledby="@headingId" data-bs-parent="#attemptsAccordion">
-                            <div class="accordion-body p-3 p-md-4 bg-white">
+                            <div class="report-accordion-body">
                                 @if (attempt.ExamState == AIVES.BLL.Models.ExamReporting.ExamState.Abandoned)
                                 {
-                                    <div class="alert alert-secondary mb-0">
+                                    <div class="alert alert-secondary rounded-4 mb-0">
                                         <i class="bi bi-exclamation-circle me-1"></i> Lượt thi này sinh viên đã hủy hoặc bỏ dở giữa chừng. Theo quy định DEC-01, lượt thi này không được tính vào số lượt hoàn thành và không có điểm.
                                     </div>
                                 }
                                 else if (!attempt.QuestionResults.Any())
                                 {
-                                    <div class="alert alert-light">Không có câu hỏi nào trong lượt thi này.</div>
+                                    <div class="alert alert-light rounded-4">Không có câu hỏi nào trong lượt thi này.</div>
                                 }
                                 else
                                 {
-                                    <!-- Render chi tiết câu hỏi theo 5 khối tuần tự qua Shared Partial Component -->
                                     <div class="vstack gap-4">
                                         @foreach (var q in attempt.QuestionResults)
                                         {
