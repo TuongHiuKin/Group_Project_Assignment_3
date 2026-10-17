@@ -38,6 +38,15 @@ public class AiServiceOptions
     /// Settings for Azure Cognitive Speech (STT/TTS).
     /// </summary>
     public AzureSpeechOptions AzureSpeech { get; set; } = new();
+
+    /// <summary>Thư mục lưu mp3 TTS (wwwroot/audio/cache). Presentation layer gán khi khởi động.</summary>
+    public string? TtsCacheDirectory { get; set; }
+
+    /// <summary>Đường dẫn file lưu API key đã mã hoá (App_Data/ai-credentials.json). Presentation layer gán khi khởi động.</summary>
+    public string? CredentialStorePath { get; set; }
+
+    /// <summary>True khi dùng provider thật: UseMock = false và đã có OpenAI API key.</summary>
+    public bool UsesRealProviders => !UseMock && !string.IsNullOrWhiteSpace(OpenAI.ApiKey);
 }
 
 public class OpenAiOptions
@@ -49,6 +58,9 @@ public class OpenAiOptions
     public string TtsVoice { get; set; } = "alloy";
     public string? BaseUrl { get; set; }
     public string? OrganizationId { get; set; }
+
+    /// <summary>Mã ngôn ngữ ISO-639-1 gửi cho Whisper. Để trống thì Whisper tự nhận diện.</summary>
+    public string? TranscriptionLanguage { get; set; } = "vi";
 }
 
 public class AzureSpeechOptions
