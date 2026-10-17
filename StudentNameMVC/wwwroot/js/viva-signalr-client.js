@@ -93,17 +93,17 @@ class VivaExamClient {
             this.el.btnRetryRecord.addEventListener('click', () => this.handleRetryRecording());
         }
 
-        if (this.el.btnPlayQuestionAudio && this.el.questionAudio) {
+        if (this.el.btnPlayQuestionAudio) {
             this.el.btnPlayQuestionAudio.addEventListener('click', () => {
-                this.el.questionAudio.currentTime = 0;
-                this.el.questionAudio.play().catch(e => console.warn('Audio play failed:', e));
+                const text = this.el.questionContent ? this.el.questionContent.textContent : '';
+                this.playTts(text, this.el.questionAudio, this.el.questionAudio?.src, null);
             });
         }
 
-        if (this.el.btnPlayFollowUpAudio && this.el.followUpAudio) {
+        if (this.el.btnPlayFollowUpAudio) {
             this.el.btnPlayFollowUpAudio.addEventListener('click', () => {
-                this.el.followUpAudio.currentTime = 0;
-                this.el.followUpAudio.play().catch(e => console.warn('Audio play failed:', e));
+                const text = this.el.followUpContent ? this.el.followUpContent.textContent : '';
+                this.playTts(text, this.el.followUpAudio, this.el.followUpAudio?.src, null);
             });
         }
     }
@@ -289,6 +289,67 @@ class VivaExamClient {
         }
     }
 
+    playTts(text, audioEl, audioUrl, onEndCallback) {
+        const isMockAudio = !audioUrl || audioUrl.includes('mock-question.mp3');
+
+        // Playback via browser Web Speech API (Vietnamese voice)
+        const speakBrowserTts = () => {
+            if (!('speechSynthesis' in window) || !text) {
+                if (onEndCallback) onEndCallback();
+                return;
+            }
+
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'vi-VN';
+            utterance.rate = 1.0;
+
+            const voices = window.speechSynthesis.getVoices();
+            const viVoice = voices.find(v => v.lang && (v.lang.startsWith('vi') || v.lang.includes('VIE')));
+            if (viVoice) utterance.voice = viVoice;
+
+            let completed = false;
+            const finish = () => {
+                if (!completed) {
+                    completed = true;
+                    if (onEndCallback) onEndCallback();
+                }
+            };
+
+            utterance.onend = finish;
+            utterance.onerror = (e) => {
+                console.warn('SpeechSynthesis warning:', e);
+                finish();
+            };
+
+            window.speechSynthesis.speak(utterance);
+        };
+
+        if (isMockAudio) {
+            // In mock mode: touch audioEl so HTTP 200 is verified without 404, but speak text aloud
+            if (audioEl && audioUrl) {
+                audioEl.src = audioUrl;
+                audioEl.currentTime = 0;
+                audioEl.play().catch(() => {});
+            }
+            speakBrowserTts();
+        } else if (audioEl && audioUrl) {
+            // Real cloud TTS: play synthesized audio file directly
+            audioEl.src = audioUrl;
+            audioEl.currentTime = 0;
+            audioEl.play()
+                .then(() => {
+                    if (onEndCallback) audioEl.onended = onEndCallback;
+                })
+                .catch(err => {
+                    console.warn('Audio playback failed or blocked, falling back to speech synthesis:', err);
+                    speakBrowserTts();
+                });
+        } else {
+            speakBrowserTts();
+        }
+    }
+
     renderQuestion(question) {
         if (!question) return;
         this.currentQuestionId = question.questionId;
@@ -297,18 +358,12 @@ class VivaExamClient {
 
         if (question.audioUrl && this.el.questionAudio) {
             this.el.questionAudio.src = question.audioUrl;
-            if (this.el.btnPlayQuestionAudio) this.el.btnPlayQuestionAudio.classList.remove('d-none');
-            // Try automatic playback on question delivery
-            this.el.questionAudio.play().catch(e => {
-                console.log('Autoplay question audio blocked by browser policy. User can click button.', e);
-            });
-            this.el.questionAudio.onended = () => {
-                this.requestBeginAnswering();
-            };
-        } else {
-            // No audio, start answering timer immediately
-            this.requestBeginAnswering();
         }
+
+        if (this.el.btnPlayQuestionAudio) this.el.btnPlayQuestionAudio.classList.remove('d-none');
+        this.playTts(question.content, this.el.questionAudio, question.audioUrl, () => {
+            this.requestBeginAnswering();
+        });
     }
 
     async requestBeginAnswering() {
@@ -366,22 +421,11 @@ class VivaExamClient {
         }
 
         // Follow-up TTS Playback (UI-05)
-        if (followUp.audioUrl && this.el.followUpAudio) {
-            this.el.followUpAudio.src = followUp.audioUrl;
-            if (this.el.btnPlayFollowUpAudio) this.el.btnPlayFollowUpAudio.classList.remove('d-none');
-
-            this.el.followUpAudio.play().catch(e => {
-                console.log('Autoplay follow-up audio blocked by browser. User can click to play.', e);
-            });
-
-            this.el.followUpAudio.onended = () => {
-                this.requestBeginAnswering();
-                this.setRecordingUiState('ready', 'Mời bạn bắt đầu ghi âm trả lời câu hỏi phụ.');
-            };
-        } else {
+        if (this.el.btnPlayFollowUpAudio) this.el.btnPlayFollowUpAudio.classList.remove('d-none');
+        this.playTts(followUp.followUpContent, this.el.followUpAudio, followUp.audioUrl, () => {
             this.requestBeginAnswering();
             this.setRecordingUiState('ready', 'Mời bạn bắt đầu ghi âm trả lời câu hỏi phụ.');
-        }
+        });
 
         this.showToast('AI đã tạo câu hỏi phụ cho bạn!', 'info');
     }

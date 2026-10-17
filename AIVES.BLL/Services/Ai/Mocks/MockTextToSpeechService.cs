@@ -1,6 +1,4 @@
 using System;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -51,14 +49,7 @@ public class MockTextToSpeechService : ITextToSpeechService
         // Simulate async latency (10ms)
         await Task.Delay(10, ct);
 
-        // Derive deterministic URL path if using default
         string audioUrl = ConfiguredAudioUrl;
-        if (audioUrl == DefaultMockAudioUrl)
-        {
-            using var sha = SHA256.Create();
-            var hash = Convert.ToHexString(sha.ComputeHash(Encoding.UTF8.GetBytes(text)))[..8].ToLowerInvariant();
-            audioUrl = $"/audio/cache/mock-{hash}.mp3";
-        }
 
         _logger?.LogInformation("Mock TTS synthesized {Length} chars with locale {Locale} -> {Url}",
             text.Length, voiceLocale, audioUrl);

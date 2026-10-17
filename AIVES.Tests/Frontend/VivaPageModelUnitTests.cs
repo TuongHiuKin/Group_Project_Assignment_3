@@ -103,6 +103,113 @@ public sealed class VivaPageModelUnitTests
         Assert.Equal(validGuid, redirect.RouteValues?["sessionId"]);
     }
 
+    private sealed class StubOrchestrator : IVivaSessionOrchestrator
+    {
+        public string? CapturedExamId { get; private set; }
+        public string? CapturedStudentId { get; private set; }
+        public Guid ExpectedSessionId { get; set; } = Guid.NewGuid();
+        public Guid ExpectedTurnId { get; set; } = Guid.NewGuid();
+        public Guid? CapturedFollowUpSessionId { get; private set; }
+        public Guid? CapturedFollowUpTurnId { get; private set; }
+        public bool ShouldFailFollowUp { get; set; }
+
+        public Task<VivaSessionStatusDto> InitializeSessionAsync(string examId, string studentId, CancellationToken ct = default)
+        {
+            CapturedExamId = examId;
+            CapturedStudentId = studentId;
+            return Task.FromResult(new VivaSessionStatusDto(ExpectedSessionId, examId, studentId, VivaSessionState.Created, 0, 2, DateTime.UtcNow, null));
+        }
+
+        public Task<bool> AuthorizeUserForSessionAsync(Guid sessionId, string userId, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<VivaQuestionDto> StartSessionAsync(Guid sessionId, CancellationToken ct = default) => throw new NotImplementedException();
+
+        public Task<VivaTranscriptDto> SubmitAnswerAudioAsync(VivaAnswerSubmissionDto submission, CancellationToken ct = default)
+        {
+            return Task.FromResult(new VivaTranscriptDto(
+                submission.SessionId,
+                ExpectedTurnId,
+                submission.QuestionId,
+                "Transcript result",
+                0.95m,
+                DateTime.UtcNow
+            ));
+        }
+
+        public Task<VivaFollowUpDto?> GenerateFollowUpAsync(Guid sessionId, Guid turnId, CancellationToken ct = default)
+        {
+            CapturedFollowUpSessionId = sessionId;
+            CapturedFollowUpTurnId = turnId;
+            if (ShouldFailFollowUp)
+            {
+                throw new InvalidOperationException("Follow-up generation simulated failure");
+            }
+
+            return Task.FromResult<VivaFollowUpDto?>(new VivaFollowUpDto(
+                sessionId,
+                turnId,
+                "Q_FOLLOW_UP_01",
+                "Follow-up content",
+                1,
+                "/audio/mock-question.mp3"
+            ));
+        }
+
+        public Task<VivaSessionStatusDto> CompleteSessionAsync(Guid sessionId, CancellationToken ct = default) => throw new NotImplementedException();
+    }
+
+    [Fact]
+    public async Task IndexModel_OnPostCreateAsync_WhenOrchestratorIsNull_ReturnsPageWithErrorMessage()
+    {
+        var model = new IndexModel(NullLogger<IndexModel>.Instance)
+        {
+            PageContext = CreatePageContext(),
+            ExamIdInput = "EXAM01"
+        };
+
+        var result = await model.OnPostCreateAsync();
+
+        Assert.IsType<PageResult>(result);
+        Assert.False(model.IsOrchestratorAvailable);
+        Assert.Equal("Chức năng thi vấn đáp chưa được bật.", model.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task IndexModel_OnPostCreateAsync_WhenUserHasNoNameIdentifier_ReturnsChallengeResult()
+    {
+        var stub = new StubOrchestrator();
+        var sp = CreateServiceProvider(stub);
+        var httpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity()) };
+        var model = new IndexModel(NullLogger<IndexModel>.Instance, sp)
+        {
+            PageContext = new PageContext { HttpContext = httpContext },
+            ExamIdInput = "EXAM01"
+        };
+
+        var result = await model.OnPostCreateAsync();
+
+        Assert.IsType<ChallengeResult>(result);
+    }
+
+    [Fact]
+    public async Task IndexModel_OnPostCreateAsync_WhenSuccessful_RedirectsToExamWithSessionId()
+    {
+        var stub = new StubOrchestrator();
+        var sp = CreateServiceProvider(stub);
+        var model = new IndexModel(NullLogger<IndexModel>.Instance, sp)
+        {
+            PageContext = CreatePageContext(userId: "SV_TEST_01"),
+            ExamIdInput = "EXAM99"
+        };
+
+        var result = await model.OnPostCreateAsync();
+
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.Equal("/Viva/Exam", redirect.PageName);
+        Assert.Equal(stub.ExpectedSessionId, redirect.RouteValues?["sessionId"]);
+        Assert.Equal("EXAM99", stub.CapturedExamId);
+        Assert.Equal("SV_TEST_01", stub.CapturedStudentId);
+    }
+
     [Fact]
     public async Task ExamModel_OnGetAsync_WithNullOrEmptySessionId_RedirectsToIndex()
     {
@@ -280,5 +387,58 @@ public sealed class VivaPageModelUnitTests
 
         var json = Assert.IsType<JsonResult>(result);
         Assert.NotNull(json.Value);
+    }
+
+    [Fact]
+    public async Task ExamModel_OnPostSubmitAudioAsync_Success_GeneratesFollowUpForSubmittedTurn()
+    {
+        var stub = new StubOrchestrator();
+        var sp = CreateServiceProvider(stub);
+        var model = new ExamModel(NullLogger<ExamModel>.Instance, sp)
+        {
+            PageContext = CreatePageContext(userId: "SV01")
+        };
+
+        var sessionId = Guid.NewGuid();
+        var formFile = new FormFile(new MemoryStream(new byte[] { 1, 2, 3 }), 0, 3, "audioFile", "recording.webm")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "audio/webm"
+        };
+
+        var result = await model.OnPostSubmitAudioAsync(sessionId, "Q1", formFile, 15);
+
+        var json = Assert.IsType<JsonResult>(result);
+        Assert.NotNull(json.Value);
+        Assert.Equal(sessionId, stub.CapturedFollowUpSessionId);
+        Assert.Equal(stub.ExpectedTurnId, stub.CapturedFollowUpTurnId);
+    }
+
+    [Fact]
+    public async Task ExamModel_OnPostSubmitAudioAsync_FollowUpFails_StillReturnsTranscript()
+    {
+        var stub = new StubOrchestrator
+        {
+            ShouldFailFollowUp = true
+        };
+        var sp = CreateServiceProvider(stub);
+        var model = new ExamModel(NullLogger<ExamModel>.Instance, sp)
+        {
+            PageContext = CreatePageContext(userId: "SV01")
+        };
+
+        var sessionId = Guid.NewGuid();
+        var formFile = new FormFile(new MemoryStream(new byte[] { 1, 2, 3 }), 0, 3, "audioFile", "recording.webm")
+        {
+            Headers = new HeaderDictionary(),
+            ContentType = "audio/webm"
+        };
+
+        var result = await model.OnPostSubmitAudioAsync(sessionId, "Q1", formFile, 15);
+
+        var json = Assert.IsType<JsonResult>(result);
+        Assert.NotNull(json.Value);
+        var successProp = json.Value.GetType().GetProperty("success")?.GetValue(json.Value);
+        Assert.Equal(true, successProp);
     }
 }
