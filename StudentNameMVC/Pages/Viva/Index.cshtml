@@ -59,18 +59,39 @@
                     </ol>
                 </div>
 
-                <!-- Test Microphone Widget -->
-                <div class="card bg-light border-0 mb-4 p-3 rounded-3">
-                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                        <div>
-                            <h6 class="fw-bold mb-1"><i class="bi bi-mic-fill text-danger me-2"></i>Kiểm tra thiết bị Microphone</h6>
-                            <small class="text-muted" id="micStatusText">Nhấn nút bên cạnh để kiểm tra quyền truy cập microphone trước khi vào thi.</small>
+                <!-- Device Check Section (Microphone & Speakers) -->
+                <div class="row g-3 mb-4">
+                    <!-- Test Microphone Widget -->
+                    <div class="col-md-6">
+                        <div class="card bg-light border-0 p-3 rounded-3 h-100">
+                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                                <div>
+                                    <h6 class="fw-bold mb-1"><i class="bi bi-mic-fill text-danger me-2"></i>Kiểm tra Microphone</h6>
+                                    <small class="text-muted" id="micStatusText">Kiểm tra quyền truy cập microphone trước khi thi.</small>
+                                </div>
+                                <button type="button" id="btnTestMic" class="btn btn-outline-primary btn-sm px-3 rounded-pill">
+                                    <i class="bi bi-soundwave me-1"></i>Thử Micro
+                                </button>
+                            </div>
+                            <div id="micFeedbackAlert" class="mt-2 d-none"></div>
                         </div>
-                        <button type="button" id="btnTestMic" class="btn btn-outline-primary btn-sm px-3 rounded-pill">
-                            <i class="bi bi-soundwave me-1"></i>Kiểm tra Micro
-                        </button>
                     </div>
-                    <div id="micFeedbackAlert" class="mt-2 d-none"></div>
+
+                    <!-- Test Speaker / Headphone Widget -->
+                    <div class="col-md-6">
+                        <div class="card bg-light border-0 p-3 rounded-3 h-100">
+                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                                <div>
+                                    <h6 class="fw-bold mb-1"><i class="bi bi-headphones text-success me-2"></i>Kiểm tra Tai nghe / Loa</h6>
+                                    <small class="text-muted" id="speakerStatusText">Phát âm thanh để đảm bảo bạn nghe rõ câu hỏi của AI.</small>
+                                </div>
+                                <button type="button" id="btnTestSpeaker" class="btn btn-outline-success btn-sm px-3 rounded-pill">
+                                    <i class="bi bi-volume-up-fill me-1"></i>Thử Tai nghe
+                                </button>
+                            </div>
+                            <div id="speakerFeedbackAlert" class="mt-2 d-none"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Create Session Form -->
@@ -154,6 +175,57 @@
                 feedback.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i> Lỗi micro: ' + (err.message || 'Không thể truy cập microphone. Vui lòng cho phép quyền trong cài đặt trình duyệt.');
                 statusText.textContent = 'Chưa cấp quyền microphone.';
             }
+        });
+
+        document.getElementById('btnTestSpeaker')?.addEventListener('click', function () {
+            const feedback = document.getElementById('speakerFeedbackAlert');
+            const statusText = document.getElementById('speakerStatusText');
+            feedback.className = 'mt-2 alert alert-info py-2 small';
+            feedback.innerHTML = '<i class="bi bi-volume-up me-1"></i> Đang phát âm thanh kiểm tra qua tai nghe/loa...';
+            feedback.classList.remove('d-none');
+
+            // 1. Play musical chime via Web Audio API (always works offline without external files)
+            try {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (AudioCtx) {
+                    const ctx = new AudioCtx();
+                    const now = ctx.currentTime;
+                    const playTone = (freq, start, duration) => {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(freq, start);
+                        gain.gain.setValueAtTime(0.2, start);
+                        gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start(start);
+                        osc.stop(start + duration);
+                    };
+
+                    playTone(523.25, now, 0.22);         // C5
+                    playTone(659.25, now + 0.18, 0.22);  // E5
+                    playTone(783.99, now + 0.36, 0.35);  // G5
+                }
+            } catch (e) {
+                console.warn('Web Audio chime warning:', e);
+            }
+
+            // 2. Play spoken voice via SpeechSynthesis if supported
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utter = new SpeechSynthesisUtterance('Kiểm tra âm thanh thành công. Tai nghe của bạn đang hoạt động rất tốt.');
+                utter.lang = 'vi-VN';
+                utter.rate = 1.0;
+                const voices = window.speechSynthesis.getVoices();
+                const viVoice = voices.find(v => v.lang && (v.lang.startsWith('vi') || v.lang.includes('VIE')));
+                if (viVoice) utter.voice = viVoice;
+                window.speechSynthesis.speak(utter);
+            }
+
+            feedback.className = 'mt-2 alert alert-success py-2 small';
+            feedback.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Đã phát chuông và giọng nói thử nghiệm! Bạn hãy kiểm tra xem tai nghe/loa có nghe rõ không.';
+            statusText.textContent = 'Tai nghe/Loa đã sẵn sàng.';
         });
     </script>
 }
