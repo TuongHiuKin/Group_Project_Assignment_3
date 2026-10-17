@@ -1,0 +1,271 @@
+@using AIVES.BLL.Security
+@{
+    ViewData["Title"] = "Lecturer Dashboard";
+    var userRole = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? ApplicationRoles.Lecturer;
+    var userName = User.Identity?.Name ?? "Giảng viên";
+}
+
+<!-- Top Role Header Bar -->
+<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h4 class="fw-bold mb-0 text-dark">Dashboard Giảng viên Khảo thí</h4>
+            <span class="badge rounded-pill px-3 py-1 small" style="background: #0d9488; color: #ffffff;">
+                <i class="bi bi-person-video3 me-1"></i> Lecturer Portal
+            </span>
+        </div>
+        <p class="text-muted small mb-0">Theo dõi tiến độ khảo thí, đánh giá năng lực sinh viên và phân tích phổ điểm lớp học</p>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <a asp-controller="ClassReports" asp-action="Index" class="btn btn-outline-secondary rounded-pill px-3 py-1.5 fw-bold">
+            <i class="bi bi-bar-chart-steps me-1"></i> Thống kê Lớp học
+        </a>
+        <a asp-controller="ClassReports" asp-action="ExportGradeSheet" asp-route-teacherId="GV01" asp-route-classId="SE1701" asp-route-examId="EXAM01"
+           class="btn rounded-pill px-3 py-1.5 fw-bold text-white shadow-sm" style="background: #0d9488;">
+            <i class="bi bi-file-earmark-excel-fill me-1"></i> Xuất Bảng Điểm CSV
+        </a>
+    </div>
+</div>
+
+<!-- ========================================================
+     DASHBOARD: GIẢNG VIÊN KHẢO THÍ (LECTURER DASHBOARD)
+     ======================================================== -->
+<div class="dashboard-grid">
+    <!-- Main Column -->
+    <div class="dashboard-main-col">
+        <!-- 1. Hero Banner: Lecturer Center -->
+        <div class="hero-banner" style="background: linear-gradient(135deg, #0f766e 0%, #0d9488 50%, #14b8a6 100%);">
+            <span class="hero-sparkle hero-sparkle-1">✦</span>
+            <span class="hero-sparkle hero-sparkle-2">✦</span>
+            <span class="hero-sparkle hero-sparkle-3">★</span>
+
+            <span class="hero-tag" style="background: rgba(255, 255, 255, 0.2);">GIẢNG VIÊN KHẢO THÍ · HUMAN-IN-THE-LOOP</span>
+            <h1 class="hero-title">Quản lý Khảo thí & Đánh giá Năng lực Sinh viên</h1>
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <a asp-controller="ClassReports" asp-action="Index" class="hero-btn" style="background: #111827;">
+                    <span>Thống kê Lớp học</span>
+                    <span class="hero-btn-arrow"><i class="bi bi-bar-chart-steps"></i></span>
+                </a>
+                <a asp-controller="ClassReports" asp-action="ExportGradeSheet" asp-route-teacherId="GV01" asp-route-classId="SE1701" asp-route-examId="EXAM01"
+                   class="btn btn-light rounded-pill px-4 py-2.5 fw-bold text-dark shadow-sm">
+                    <i class="bi bi-file-earmark-excel-fill text-success me-1"></i> Xuất Bảng Điểm CSV
+                </a>
+            </div>
+        </div>
+
+        <!-- 2. Lecturer Quick Stat Mini Cards -->
+        <div class="stat-mini-row">
+            <div class="stat-mini-card">
+                <div class="stat-mini-icon-box icon-cyan">
+                    <i class="bi bi-people-fill"></i>
+                </div>
+                <div class="stat-mini-info">
+                    <span class="stat-mini-metric">Lớp SE1701</span>
+                    <span class="stat-mini-title">48 Sinh viên</span>
+                </div>
+            </div>
+
+            <div class="stat-mini-card">
+                <div class="stat-mini-icon-box icon-purple">
+                    <i class="bi bi-award-fill"></i>
+                </div>
+                <div class="stat-mini-info">
+                    <span class="stat-mini-metric">Điểm TB Lớp</span>
+                    <span class="stat-mini-title">7.65 / 10 Điểm</span>
+                </div>
+            </div>
+
+            <div class="stat-mini-card">
+                <div class="stat-mini-icon-box icon-pink">
+                    <i class="bi bi-fire"></i>
+                </div>
+                <div class="stat-mini-info">
+                    <span class="stat-mini-metric">Câu khó nhất</span>
+                    <span class="stat-mini-title">Q1 (Bloom: Vận dụng)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Các lớp học phần phụ trách -->
+        <div class="section-header">
+            <h2 class="section-title">Lớp học phần & Kỳ thi vấn đáp phụ trách</h2>
+            <span class="badge tag-cyan">Học kỳ Fall 2026</span>
+        </div>
+
+        <div class="course-cards-grid">
+            <!-- Class 1 -->
+            <div class="course-card">
+                <div class="course-card-thumb-wrap">
+                    <img src="https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80" alt="Lớp SE1701" class="course-card-thumb-img" />
+                </div>
+                <div class="course-card-body">
+                    <span class="course-tag-pill tag-purple">LỚP SE1701 · PRN222</span>
+                    <h3 class="course-card-title">Kiến trúc 3 lớp & Dependency Injection trong .NET 8</h3>
+                    <div class="mt-auto pt-2">
+                        <a asp-controller="ClassReports" asp-action="Index" asp-route-classId="SE1701" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
+                            <i class="bi bi-bar-chart-fill me-1"></i> Xem thống kê lớp
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Class 2 -->
+            <div class="course-card">
+                <div class="course-card-thumb-wrap">
+                    <img src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=600&q=80" alt="Lớp SE1702" class="course-card-thumb-img" />
+                </div>
+                <div class="course-card-body">
+                    <span class="course-tag-pill tag-cyan">LỚP SE1702 · PRN231</span>
+                    <h3 class="course-card-title">Thiết kế RESTful API & SignalR Realtime Gateway</h3>
+                    <div class="mt-auto pt-2">
+                        <a asp-controller="ClassReports" asp-action="Index" asp-route-classId="SE1702" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
+                            <i class="bi bi-bar-chart-fill me-1"></i> Xem thống kê lớp
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Class 3 -->
+            <div class="course-card">
+                <div class="course-card-thumb-wrap">
+                    <img src="https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=600&q=80" alt="Lớp SE1703" class="course-card-thumb-img" />
+                </div>
+                <div class="course-card-body">
+                    <span class="course-tag-pill tag-pink">LỚP SE1703 · PRN211</span>
+                    <h3 class="course-card-title">Lập trình hướng đối tượng nâng cao C# & LINQ</h3>
+                    <div class="mt-auto pt-2">
+                        <a asp-controller="ClassReports" asp-action="Index" asp-route-classId="SE1703" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
+                            <i class="bi bi-bar-chart-fill me-1"></i> Xem thống kê lớp
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Danh sách sinh viên vừa nộp bài cần duyệt -->
+        <div class="section-header">
+            <h2 class="section-title">Sinh viên vừa hoàn thành bài thi vấn đáp</h2>
+            <a asp-controller="ClassReports" asp-action="Index" class="section-link">Xem tất cả lớp</a>
+        </div>
+
+        <div class="lesson-table-wrap">
+            <table class="lesson-table">
+                <thead>
+                    <tr>
+                        <th>SINH VIÊN</th>
+                        <th>MÔN THI</th>
+                        <th>ĐIỂM SỐ</th>
+                        <th>KẾT QUẢ</th>
+                        <th style="text-align: right;">XEM BÀI THI</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>
+                            <div class="table-mentor-cell">
+                                <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&q=80" alt="Avatar" class="table-mentor-avatar" />
+                                <div>
+                                    <div class="table-mentor-name">Nguyễn Văn A</div>
+                                    <div class="table-mentor-date">MSSV: SV01 · Lớp SE1701</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="badge tag-purple m-0">EXAM01 (.NET)</span></td>
+                        <td><strong class="text-success fs-6">8.5 / 10</strong></td>
+                        <td><span class="badge bg-success text-white rounded-pill px-3">ĐẠT CHUẨN</span></td>
+                        <td style="text-align: right;">
+                            <a asp-controller="ClassReports" asp-action="StudentDetail" asp-route-studentId="SV01" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="table-mentor-cell">
+                                <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=80&q=80" alt="Avatar" class="table-mentor-avatar" />
+                                <div>
+                                    <div class="table-mentor-name">Trần Thị B</div>
+                                    <div class="table-mentor-date">MSSV: SV02 · Lớp SE1701</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="badge tag-purple m-0">EXAM01 (.NET)</span></td>
+                        <td><strong class="text-success fs-6">9.0 / 10</strong></td>
+                        <td><span class="badge bg-success text-white rounded-pill px-3">ĐẠT CHUẨN</span></td>
+                        <td style="text-align: right;">
+                            <a asp-controller="ClassReports" asp-action="StudentDetail" asp-route-studentId="SV02" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="table-mentor-cell">
+                                <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=80&q=80" alt="Avatar" class="table-mentor-avatar" />
+                                <div>
+                                    <div class="table-mentor-name">Lê Văn C</div>
+                                    <div class="table-mentor-date">MSSV: SV03 · Lớp SE1701</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="badge tag-purple m-0">EXAM01 (.NET)</span></td>
+                        <td><strong class="text-danger fs-6">4.5 / 10</strong></td>
+                        <td><span class="badge bg-danger text-white rounded-pill px-3">CHƯA ĐẠT</span></td>
+                        <td style="text-align: right;">
+                            <a asp-controller="ClassReports" asp-action="StudentDetail" asp-route-studentId="SV03" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Right Statistic Column -->
+    <div class="dashboard-side-col">
+        <div class="statistic-panel">
+            <div class="statistic-header">
+                <h3 class="statistic-title">Class Progress</h3>
+                <button type="button" class="statistic-more-btn"><i class="bi bi-three-dots-vertical"></i></button>
+            </div>
+
+            <div class="statistic-user-card">
+                <div class="avatar-progress-container">
+                    <div class="avatar-progress-ring" style="background: conic-gradient(#0d9488 0% 92%, #e2e8f0 92% 100%);">
+                        <div class="avatar-progress-inner">
+                            <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80" alt="Avatar" class="avatar-progress-img" />
+                        </div>
+                    </div>
+                    <span class="avatar-percentage-badge" style="background: #0d9488;">92%</span>
+                </div>
+
+                <div class="statistic-user-greeting">Xin chào, @userName 🔥</div>
+                <div class="statistic-user-sub">92% sinh viên lớp SE1701 đã hoàn thành bài thi vấn đáp.</div>
+            </div>
+
+            <!-- Mini Bar Chart -->
+            <div class="chart-card">
+                <div class="chart-bars-wrap">
+                    <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 35%; background: #99f6e4;"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 60%; background: #5eead4;"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 90%; background: #0d9488;"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 70%; background: #2dd4bf;"></div></div>
+                </div>
+                <div class="chart-axis-labels">
+                    <span>Điểm 0-4</span>
+                    <span>Điểm 5-6</span>
+                    <span>Điểm 7-8</span>
+                    <span>Điểm 9-10</span>
+                </div>
+            </div>
+
+            <!-- Hardest Question Card -->
+            <div class="p-3 rounded-4" style="background: #fff1f2; border: 1px solid #fecdd3;">
+                <div class="d-flex align-items-center gap-2 mb-1 text-danger fw-bold small">
+                    <i class="bi bi-fire"></i> CÂU HỎI CẦN LƯU Ý
+                </div>
+                <div class="fw-bold text-dark small mb-1">Q1: Dependency Injection</div>
+                <div class="text-secondary small">Có 33% sinh viên trả lời thiếu ý về DbContext trong Singleton.</div>
+            </div>
+
+            <a asp-controller="ClassReports" asp-action="Index" class="btn-see-all-mentors" style="background: #ccfbf1; color: #0f766e;">
+                Xem toàn bộ phổ điểm lớp
+            </a>
+        </div>
+    </div>
+</div>

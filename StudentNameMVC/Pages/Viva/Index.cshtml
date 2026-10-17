@@ -4,146 +4,236 @@
     ViewData["Title"] = "Cổng phòng thi Vấn đáp AI";
 }
 
-<div class="row justify-content-center mt-3">
-    <div class="col-lg-8">
-        <div class="card viva-card shadow-sm border-0 mb-4">
-            <div class="card-header bg-primary text-white py-3 rounded-top">
-                <h4 class="mb-0 fw-bold">
-                    <i class="bi bi-mortarboard me-2"></i>Chào mừng bạn đến với Phòng thi Vấn đáp AI (AIVES Viva)
-                </h4>
+<div class="viva-exam-shell">
+    <!-- Hero Banner for Viva Lobby -->
+    <div class="hero-banner mb-2">
+        <span class="hero-sparkle hero-sparkle-1">✦</span>
+        <span class="hero-sparkle hero-sparkle-2">✦</span>
+        <span class="hero-sparkle hero-sparkle-3">★</span>
+
+        <span class="hero-tag">AIVES VIVA CORE 2.0</span>
+        <h1 class="hero-title mb-2">Chào mừng bạn đến với Phòng thi Vấn đáp AI</h1>
+        <p class="text-white-50 mb-4" style="max-width: 620px; font-size: 15px;">
+            Hệ thống phỏng vấn vấn đáp tích hợp Trí tuệ Nhân tạo: AI đặt câu hỏi bằng giọng nói, thí sinh trả lời qua microphone trực tiếp và AI tự động sinh câu hỏi hỏi xoáy theo thời gian thực.
+        </p>
+
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <span class="badge bg-white bg-opacity-20 px-3 py-2 rounded-pill text-white fw-semibold">
+                <i class="bi bi-mic-fill me-1"></i> Whisper STT Voice
+            </span>
+            <span class="badge bg-white bg-opacity-20 px-3 py-2 rounded-pill text-white fw-semibold">
+                <i class="bi bi-volume-up-fill me-1"></i> OpenAI Speech TTS
+            </span>
+            <span class="badge bg-white bg-opacity-20 px-3 py-2 rounded-pill text-white fw-semibold">
+                <i class="bi bi-robot me-1"></i> Adaptive Follow-up LLM
+            </span>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show border-0 rounded-4 shadow-sm" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2 text-danger"></i> @Model.ErrorMessage
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Đóng"></button>
+        </div>
+    }
+
+    <div class="row g-4">
+        <!-- LEFT COLUMN: Workflow Guide & Device Testing -->
+        <div class="col-lg-7">
+            <!-- 1. Examination Workflow Guide -->
+            <div class="viva-panel-card mb-4">
+                <div class="viva-panel-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-info-circle-fill text-primary fs-5"></i>
+                        <h5 class="mb-0 fw-bold text-dark">Quy trình thi vấn đáp AI 5 bước</h5>
+                    </div>
+                    <span class="badge tag-purple">Chuẩn quy trình</span>
+                </div>
+                <div class="viva-panel-body p-4">
+                    <div class="viva-step-item">
+                        <div class="viva-step-num">1</div>
+                        <div>
+                            <div class="fw-bold text-dark mb-1">Kết nối phòng thi & Điểm danh realtime</div>
+                            <div class="text-secondary small">Xác thực tài khoản và kết nối tới Hub SignalR để truyền dữ liệu trạng thái phòng thi liên tục.</div>
+                        </div>
+                    </div>
+
+                    <div class="viva-step-item">
+                        <div class="viva-step-num">2</div>
+                        <div>
+                            <div class="fw-bold text-dark mb-1">Lắng nghe câu hỏi chính qua giọng nói AI (TTS)</div>
+                            <div class="text-secondary small">Hệ thống phát âm thanh câu hỏi tự động bằng giọng đọc tiếng Việt tự nhiên và hiển thị nội dung trên màn hình.</div>
+                        </div>
+                    </div>
+
+                    <div class="viva-step-item">
+                        <div class="viva-step-num">3</div>
+                        <div>
+                            <div class="fw-bold text-dark mb-1">Ghi âm câu trả lời qua Microphone</div>
+                            <div class="text-secondary small">Thí sinh bật micro nói trực tiếp trong thời gian quy định, quan sát bộ đo sóng âm WebAudio trực quan.</div>
+                        </div>
+                    </div>
+
+                    <div class="viva-step-item">
+                        <div class="viva-step-num">4</div>
+                        <div>
+                            <div class="fw-bold text-dark mb-1">Chuyển giọng nói sang văn bản (STT Whisper)</div>
+                            <div class="text-secondary small">Bản ghi giọng nói được chuyển thành văn bản tức thời, lưu trữ vào SQL Server và cập nhật trên giao diện.</div>
+                        </div>
+                    </div>
+
+                    <div class="viva-step-item">
+                        <div class="viva-step-num">5</div>
+                        <div>
+                            <div class="fw-bold text-dark mb-1">Trả lời câu hỏi hỏi xoáy / làm rõ (Follow-up)</div>
+                            <div class="text-secondary small">AI phân tích lỗ hổng hoặc điểm mơ hồ trong câu trả lời để sinh câu hỏi đào sâu trước khi kết thúc bài thi.</div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="card-body p-4">
-                @if (!string.IsNullOrEmpty(Model.ErrorMessage))
-                {
-                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                        <i class="bi bi-exclamation-triangle-fill me-2"></i>@Model.ErrorMessage
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Đóng"></button>
-                    </div>
-                }
 
-                <div class="mb-4">
-                    <h5 class="fw-bold text-dark border-bottom pb-2">
-                        <i class="bi bi-info-circle text-primary me-2"></i>Quy trình thi vấn đáp AI
-                    </h5>
-                    <ol class="list-group list-group-numbered list-group-flush mb-3">
-                        <li class="list-group-item d-flex justify-content-between align-items-start">
-                            <div class="ms-2 me-auto">
-                                <div class="fw-bold">Kết nối phòng thi & Điểm danh</div>
-                                Hệ thống tự động xác thực và tham gia phòng thi realtime thông qua SignalR.
-                            </div>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-start">
-                            <div class="ms-2 me-auto">
-                                <div class="fw-bold">Lắng nghe câu hỏi (TTS)</div>
-                                Câu hỏi được hiển thị và tự động phát âm thanh giọng đọc AI chuẩn tiếng Việt.
-                            </div>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-start">
-                            <div class="ms-2 me-auto">
-                                <div class="fw-bold">Ghi âm câu trả lời qua Microphone</div>
-                                Thí sinh bật microphone và trả lời trực tiếp trong thời gian quy định (đếm ngược server-side).
-                            </div>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-start">
-                            <div class="ms-2 me-auto">
-                                <div class="fw-bold">Chuyển giọng nói thành văn bản (STT)</div>
-                                Hệ thống nhận diện giọng nói và truyền transcript trực tiếp lên màn hình mà không cần tải lại trang.
-                            </div>
-                        </li>
-                        <li class="list-group-item d-flex justify-content-between align-items-start">
-                            <div class="ms-2 me-auto">
-                                <div class="fw-bold">Trả lời câu hỏi phụ của AI (Follow-up)</div>
-                                AI tự động phân tích câu trả lời và đưa ra câu hỏi phụ đào sâu hoặc làm rõ.
-                            </div>
-                        </li>
-                    </ol>
+            <!-- 2. Interactive Device Testing (Microphone & Speaker) -->
+            <div class="viva-panel-card">
+                <div class="viva-panel-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-shield-check text-success fs-5"></i>
+                        <h5 class="mb-0 fw-bold text-dark">Kiểm tra thiết bị âm thanh trước khi thi</h5>
+                    </div>
+                    <span class="badge tag-cyan">Khuyến nghị</span>
                 </div>
-
-                <!-- Device Check Section (Microphone & Speakers) -->
-                <div class="row g-3 mb-4">
-                    <!-- Test Microphone Widget -->
-                    <div class="col-md-6">
-                        <div class="card bg-light border-0 p-3 rounded-3 h-100">
-                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                <div class="viva-panel-body p-4">
+                    <div class="row g-3">
+                        <!-- Microphone Test -->
+                        <div class="col-md-6">
+                            <div class="p-3 rounded-4 border bg-light h-100 d-flex flex-column justify-content-between">
                                 <div>
-                                    <h6 class="fw-bold mb-1"><i class="bi bi-mic-fill text-danger me-2"></i>Kiểm tra Microphone</h6>
-                                    <small class="text-muted" id="micStatusText">Kiểm tra quyền truy cập microphone trước khi thi.</small>
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <div class="fw-bold text-dark"><i class="bi bi-mic-fill text-danger me-1"></i> Microphone</div>
+                                        <button type="button" id="btnTestMic" class="btn btn-outline-primary btn-sm px-3 rounded-pill">
+                                            <i class="bi bi-soundwave me-1"></i> Thử Micro
+                                        </button>
+                                    </div>
+                                    <small class="text-muted d-block" id="micStatusText">Kiểm tra quyền truy cập microphone.</small>
                                 </div>
-                                <button type="button" id="btnTestMic" class="btn btn-outline-primary btn-sm px-3 rounded-pill">
-                                    <i class="bi bi-soundwave me-1"></i>Thử Micro
-                                </button>
+                                <div id="micFeedbackAlert" class="mt-2 d-none"></div>
                             </div>
-                            <div id="micFeedbackAlert" class="mt-2 d-none"></div>
                         </div>
-                    </div>
 
-                    <!-- Test Speaker / Headphone Widget -->
-                    <div class="col-md-6">
-                        <div class="card bg-light border-0 p-3 rounded-3 h-100">
-                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                        <!-- Speaker Test -->
+                        <div class="col-md-6">
+                            <div class="p-3 rounded-4 border bg-light h-100 d-flex flex-column justify-content-between">
                                 <div>
-                                    <h6 class="fw-bold mb-1"><i class="bi bi-headphones text-success me-2"></i>Kiểm tra Tai nghe / Loa</h6>
-                                    <small class="text-muted" id="speakerStatusText">Phát âm thanh để đảm bảo bạn nghe rõ câu hỏi của AI.</small>
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <div class="fw-bold text-dark"><i class="bi bi-headphones text-success me-1"></i> Tai nghe / Loa</div>
+                                        <button type="button" id="btnTestSpeaker" class="btn btn-outline-success btn-sm px-3 rounded-pill">
+                                            <i class="bi bi-volume-up-fill me-1"></i> Thử Loa
+                                        </button>
+                                    </div>
+                                    <small class="text-muted d-block" id="speakerStatusText">Phát âm thanh kiểm tra tai nghe.</small>
                                 </div>
-                                <button type="button" id="btnTestSpeaker" class="btn btn-outline-success btn-sm px-3 rounded-pill">
-                                    <i class="bi bi-volume-up-fill me-1"></i>Thử Tai nghe
-                                </button>
+                                <div id="speakerFeedbackAlert" class="mt-2 d-none"></div>
                             </div>
-                            <div id="speakerFeedbackAlert" class="mt-2 d-none"></div>
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
 
-                <!-- Create Session Form -->
-                <div class="card border border-success border-opacity-25 rounded-3 p-3 bg-white shadow-sm mb-4">
-                    <h5 class="fw-bold text-success mb-3">
-                        <i class="bi bi-plus-circle-fill me-2"></i>Tạo phiên thi mới
-                    </h5>
+        <!-- RIGHT COLUMN: Create Session & Enter Room Actions -->
+        <div class="col-lg-5">
+            <!-- 1. Quick Launch Exam (EXAM01) -->
+            <div class="viva-panel-card mb-4" style="border: 2px solid #e0e7ff;">
+                <div class="viva-panel-header" style="background: #f5f3ff;">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-play-circle-fill text-primary fs-5"></i>
+                        <h5 class="mb-0 fw-bold text-dark">Khởi tạo bài thi nhanh</h5>
+                    </div>
+                    <span class="badge bg-primary text-white rounded-pill px-3 py-1">Phổ biến</span>
+                </div>
+                <div class="viva-panel-body p-4">
+                    <div class="p-3 rounded-4 mb-3" style="background: #f8fafc; border: 1px solid var(--border-subtle);">
+                        <div class="d-flex align-items-center justify-content-between mb-1">
+                            <span class="badge tag-purple">MÃ ĐỀ: EXAM01</span>
+                            <small class="text-muted"><i class="bi bi-clock me-1"></i> 90 giây / câu</small>
+                        </div>
+                        <h6 class="fw-bold text-dark mb-1">Kiến trúc ASP.NET Core & Dependency Injection</h6>
+                        <small class="text-secondary">Khảo thí chuyên sâu về Transient, Scoped, Singleton và kiến trúc 3 lớp.</small>
+                    </div>
+
                     @if (Model.IsOrchestratorAvailable)
                     {
                         <form method="post" asp-page-handler="Create">
                             @Html.AntiForgeryToken()
-                            <div class="input-group mb-3">
-                                <span class="input-group-text bg-light text-muted">
-                                    <i class="bi bi-journal-text"></i>
-                                </span>
-                                <input asp-for="ExamIdInput" class="form-control form-control-lg" placeholder="Nhập mã đề thi (ví dụ: EXAM01)" required />
-                                <button type="submit" class="btn btn-success btn-lg px-4 fw-semibold">
-                                    <i class="bi bi-play-circle me-1"></i> Tạo phiên thi mới
-                                </button>
+                            <input type="hidden" name="ExamIdInput" value="EXAM01" />
+                            <button type="submit" class="btn btn-primary w-100 py-3 rounded-pill fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2">
+                                <i class="bi bi-lightning-charge-fill"></i> Vào thi ngay đề EXAM01
+                            </button>
+                        </form>
+                    }
+                </div>
+            </div>
+
+            <!-- 2. Create Custom Session Form -->
+            <div class="viva-panel-card mb-4">
+                <div class="viva-panel-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-plus-circle-fill text-success fs-5"></i>
+                        <h5 class="mb-0 fw-bold text-dark">Tạo bài thi với mã đề khác</h5>
+                    </div>
+                </div>
+                <div class="viva-panel-body p-4">
+                    @if (Model.IsOrchestratorAvailable)
+                    {
+                        <form method="post" asp-page-handler="Create">
+                            @Html.AntiForgeryToken()
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-secondary mb-1">Mã đề thi (Exam ID)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0" style="border-radius: 14px 0 0 14px;">
+                                        <i class="bi bi-journal-text text-muted"></i>
+                                    </span>
+                                    <input asp-for="ExamIdInput" class="form-control" style="border-radius: 0 14px 14px 0; padding: 12px;" placeholder="Ví dụ: EXAM01, EXAM02..." required />
+                                </div>
                             </div>
-                            <div class="form-text text-muted">
-                                <i class="bi bi-info-circle me-1"></i>Hệ thống sẽ tạo phiên thi và chuyển trực tiếp tới phòng thi để bạn bắt đầu làm bài.
-                            </div>
+                            <button type="submit" class="btn btn-outline-primary w-100 py-2 rounded-pill fw-bold">
+                                <i class="bi bi-plus-lg me-1"></i> Tạo phiên thi mới
+                            </button>
                         </form>
                     }
                     else
                     {
-                        <div class="alert alert-warning mb-0" role="alert">
-                            <i class="bi bi-exclamation-triangle-fill me-2"></i>Chức năng thi vấn đáp chưa được bật.
+                        <div class="alert alert-warning mb-0 rounded-4" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>Chức năng Viva Orchestrator đang bảo trì.
                         </div>
                     }
                 </div>
+            </div>
 
-                <!-- Enter Session Form -->
-                <div class="card border border-primary border-opacity-25 rounded-3 p-3 bg-white shadow-sm">
-                    <h5 class="fw-bold text-primary mb-3">
-                        <i class="bi bi-door-open-fill me-2"></i>Tham gia phòng thi theo mã phiên
-                    </h5>
+            <!-- 3. Join by Existing SessionId -->
+            <div class="viva-panel-card">
+                <div class="viva-panel-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-door-open-fill text-primary fs-5"></i>
+                        <h5 class="mb-0 fw-bold text-dark">Vào phòng theo Mã phiên thi</h5>
+                    </div>
+                </div>
+                <div class="viva-panel-body p-4">
                     <form method="post">
                         @Html.AntiForgeryToken()
-                        <div class="input-group mb-3">
-                            <span class="input-group-text bg-light text-muted">
-                                <i class="bi bi-key-fill"></i>
-                            </span>
-                            <input asp-for="SessionIdInput" class="form-control form-control-lg" placeholder="Ví dụ: 11111111-1111-1111-1111-111111111111" required />
-                            <button type="submit" class="btn btn-primary btn-lg px-4 fw-semibold">
-                                <i class="bi bi-box-arrow-in-right me-1"></i> Vào phòng thi
-                            </button>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-secondary mb-1">Mã Guid phiên thi (Session ID)</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light border-end-0" style="border-radius: 14px 0 0 14px;">
+                                    <i class="bi bi-key-fill text-muted"></i>
+                                </span>
+                                <input asp-for="SessionIdInput" class="form-control" style="border-radius: 0 14px 14px 0; padding: 12px;" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" required />
+                            </div>
+                            <div class="form-text small text-muted mt-1">Dành cho thí sinh tiếp tục phiên thi đã được cấp trước.</div>
                         </div>
-                        <div class="form-text text-muted">
-                            <i class="bi bi-lightbulb me-1"></i>Bạn có thể lấy mã phiên từ email lịch thi hoặc danh sách bài thi được phân công.
-                        </div>
+                        <button type="submit" class="btn btn-dark w-100 py-2 rounded-pill fw-bold" style="background: var(--dark-charcoal);">
+                            <i class="bi bi-box-arrow-in-right me-1"></i> Tham gia phiên thi
+                        </button>
                     </form>
                 </div>
             </div>
@@ -156,7 +246,7 @@
         document.getElementById('btnTestMic')?.addEventListener('click', async function () {
             const feedback = document.getElementById('micFeedbackAlert');
             const statusText = document.getElementById('micStatusText');
-            feedback.className = 'mt-2 alert alert-info py-2 small';
+            feedback.className = 'mt-2 alert alert-info py-2 small rounded-3 border-0';
             feedback.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Đang yêu cầu quyền truy cập micro...';
             feedback.classList.remove('d-none');
 
@@ -165,14 +255,13 @@
                     throw new Error('Trình duyệt không hỗ trợ MediaDevices API.');
                 }
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                // Clean up tracks
                 stream.getTracks().forEach(t => t.stop());
-                feedback.className = 'mt-2 alert alert-success py-2 small';
-                feedback.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Microphone hoạt động tốt! Bạn đã sẵn sàng tham gia phòng thi.';
+                feedback.className = 'mt-2 alert alert-success py-2 small rounded-3 border-0';
+                feedback.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Microphone hoạt động tốt! Sẵn sàng làm bài thi.';
                 statusText.textContent = 'Microphone đã được cấp quyền thành công.';
             } catch (err) {
-                feedback.className = 'mt-2 alert alert-danger py-2 small';
-                feedback.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i> Lỗi micro: ' + (err.message || 'Không thể truy cập microphone. Vui lòng cho phép quyền trong cài đặt trình duyệt.');
+                feedback.className = 'mt-2 alert alert-danger py-2 small rounded-3 border-0';
+                feedback.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i> Lỗi micro: ' + (err.message || 'Không thể truy cập microphone.');
                 statusText.textContent = 'Chưa cấp quyền microphone.';
             }
         });
@@ -180,11 +269,10 @@
         document.getElementById('btnTestSpeaker')?.addEventListener('click', function () {
             const feedback = document.getElementById('speakerFeedbackAlert');
             const statusText = document.getElementById('speakerStatusText');
-            feedback.className = 'mt-2 alert alert-info py-2 small';
-            feedback.innerHTML = '<i class="bi bi-volume-up me-1"></i> Đang phát âm thanh kiểm tra qua tai nghe/loa...';
+            feedback.className = 'mt-2 alert alert-info py-2 small rounded-3 border-0';
+            feedback.innerHTML = '<i class="bi bi-volume-up me-1"></i> Đang phát âm thanh kiểm tra...';
             feedback.classList.remove('d-none');
 
-            // 1. Play musical chime via Web Audio API (always works offline without external files)
             try {
                 const AudioCtx = window.AudioContext || window.webkitAudioContext;
                 if (AudioCtx) {
@@ -208,23 +296,18 @@
                     playTone(783.99, now + 0.36, 0.35);  // G5
                 }
             } catch (e) {
-                console.warn('Web Audio chime warning:', e);
+                console.warn('Web Audio warning:', e);
             }
 
-            // 2. Play spoken voice via SpeechSynthesis if supported
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
                 const utter = new SpeechSynthesisUtterance('Kiểm tra âm thanh thành công. Tai nghe của bạn đang hoạt động rất tốt.');
                 utter.lang = 'vi-VN';
-                utter.rate = 1.0;
-                const voices = window.speechSynthesis.getVoices();
-                const viVoice = voices.find(v => v.lang && (v.lang.startsWith('vi') || v.lang.includes('VIE')));
-                if (viVoice) utter.voice = viVoice;
                 window.speechSynthesis.speak(utter);
             }
 
-            feedback.className = 'mt-2 alert alert-success py-2 small';
-            feedback.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Đã phát chuông và giọng nói thử nghiệm! Bạn hãy kiểm tra xem tai nghe/loa có nghe rõ không.';
+            feedback.className = 'mt-2 alert alert-success py-2 small rounded-3 border-0';
+            feedback.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Đã phát chuông thử nghiệm! Bạn hãy kiểm tra tai nghe có nghe rõ không.';
             statusText.textContent = 'Tai nghe/Loa đã sẵn sàng.';
         });
     </script>

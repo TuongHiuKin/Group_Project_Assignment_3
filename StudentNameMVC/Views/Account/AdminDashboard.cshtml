@@ -1,0 +1,275 @@
+@using AIVES.BLL.Security
+@{
+    ViewData["Title"] = "Admin Dashboard";
+    var userRole = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? ApplicationRoles.Admin;
+    var userName = User.Identity?.Name ?? "Quản trị viên";
+}
+
+<!-- Top Role Header Bar -->
+<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h4 class="fw-bold mb-0 text-dark">Dashboard Quản trị viên Toàn hệ thống</h4>
+            <span class="badge bg-primary text-white rounded-pill px-3 py-1 small">
+                <i class="bi bi-shield-lock-fill me-1"></i> Admin Portal
+            </span>
+        </div>
+        <p class="text-muted small mb-0">Không gian quản trị hạ tầng, tài khoản người dùng và giám sát dịch vụ AI thời gian thực</p>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <a asp-controller="Account" asp-action="Index" class="btn btn-primary rounded-pill px-3 py-1.5 fw-bold shadow-sm">
+            <i class="bi bi-person-plus-fill me-1"></i> Quản lý Tài khoản
+        </a>
+        <a asp-controller="ClassReports" asp-action="Index" class="btn btn-outline-secondary rounded-pill px-3 py-1.5 fw-bold">
+            <i class="bi bi-bar-chart-steps me-1"></i> Báo cáo Học vụ
+        </a>
+    </div>
+</div>
+
+<!-- ========================================================
+     DASHBOARD: QUẢN TRỊ VIÊN TOÀN HỆ THỐNG (ADMIN DASHBOARD)
+     ======================================================== -->
+<div class="dashboard-grid">
+    <!-- Main Column -->
+    <div class="dashboard-main-col">
+        <!-- 1. Hero Banner: Admin Command Center -->
+        <div class="hero-banner" style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);">
+            <span class="hero-sparkle hero-sparkle-1">✦</span>
+            <span class="hero-sparkle hero-sparkle-2">✦</span>
+            <span class="hero-sparkle hero-sparkle-3">★</span>
+
+            <span class="hero-tag" style="background: rgba(255, 255, 255, 0.15);">AIVES ADMIN PORTAL · CORE 2.0</span>
+            <h1 class="hero-title">Trung tâm Quản trị & Điều hành Hệ thống AIVES</h1>
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <a asp-controller="Account" asp-action="Index" class="hero-btn" style="background: #ffffff; color: #1e1b4b;">
+                    <span>Quản lý Tài khoản</span>
+                    <span class="hero-btn-arrow" style="background: #e0e7ff; color: #1e1b4b;"><i class="bi bi-people-fill"></i></span>
+                </a>
+                <a asp-controller="ClassReports" asp-action="Index" class="btn btn-outline-light rounded-pill px-4 py-2.5 fw-bold">
+                    <i class="bi bi-bar-chart-steps me-1"></i> Báo cáo Học vụ
+                </a>
+            </div>
+        </div>
+
+        <!-- 2. Admin Quick Stat Mini Cards (System Health & Stats) -->
+        <div class="stat-mini-row">
+            <div class="stat-mini-card">
+                <div class="stat-mini-icon-box icon-purple">
+                    <i class="bi bi-people-fill"></i>
+                </div>
+                <div class="stat-mini-info">
+                    <span class="stat-mini-metric">Hệ thống</span>
+                    <span class="stat-mini-title">Quản lý Tài khoản (Nhóm 7)</span>
+                </div>
+            </div>
+
+            <div class="stat-mini-card">
+                <div class="stat-mini-icon-box icon-cyan">
+                    <i class="bi bi-cpu-fill"></i>
+                </div>
+                <div class="stat-mini-info">
+                    <span class="stat-mini-metric">AI Engine</span>
+                    <span class="stat-mini-title">Whisper · TTS · GPT-4o</span>
+                </div>
+            </div>
+
+            <div class="stat-mini-card">
+                <div class="stat-mini-icon-box icon-pink">
+                    <i class="bi bi-shield-check"></i>
+                </div>
+                <div class="stat-mini-info">
+                    <span class="stat-mini-metric">Bảo mật</span>
+                    <span class="stat-mini-title">Cookie & Anti-Forgery</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Quản lý phân hệ cốt lõi -->
+        <div class="section-header">
+            <h2 class="section-title">Các phân hệ nghiệp vụ AIVES</h2>
+            <span class="badge tag-purple">3 Phân hệ chính</span>
+        </div>
+
+        <div class="course-cards-grid">
+            <!-- Phân hệ 1: Quản trị tài khoản -->
+            <div class="course-card">
+                <div class="course-card-thumb-wrap">
+                    <img src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=600&q=80" alt="Tài khoản" class="course-card-thumb-img" />
+                </div>
+                <div class="course-card-body">
+                    <span class="course-tag-pill tag-purple">NHÓM 7 SECURITY</span>
+                    <h3 class="course-card-title">Quản trị người dùng: Admin, Giảng viên và Sinh viên</h3>
+                    <div class="mt-auto pt-2">
+                        <a asp-controller="Account" asp-action="Index" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
+                            <i class="bi bi-gear-fill me-1"></i> Quản lý Tài khoản
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Phân hệ 2: Báo cáo & Thống kê -->
+            <div class="course-card">
+                <div class="course-card-thumb-wrap">
+                    <img src="https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=600&q=80" alt="Thống kê" class="course-card-thumb-img" />
+                </div>
+                <div class="course-card-body">
+                    <span class="course-tag-pill tag-cyan">NHÓM 6 REPORTING</span>
+                    <h3 class="course-card-title">Phân tích câu hỏi khó, phổ điểm & xuất bảng điểm CSV</h3>
+                    <div class="mt-auto pt-2">
+                        <a asp-controller="ClassReports" asp-action="Index" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
+                            <i class="bi bi-graph-up me-1"></i> Thống kê Lớp học
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Phân hệ 3: Lõi Viva Realtime -->
+            <div class="course-card">
+                <div class="course-card-thumb-wrap">
+                    <img src="https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80" alt="Viva Hub" class="course-card-thumb-img" />
+                </div>
+                <div class="course-card-body">
+                    <span class="course-tag-pill tag-pink">NHÓM 3 VIVA AI</span>
+                    <h3 class="course-card-title">Phòng thi vấn đáp Realtime SignalR & Hỏi xoáy AI</h3>
+                    <div class="mt-auto pt-2">
+                        <a asp-page="/Viva/Index" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
+                            <i class="bi bi-mic-fill me-1"></i> Cổng phòng thi
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Lịch sử hoạt động & Kiểm toán gần đây -->
+        <div class="section-header">
+            <h2 class="section-title">Nhật ký phiên thi & Hoạt động quản trị gần nhất</h2>
+            <a asp-controller="ClassReports" asp-action="Index" class="section-link">Xem tất cả</a>
+        </div>
+
+        <div class="lesson-table-wrap">
+            <table class="lesson-table">
+                <thead>
+                    <tr>
+                        <th>TÀI KHOẢN</th>
+                        <th>VAI TRÒ</th>
+                        <th>HOẠT ĐỘNG GẦN NHẤT</th>
+                        <th style="text-align: right;">THAO TÁC</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>
+                            <div class="table-mentor-cell">
+                                <div class="brand-icon-box" style="width: 34px; height: 34px; font-size: 16px; border-radius: 10px;">
+                                    <i class="bi bi-shield-lock-fill"></i>
+                                </div>
+                                <div>
+                                    <div class="table-mentor-name">admin@funews.com</div>
+                                    <div class="table-mentor-date">17/10/2026 09:15</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="badge tag-purple m-0">ADMIN</span></td>
+                        <td>Đăng nhập hệ thống & kiểm tra phân quyền hệ thống</td>
+                        <td style="text-align: right;">
+                            <a asp-controller="Account" asp-action="Index" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="table-mentor-cell">
+                                <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=80&q=80" alt="Avatar" class="table-mentor-avatar" />
+                                <div>
+                                    <div class="table-mentor-name">GV01 (TS. Hoàng Yến)</div>
+                                    <div class="table-mentor-date">17/10/2026 08:30</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="badge tag-cyan m-0">GIẢNG VIÊN</span></td>
+                        <td>Xem thống kê lớp SE1701 & tải file điểm CSV UTF-8</td>
+                        <td style="text-align: right;">
+                            <a asp-controller="ClassReports" asp-action="Index" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            <div class="table-mentor-cell">
+                                <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&q=80" alt="Avatar" class="table-mentor-avatar" />
+                                <div>
+                                    <div class="table-mentor-name">SV01 (Nguyễn Văn A)</div>
+                                    <div class="table-mentor-date">17/10/2026 08:00</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="badge tag-pink m-0">SINH VIÊN</span></td>
+                        <td>Hoàn thành bài thi vấn đáp EXAM01 qua Microphone STT</td>
+                        <td style="text-align: right;">
+                            <a asp-controller="StudentReports" asp-action="Index" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Right Statistic Column -->
+    <div class="dashboard-side-col">
+        <div class="statistic-panel">
+            <div class="statistic-header">
+                <h3 class="statistic-title">System Status</h3>
+                <button type="button" class="statistic-more-btn"><i class="bi bi-three-dots-vertical"></i></button>
+            </div>
+
+            <div class="statistic-user-card">
+                <div class="avatar-progress-container">
+                    <div class="avatar-progress-ring" style="background: conic-gradient(#10b981 0% 100%, #e2e8f0 100%);">
+                        <div class="avatar-progress-inner">
+                            <div class="brand-icon-box" style="width: 76px; height: 76px; font-size: 32px; border-radius: 50%;">
+                                <i class="bi bi-shield-check"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <span class="avatar-percentage-badge" style="background: #10b981;">100%</span>
+                </div>
+
+                <div class="statistic-user-greeting">AIVES Server Healthy 🔥</div>
+                <div class="statistic-user-sub">Hạ tầng SignalR Hub & Database SQL Server hoạt động ổn định.</div>
+            </div>
+
+            <!-- Mini Bar Chart -->
+            <div class="chart-card">
+                <div class="chart-bars-wrap">
+                    <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 50%;"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 75%;"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar-pillar active" style="height: 95%;"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 60%;"></div></div>
+                </div>
+                <div class="chart-axis-labels">
+                    <span>Database</span>
+                    <span>SignalR</span>
+                    <span>AI Cloud</span>
+                    <span>Storage</span>
+                </div>
+            </div>
+
+            <!-- Quick Admin Links -->
+            <div>
+                <h4 class="mentor-list-title mb-3">Lối tắt Quản trị</h4>
+                <div class="d-flex flex-column gap-2">
+                    <a asp-controller="Account" asp-action="Index" class="btn btn-light text-start py-2.5 px-3 rounded-4 border d-flex align-items-center justify-content-between">
+                        <span class="fw-bold small text-dark"><i class="bi bi-person-plus text-primary me-2"></i>Tạo tài khoản mới</span>
+                        <i class="bi bi-chevron-right text-muted small"></i>
+                    </a>
+                    <a asp-controller="ClassReports" asp-action="Index" class="btn btn-light text-start py-2.5 px-3 rounded-4 border d-flex align-items-center justify-content-between">
+                        <span class="fw-bold small text-dark"><i class="bi bi-file-earmark-bar-graph text-success me-2"></i>Bảng điểm toàn trường</span>
+                        <i class="bi bi-chevron-right text-muted small"></i>
+                    </a>
+                    <a asp-page="/Viva/Index" class="btn btn-light text-start py-2.5 px-3 rounded-4 border d-flex align-items-center justify-content-between">
+                        <span class="fw-bold small text-dark"><i class="bi bi-mic text-danger me-2"></i>Thử nghiệm phòng thi AI</span>
+                        <i class="bi bi-chevron-right text-muted small"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
