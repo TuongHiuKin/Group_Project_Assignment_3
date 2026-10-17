@@ -11,6 +11,8 @@ using AIVES.BLL.Interfaces.Ai;
 using AIVES.BLL.Options;
 using AIVES.BLL.Security;
 using AIVES.BLL.Services.Ai;
+using Microsoft.AspNetCore.Authentication;
+using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -182,6 +184,49 @@ public sealed class AdminAiSettingsTests : IClassFixture<AdminAiSettingsTests.Ad
         Assert.DoesNotContain(fakeKey, message);
     }
 
+    [Fact]
+    public async Task Get_AiSettings_WhenVivaDisabled_Returns200ForAdmin()
+    {
+        using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["VivaInterview:Enabled"] = "false"
+            }));
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddAuthentication(options =>
+                {
+                    options.DefaultAuthenticateScheme = "TestAdmin";
+                    options.DefaultChallengeScheme = "TestAdmin";
+                }).AddScheme<AuthenticationSchemeOptions, TestAdminAuthHandler>("TestAdmin", _ => { });
+            });
+        });
+
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+
+        var response = await client.GetAsync("/Admin/AiSettings");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task OnPostTest_WhenConnectionTesterFails_SetsTestErrorMessageAndRedirects()
+    {
+        var fakeStore = new InMemoryCredentialStore(null, useRealAi: false);
+        var tester = new DummyConnectionTester(false, "Chưa cấu hình OpenAI API key.");
+        var model = CreatePageModel(fakeStore, tester);
+
+        var result = await model.OnPostTestAsync();
+
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.Null(redirect.PageName);
+        Assert.Equal("Chưa cấu hình OpenAI API key.", model.TempData["TestErrorMessage"]);
+    }
+
     private static AiSettingsModel CreatePageModel(IAiCredentialStore store, IAiConnectionTester tester)
     {
         var model = new AiSettingsModel(store, tester, NullLogger<AiSettingsModel>.Instance);
@@ -276,5 +321,30 @@ public sealed class AdminAiSettingsTests : IClassFixture<AdminAiSettingsTests.Ad
         private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _handler;
         public TestHttpHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> handler) => _handler = handler;
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage req, CancellationToken ct) => _handler(req, ct);
+    }
+
+    private sealed class TestAdminAuthHandler : AuthenticationHandler<AuthenticationSchemeOptions>
+    {
+        public TestAdminAuthHandler(
+            IOptionsMonitor<AuthenticationSchemeOptions> options,
+            ILoggerFactory logger,
+            UrlEncoder encoder)
+            : base(options, logger, encoder)
+        {
+        }
+
+        protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+        {
+            var claims = new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, "ADMIN01"),
+                new Claim(ClaimTypes.Name, "Administrator"),
+                new Claim(ClaimTypes.Role, ApplicationRoles.Admin)
+            };
+            var identity = new ClaimsIdentity(claims, "TestAdmin");
+            var principal = new ClaimsPrincipal(identity);
+            var ticket = new AuthenticationTicket(principal, "TestAdmin");
+            return Task.FromResult(AuthenticateResult.Success(ticket));
+        }
     }
 }

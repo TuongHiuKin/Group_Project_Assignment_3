@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using AIVES.BLL.Interfaces.Ai;
 using AIVES.BLL.Interfaces.VivaInterview;
@@ -11,6 +12,17 @@ namespace AIVES.BLL;
 
 public static class DependencyInjection
 {
+    /// <summary>
+    /// Registers credential storage and connection testing for AI settings management.
+    /// Available regardless of whether the viva interview engine is actively enabled.
+    /// </summary>
+    public static IServiceCollection AddAiCredentialManagement(this IServiceCollection services)
+    {
+        services.TryAddSingleton<IAiCredentialStore, ProtectedAiCredentialStore>();
+        services.AddHttpClient<IAiConnectionTester, OpenAiConnectionTester>();
+        return services;
+    }
+
     /// <summary>
     /// Registers BLL services for Group 3 AI Viva Interview Core.
     /// </summary>
@@ -36,8 +48,7 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddAiServices(this IServiceCollection services)
     {
-        services.AddSingleton<IAiCredentialStore, ProtectedAiCredentialStore>();
-        services.AddHttpClient<IAiConnectionTester, OpenAiConnectionTester>();
+        services.AddAiCredentialManagement();
 
         services.AddHttpClient<WhisperSpeechToTextService>();
         services.AddHttpClient<OpenAiTextToSpeechService>();

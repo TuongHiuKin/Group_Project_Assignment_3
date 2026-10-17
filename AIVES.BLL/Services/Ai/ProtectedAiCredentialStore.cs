@@ -124,7 +124,28 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to delete stored AI credential file.");
+                    _logger.LogWarning(ex, "Failed to delete stored AI credential file. Attempting to overwrite with empty credentials.");
+                    try
+                    {
+                        var emptyModel = new StoredCredentialModel
+                        {
+                            ProtectedApiKey = null,
+                            UseRealAi = false,
+                            UpdatedAtUtc = _updatedAtUtc
+                        };
+                        var json = JsonSerializer.Serialize(emptyModel, new JsonSerializerOptions
+                        {
+                            WriteIndented = true,
+                            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                        });
+                        var tmpPath = _storePath + ".tmp";
+                        await File.WriteAllTextAsync(tmpPath, json, ct).ConfigureAwait(false);
+                        File.Move(tmpPath, _storePath, overwrite: true);
+                    }
+                    catch (Exception overwriteEx)
+                    {
+                        _logger.LogWarning(overwriteEx, "Failed to overwrite AI credential file after delete failure.");
+                    }
                 }
             }
         }
