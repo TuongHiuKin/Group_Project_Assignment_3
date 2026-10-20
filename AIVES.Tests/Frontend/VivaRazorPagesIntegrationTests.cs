@@ -164,4 +164,30 @@ public sealed class VivaRazorPagesIntegrationTests : IClassFixture<VivaRazorPage
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Contains("AccessDenied", response.Headers.Location?.ToString());
     }
+
+    [Fact]
+    public async Task Get_Layout_WithAuth_RendersUserDropdownAndRemovesSidebarSettings()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-User", "SV01");
+
+        var response = await client.GetAsync("/Account/StudentDashboard");
+
+        response.EnsureSuccessStatusCode();
+        var html = await response.Content.ReadAsStringAsync();
+
+        // Dropdown toggle button with chevron & data-bs-toggle
+        Assert.Contains("id=\"userProfileDropdown\"", html);
+        Assert.Contains("data-bs-toggle=\"dropdown\"", html);
+        Assert.Contains("bi-chevron-down", html);
+
+        // Dropdown items
+        Assert.Contains("/Account/Dashboard", html);
+        Assert.Contains("Cài đặt", html);
+        Assert.Contains("/Account/Logout", html);
+        Assert.Contains("Đăng xuất", html);
+
+        // Sidebar SETTINGS removed
+        Assert.DoesNotContain("sidebar-category\">SETTINGS</div>", html);
+    }
 }
