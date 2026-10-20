@@ -38,6 +38,7 @@ public class QuestionResultDto
 {
     public string QuestionId { get; set; } = string.Empty;
     public string QuestionTitle { get; set; } = string.Empty;
+    public string QuestionContent { get; set; } = string.Empty;
     public string CognitiveLevel { get; set; } = "Vận dụng"; // Thang Bloom: Nhớ, Hiểu, Vận dụng, Phân tích (Nhóm 1)
     
     // Điểm số & Chấm điểm (Nhóm 4 - Human-in-the-loop)
@@ -94,6 +95,12 @@ public class StudentReportDto
 {
     public string StudentId { get; set; } = string.Empty;
     public string StudentName { get; set; } = string.Empty;
+    public string ClassId { get; set; } = "SE1701";
+    public string Email { get; set; } = string.Empty;
+    public string Major { get; set; } = "Kỹ thuật phần mềm (SE)";
+    public string AcademicYear { get; set; } = "K17 (2023 - 2027)";
+    public string LecturerName { get; set; } = "TS. Hoàng Yến (GV01)";
+    public string Semester { get; set; } = "Fall 2026";
     public string ExamId { get; set; } = string.Empty;
     public string ExamTitle { get; set; } = string.Empty;
     public ExamEvaluationMode EvaluationMode { get; set; } = ExamEvaluationMode.Score;

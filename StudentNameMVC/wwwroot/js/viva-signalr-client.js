@@ -20,6 +20,13 @@ class VivaExamClient {
         this.sessionState = config.initialState || 'Created';
         this.canRetry = true;
 
+        // Dừng mọi giọng đọc speech synthesis còn sót lại từ trước khi vào phòng
+        if ('speechSynthesis' in window) {
+            try {
+                window.speechSynthesis.cancel();
+            } catch (e) { }
+        }
+
         this.initDomElements();
         this.initSignalR();
         this.bindEvents();
@@ -49,6 +56,7 @@ class VivaExamClient {
             followUpAudio: document.getElementById('followUpAudio'),
 
             // Answering & Recording Section
+            startExamBanner: document.getElementById('startExamBanner'),
             answeringSection: document.getElementById('answeringSection'),
             btnStartExam: document.getElementById('btnStartExam'),
             btnStartRecord: document.getElementById('btnStartRecord'),
@@ -65,6 +73,8 @@ class VivaExamClient {
             transcriptionSpinner: document.getElementById('transcriptionSpinner'),
 
             // Completed Section
+            examWorkspace: document.getElementById('examWorkspace'),
+            completedCardContainer: document.getElementById('completedCardContainer'),
             completedCard: document.getElementById('completedCard'),
 
             // Alerts and modals
@@ -74,6 +84,15 @@ class VivaExamClient {
             generalAlert: document.getElementById('generalAlert'),
             generalAlertText: document.getElementById('generalAlertText')
         };
+
+        // Thiết lập trạng thái hiển thị ban đầu phù hợp với sessionState
+        const stateName = typeof this.sessionState === 'string' ? this.sessionState : this.mapStateToString(this.sessionState);
+        if (stateName === 'Created' || stateName === 'Ready') {
+            if (this.el.startExamBanner) this.el.startExamBanner.classList.remove('d-none');
+            if (this.el.btnStartExam) this.el.btnStartExam.classList.remove('d-none');
+            if (this.el.questionCard) this.el.questionCard.classList.add('d-none');
+            if (this.el.answeringSection) this.el.answeringSection.classList.add('d-none');
+        }
     }
 
     bindEvents() {
@@ -220,7 +239,12 @@ class VivaExamClient {
             }
         }
 
-        // 2. Stop audio playback if active
+        // 2. Stop audio playback and speech synthesis if active
+        if ('speechSynthesis' in window) {
+            try {
+                window.speechSynthesis.cancel();
+            } catch (e) { }
+        }
         if (this.audioPlayer) {
             try {
                 this.audioPlayer.pause();
@@ -249,24 +273,42 @@ class VivaExamClient {
         if (!snapshot) return;
 
         if (snapshot.status) {
+            if (snapshot.status.examId) this.examId = snapshot.status.examId;
+            if (snapshot.status.studentId) this.studentId = snapshot.status.studentId;
             this.handleSessionStatusChanged(snapshot.status);
         }
 
+        const state = snapshot.status?.state;
+        const stateName = typeof state === 'string' ? state : this.mapStateToString(state);
+        const isExamStarted = stateName !== 'Created' && stateName !== 'Ready';
+
         if (snapshot.currentQuestion) {
-            this.renderQuestion(snapshot.currentQuestion);
+            if (isExamStarted) {
+                // Phiên thi đã bắt đầu trước đó (ví dụ F5 tải lại trang giữa bài thi)
+                // Hiển thị nội dung câu hỏi nhưng KHÔNG tự động đọc lại (autoPlayTts = false)
+                this.renderQuestion(snapshot.currentQuestion, false);
+            } else {
+                // Chưa bấm "Bắt đầu làm bài thi": Lưu dữ liệu nhưng KHÔNG hiển thị và TUYỆT ĐỐI KHÔNG đọc
+                this.currentQuestionId = snapshot.currentQuestion.questionId;
+                if (this.el.questionTitle) this.el.questionTitle.textContent = snapshot.currentQuestion.title || `Câu hỏi: ${snapshot.currentQuestion.questionId}`;
+                if (this.el.questionContent) this.el.questionContent.textContent = snapshot.currentQuestion.content || '';
+                if (snapshot.currentQuestion.audioUrl && this.el.questionAudio) {
+                    this.el.questionAudio.src = snapshot.currentQuestion.audioUrl;
+                }
+            }
         }
 
-        if (snapshot.latestTranscript) {
+        if (isExamStarted && snapshot.latestTranscript) {
             this.handleTranscriptReady(snapshot.latestTranscript);
         }
 
         if (snapshot.currentFollowUp &&
-            (snapshot.status?.state === 'FollowUpDelivered' || snapshot.status?.state === 'Answering' ||
+            (stateName === 'FollowUpDelivered' || stateName === 'Answering' ||
              snapshot.status?.state === 7 || snapshot.status?.state === 3)) {
-            this.handleFollowUpGenerated(snapshot.currentFollowUp);
+            this.handleFollowUpGenerated(snapshot.currentFollowUp, false);
         }
 
-        if (snapshot.timer) {
+        if (isExamStarted && snapshot.timer) {
             this.handleTimeRemainingChanged(snapshot.timer);
         }
     }
@@ -302,15 +344,15 @@ class VivaExamClient {
         }
 
         // Handle states
-        if (stateName === 'Ready') {
+        if (stateName === 'Ready' || stateName === 'Created') {
+            if (this.el.startExamBanner) this.el.startExamBanner.classList.remove('d-none');
             if (this.el.btnStartExam) this.el.btnStartExam.classList.remove('d-none');
+            if (this.el.questionCard) this.el.questionCard.classList.add('d-none');
             if (this.el.answeringSection) this.el.answeringSection.classList.add('d-none');
-        } else if (stateName === 'QuestionDelivered') {
+        } else if (stateName === 'QuestionDelivered' || stateName === 'Answering') {
+            if (this.el.startExamBanner) this.el.startExamBanner.classList.add('d-none');
             if (this.el.btnStartExam) this.el.btnStartExam.classList.add('d-none');
             if (this.el.questionCard) this.el.questionCard.classList.remove('d-none');
-            if (this.el.answeringSection) this.el.answeringSection.classList.remove('d-none');
-        } else if (stateName === 'Answering') {
-            if (this.el.btnStartExam) this.el.btnStartExam.classList.add('d-none');
             if (this.el.answeringSection) this.el.answeringSection.classList.remove('d-none');
         } else if (stateName === 'Transcribing') {
             if (this.el.transcriptionSpinner) this.el.transcriptionSpinner.classList.remove('d-none');
@@ -325,6 +367,69 @@ class VivaExamClient {
         }
     }
 
+    sanitizeTextForVietnameseTts(rawText) {
+        if (!rawText) return '';
+        let s = rawText;
+
+        // Chuẩn hóa và phiên âm các từ tiếng Anh chuyên ngành để bộ đọc Tiếng Việt không bị lỗi/nghẹn tiếng:
+        const terms = [
+            [/\bDbContext\b/gi, 'Đi-bi Con-text'],
+            [/\bDbContexts\b/gi, 'Đi-bi Con-texts'],
+            [/\bSingleton\b/gi, 'Xinh-gơn-tơn'],
+            [/\bScoped\b/gi, 'X-cốp'],
+            [/\bTransient\b/gi, 'Tran-ren'],
+            [/\bRepository\b/gi, 'Re-po-si-to-ri'],
+            [/\bRepositories\b/gi, 'Re-po-si-to-ri'],
+            [/\bConcurrency\b/gi, 'cơn-cơ-rần-xi'],
+            [/\bException\b/gi, 'ếch-sép-dần'],
+            [/\bExceptions\b/gi, 'ếch-sép-dần'],
+            [/\bMemory\s*leak\b/gi, 'me-mô-ri lích'],
+            [/\bDependency\s*Injection\b/gi, 'Đe-pen-đân-xi In-dếch-dần'],
+            [/\bDI\b/g, 'D I'],
+            [/\bASP\.NET\s*Core\b/gi, 'A S P Đót Nét Co'],
+            [/\b\.NET\s*Core\b/gi, 'Đót Nét Co'],
+            [/\b\.NET\b/gi, 'Đót Nét'],
+            [/\bEF\s*Core\b/gi, 'E F Co'],
+            [/\bSignalR\b/gi, 'Xích-nồ R'],
+            [/\bAPI\b/gi, 'A P I'],
+            [/\bAPIs\b/gi, 'A P I'],
+            [/\bAsync\b/gi, 'A-xinh'],
+            [/\bAwait\b/gi, 'Ơ-quết'],
+            [/\bThread\b/gi, 'Thrét'],
+            [/\bThreads\b/gi, 'Thréts'],
+            [/\bTask\b/gi, 'Tác'],
+            [/\bBLL\b/gi, 'B L L'],
+            [/\bDAL\b/gi, 'D A L'],
+            [/\bDTO\b/gi, 'D T O'],
+            [/\bUnit\s*of\s*Work\b/gi, 'Diu-nít ọp guốc'],
+            [/\bEntity\s*Framework\b/gi, 'En-ti-ti Phrem-guốc'],
+            [/\bEntity\b/gi, 'En-ti-ti'],
+            [/\bEntities\b/gi, 'En-ti-ti'],
+            [/\bMicrophone\b/gi, 'Míc'],
+            [/\bMic\b/gi, 'Míc'],
+            [/\bWebSocket\b/gi, 'Quép-sóc-két'],
+            [/\bWebSockets\b/gi, 'Quép-sóc-két'],
+            [/\bProduction\b/gi, 'Prô-đắc-dần'],
+            [/\bCache\b/gi, 'Két'],
+            [/\bCaching\b/gi, 'Két-xinh'],
+            [/\bQuery\b/gi, 'Cue-ri'],
+            [/\bQueries\b/gi, 'Cue-ri'],
+            [/\bEdge[\s-]*case\b/gi, 'ét-cây'],
+            [/\bEdge[\s-]*cases\b/gi, 'ét-cây'],
+            [/\bTrade[\s-]*off\b/gi, 'trết-ọp'],
+            [/\bTrade[\s-]*offs\b/gi, 'trết-ọp'],
+            [/\bPipeline\b/gi, 'pai-lai'],
+            [/\bConnection\s*pool\b/gi, 'cơn-nếch-dần pun'],
+            [/\bPool\b/gi, 'pun']
+        ];
+
+        for (const [pattern, phonetic] of terms) {
+            s = s.replace(pattern, phonetic);
+        }
+
+        return s;
+    }
+
     playTts(text, audioEl, audioUrl, onEndCallback) {
         const isMockAudio = !audioUrl || audioUrl.includes('mock-question.mp3');
 
@@ -336,13 +441,49 @@ class VivaExamClient {
             }
 
             window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
+            
+            // Xử lý phiên âm thuật ngữ tiếng Anh giúp phát âm trơn tru, không lỗi
+            const spokenText = this.sanitizeTextForVietnameseTts(text);
+            const utterance = new SpeechSynthesisUtterance(spokenText);
             utterance.lang = 'vi-VN';
-            utterance.rate = 1.0;
+            utterance.rate = 0.95; // Tốc độ 0.95 giúp giọng đọc rõ ràng, tự nhiên cho câu hỏi học thuật
+            utterance.pitch = 1.0;
 
-            const voices = window.speechSynthesis.getVoices();
-            const viVoice = voices.find(v => v.lang && (v.lang.startsWith('vi') || v.lang.includes('VIE')));
-            if (viVoice) utterance.voice = viVoice;
+            const getBestVoice = () => {
+                const voices = window.speechSynthesis.getVoices();
+                if (!voices || voices.length === 0) return null;
+
+                const viVoices = voices.filter(v => v.lang && (v.lang.startsWith('vi') || v.lang.includes('VIE')));
+                if (viVoices.length === 0) return voices[0];
+
+                // 1. Ưu tiên Microsoft HoaiMy Online (Natural) - Giọng nữ truyền cảm, mượt mà
+                const hoaiMy = viVoices.find(v => v.name.includes('HoaiMy') || v.name.includes('Hoài My'));
+                if (hoaiMy) return hoaiMy;
+
+                // 2. Ưu tiên Microsoft NamMinh Online (Natural) - Giọng nam chuẩn
+                const namMinh = viVoices.find(v => v.name.includes('NamMinh') || v.name.includes('Nam Minh'));
+                if (namMinh) return namMinh;
+
+                // 3. Ưu tiên giọng Natural hoặc Online
+                const natural = viVoices.find(v => v.name.includes('Natural') || v.name.includes('Online'));
+                if (natural) return natural;
+
+                // 4. Ưu tiên Google Tiếng Việt
+                const googleVi = viVoices.find(v => v.name.includes('Google'));
+                if (googleVi) return googleVi;
+
+                return viVoices[0];
+            };
+
+            const selectedVoice = getBestVoice();
+            if (selectedVoice) {
+                utterance.voice = selectedVoice;
+            } else {
+                window.speechSynthesis.onvoiceschanged = () => {
+                    const voice = getBestVoice();
+                    if (voice) utterance.voice = voice;
+                };
+            }
 
             let completed = false;
             const finish = () => {
@@ -386,7 +527,7 @@ class VivaExamClient {
         }
     }
 
-    renderQuestion(question) {
+    renderQuestion(question, autoPlayTts = true) {
         if (!question) return;
         this.currentQuestionId = question.questionId;
         if (this.el.questionTitle) this.el.questionTitle.textContent = question.title || `Câu hỏi: ${question.questionId}`;
@@ -397,9 +538,12 @@ class VivaExamClient {
         }
 
         if (this.el.btnPlayQuestionAudio) this.el.btnPlayQuestionAudio.classList.remove('d-none');
-        this.playTts(question.content, this.el.questionAudio, question.audioUrl, () => {
-            this.requestBeginAnswering();
-        });
+
+        if (autoPlayTts) {
+            this.playTts(question.content, this.el.questionAudio, question.audioUrl, () => {
+                this.requestBeginAnswering();
+            });
+        }
     }
 
     async requestBeginAnswering() {
@@ -438,7 +582,7 @@ class VivaExamClient {
         }
     }
 
-    handleFollowUpGenerated(followUp) {
+    handleFollowUpGenerated(followUp, autoPlayTts = true) {
         if (!followUp) return;
         this.currentQuestionId = followUp.followUpQuestionId;
         this.currentTurnId = followUp.turnId;
@@ -458,12 +602,15 @@ class VivaExamClient {
 
         // Follow-up TTS Playback (UI-05)
         if (this.el.btnPlayFollowUpAudio) this.el.btnPlayFollowUpAudio.classList.remove('d-none');
-        this.playTts(followUp.followUpContent, this.el.followUpAudio, followUp.audioUrl, () => {
-            this.requestBeginAnswering();
-            this.setRecordingUiState('ready', 'Mời bạn bắt đầu ghi âm trả lời câu hỏi phụ.');
-        });
 
-        this.showToast('AI đã tạo câu hỏi phụ cho bạn!', 'info');
+        if (autoPlayTts) {
+            this.playTts(followUp.followUpContent, this.el.followUpAudio, followUp.audioUrl, () => {
+                this.requestBeginAnswering();
+                this.setRecordingUiState('ready', 'Mời bạn bắt đầu ghi âm trả lời câu hỏi phụ.');
+            });
+
+            this.showToast('AI đã tạo câu hỏi phụ cho bạn!', 'info');
+        }
     }
 
     handleTimeRemainingChanged(timer) {
@@ -495,13 +642,9 @@ class VivaExamClient {
         this.sessionState = 'Completed';
         this.recorder.cancelRecording();
 
-        if (this.el.questionCard) this.el.questionCard.classList.add('d-none');
-        if (this.el.followUpCard) this.el.followUpCard.classList.add('d-none');
-        if (this.el.answeringSection) this.el.answeringSection.classList.add('d-none');
-
-        if (this.el.completedCard) {
-            this.el.completedCard.classList.remove('d-none');
-        }
+        if (this.el.examWorkspace) this.el.examWorkspace.classList.add('d-none');
+        if (this.el.completedCardContainer) this.el.completedCardContainer.classList.remove('d-none');
+        if (this.el.completedCard) this.el.completedCard.classList.remove('d-none');
 
         if (this.el.stateBadge) {
             this.el.stateBadge.textContent = 'Hoàn thành';
@@ -509,6 +652,56 @@ class VivaExamClient {
         }
 
         this.showToast('Chúc mừng! Bạn đã hoàn thành phiên thi vấn đáp.', 'success');
+        this.fetchAndDisplayScore();
+    }
+
+    async fetchAndDisplayScore() {
+        const scoreVal = document.getElementById('completedScoreValue');
+        const scoreBadge = document.getElementById('completedScoreBadge');
+        const feedbackText = document.getElementById('completedFeedbackText');
+        const strengthsText = document.getElementById('completedStrengthsText');
+        const weaknessesText = document.getElementById('completedWeaknessesText');
+        const spinner = document.getElementById('scoreLoadingSpinner');
+
+        if (spinner) spinner.classList.remove('d-none');
+
+        try {
+            const url = `/Viva/Exam?handler=ScoreSummary&sessionId=${encodeURIComponent(this.sessionId)}&examId=${encodeURIComponent(this.examId)}`;
+            const res = await fetch(url);
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.success) {
+                    if (scoreVal) scoreVal.textContent = data.score != null ? data.score.toFixed(1) : '--';
+                    if (scoreBadge) {
+                        const isPass = data.isPassed;
+                        scoreBadge.innerHTML = `<span class="badge ${isPass ? 'bg-success' : 'bg-danger'} fs-6 px-3 py-2 rounded-pill">
+                            <i class="bi ${isPass ? 'bi-check-circle-fill' : 'bi-x-circle-fill'} me-1"></i>
+                            ${isPass ? 'ĐẠT TIÊU CHUẨN' : 'CHƯA ĐẠT'}
+                        </span>`;
+                    }
+                    if (feedbackText && data.feedback) {
+                        feedbackText.innerHTML = `<strong class="text-primary"><i class="bi bi-chat-quote-fill me-1"></i> Nhận xét AI:</strong> <span>${data.feedback}</span>`;
+                        feedbackText.classList.remove('d-none');
+                    }
+                    if (strengthsText && data.strengths) {
+                        strengthsText.innerHTML = `<div class="p-3 rounded-3 text-start small h-100 shadow-2xs" style="background: #f0fdf4; border: 1px solid #bbf7d0;">
+                            <strong class="text-success d-block mb-1"><i class="bi bi-hand-thumbs-up-fill me-1"></i> Điểm mạnh:</strong>
+                            <span class="text-dark">${data.strengths}</span>
+                        </div>`;
+                    }
+                    if (weaknessesText && data.weaknesses) {
+                        weaknessesText.innerHTML = `<div class="p-3 rounded-3 text-start small h-100 shadow-2xs" style="background: #fff1f2; border: 1px solid #fecdd3;">
+                            <strong class="text-danger d-block mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i> Cần cải thiện:</strong>
+                            <span class="text-dark">${data.weaknesses}</span>
+                        </div>`;
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('Could not fetch score summary immediately:', e);
+        } finally {
+            if (spinner) spinner.classList.add('d-none');
+        }
     }
 
     handleVivaError(error) {
@@ -547,7 +740,11 @@ class VivaExamClient {
 
             const data = await response.json();
             if (data.question) {
-                this.renderQuestion(data.question);
+                if (this.el.startExamBanner) this.el.startExamBanner.classList.add('d-none');
+                if (this.el.btnStartExam) this.el.btnStartExam.classList.add('d-none');
+                if (this.el.questionCard) this.el.questionCard.classList.remove('d-none');
+                if (this.el.answeringSection) this.el.answeringSection.classList.remove('d-none');
+                this.renderQuestion(data.question, true);
             }
         } catch (err) {
             console.error('StartExam error:', err);

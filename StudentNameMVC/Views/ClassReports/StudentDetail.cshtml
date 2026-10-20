@@ -55,7 +55,10 @@
                     <div>
                         <span class="text-muted small text-uppercase fw-bold d-block">Sinh viên</span>
                         <h4 class="fw-bold mb-0 text-dark">@Model.StudentName</h4>
-                        <span class="badge tag-purple mt-1">MSSV: @Model.StudentId</span>
+                        <div class="d-flex flex-wrap align-items-center gap-1 mt-1">
+                            <span class="badge tag-purple">MSSV: @Model.StudentId</span>
+                            <span class="badge tag-cyan">Lớp: @(string.IsNullOrWhiteSpace(Model.ClassId) ? selectedClassId : Model.ClassId)</span>
+                        </div>
                     </div>
                 </div>
             </div>

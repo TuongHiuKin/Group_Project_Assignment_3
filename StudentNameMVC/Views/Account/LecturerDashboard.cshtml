@@ -17,6 +17,9 @@
         <p class="text-muted small mb-0">Theo dõi tiến độ khảo thí, đánh giá năng lực sinh viên và phân tích phổ điểm lớp học</p>
     </div>
     <div class="d-flex align-items-center gap-2">
+        <a asp-page="/Viva/CreateExam" class="btn btn-warning rounded-pill px-3 py-1.5 fw-bold text-dark shadow-sm">
+            <i class="bi bi-plus-circle-fill me-1"></i> Tạo phòng thi mới
+        </a>
         <a asp-controller="ClassReports" asp-action="Index" class="btn btn-outline-secondary rounded-pill px-3 py-1.5 fw-bold">
             <i class="bi bi-bar-chart-steps me-1"></i> Thống kê Lớp học
         </a>
@@ -42,13 +45,12 @@
             <span class="hero-tag" style="background: rgba(255, 255, 255, 0.2);">GIẢNG VIÊN KHẢO THÍ · HUMAN-IN-THE-LOOP</span>
             <h1 class="hero-title">Quản lý Khảo thí & Đánh giá Năng lực Sinh viên</h1>
             <div class="d-flex align-items-center gap-3 flex-wrap">
-                <a asp-controller="ClassReports" asp-action="Index" class="hero-btn" style="background: #111827;">
-                    <span>Thống kê Lớp học</span>
-                    <span class="hero-btn-arrow"><i class="bi bi-bar-chart-steps"></i></span>
+                <a asp-page="/Viva/CreateExam" class="hero-btn" style="background: #fbbf24; color: #111827;">
+                    <span class="fw-bold">Tạo phòng thi Viva AI</span>
+                    <span class="hero-btn-arrow" style="background: #111827; color: #ffffff;"><i class="bi bi-plus-lg"></i></span>
                 </a>
-                <a asp-controller="ClassReports" asp-action="ExportGradeSheet" asp-route-teacherId="GV01" asp-route-classId="SE1701" asp-route-examId="EXAM01"
-                   class="btn btn-light rounded-pill px-4 py-2.5 fw-bold text-dark shadow-sm">
-                    <i class="bi bi-file-earmark-excel-fill text-success me-1"></i> Xuất Bảng Điểm CSV
+                <a asp-controller="ClassReports" asp-action="Index" class="btn btn-light rounded-pill px-4 py-2.5 fw-bold text-dark shadow-sm">
+                    <i class="bi bi-bar-chart-steps text-primary me-1"></i> Thống kê Lớp học
                 </a>
             </div>
         </div>

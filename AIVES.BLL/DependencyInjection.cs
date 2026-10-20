@@ -29,6 +29,7 @@ public static class DependencyInjection
     public static IServiceCollection AddVivaInterviewServices(this IServiceCollection services)
     {
         services.AddScoped<IVivaSessionOrchestrator, VivaSessionOrchestrator>();
+        services.AddScoped<IVivaExamRoomService, VivaExamRoomService>();
         return services;
     }
 
@@ -53,6 +54,7 @@ public static class DependencyInjection
         services.AddHttpClient<WhisperSpeechToTextService>();
         services.AddHttpClient<OpenAiTextToSpeechService>();
         services.AddHttpClient<OpenAiFollowUpGeneratorService>();
+        services.AddHttpClient<IAiScoringService, AiScoringService>();
         services.AddSingleton<FollowUpPolicyValidator>();
         services.AddScoped<MockSpeechToTextService>();
         services.AddScoped<MockTextToSpeechService>();

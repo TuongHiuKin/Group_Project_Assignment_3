@@ -340,6 +340,29 @@ public class ExamReportingTests
     }
 
     [Fact]
+    public async Task StudentReportsController_LecturerCanViewAnyStudentReport_ReturnsViewResult()
+    {
+        var controller = new StudentReportsController(_studentService);
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, "GV01"),
+            new Claim(ClaimTypes.Email, "lecturer@aives.test"),
+            new Claim(ClaimTypes.Role, ApplicationRoles.Lecturer)
+        }, "TestAuth"));
+
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext { User = principal }
+        };
+
+        var result = await controller.Index(studentId: "SV01", examId: "EXAM01");
+
+        var viewResult = Assert.IsType<ViewResult>(result);
+        var model = Assert.IsType<StudentReportDto>(viewResult.Model);
+        Assert.Equal("SV01", model.StudentId);
+    }
+
+    [Fact]
     public void ReportingControllers_DoNotDependOnExamReportRepository()
     {
         // Kiểm tra kiến trúc: Controller không được nhận IExamReportRepository trong constructor
@@ -350,6 +373,122 @@ public class ExamReportingTests
         var classCtors = typeof(ClassReportsController).GetConstructors();
         Assert.All(classCtors, c =>
             Assert.DoesNotContain(c.GetParameters(), p => p.ParameterType == typeof(IExamReportRepository)));
+    }
+
+    [Fact]
+    public async Task StudentReportService_RealSessions_ScoresImmediately_AndIncludesDisclaimer()
+    {
+        var fakeRepo = new FakeExamReportRepository();
+        var fakeSessionRepo = new FakeVivaSessionRepo();
+        var fakeQuestionRepo = new FakeVivaQuestionRepo();
+        var scoringService = new AIVES.BLL.Services.Ai.AiScoringService(
+            new HttpClient(),
+            Microsoft.Extensions.Options.Options.Create(new AIVES.BLL.Options.AiServiceOptions
+            {
+                UseMock = true
+            }));
+
+        var sessionId = Guid.NewGuid();
+        var session = new AIVES.DAL.Entities.VivaSession
+        {
+            SessionId = sessionId,
+            ExamId = "REAL_EXAM",
+            StudentId = "SV_REAL",
+            State = 8, // Completed
+            StartedAtUtc = DateTime.UtcNow.AddMinutes(-10),
+            CompletedAtUtc = DateTime.UtcNow,
+            Turns = new List<AIVES.DAL.Entities.VivaSessionTurn>
+            {
+                new()
+                {
+                    TurnId = Guid.NewGuid(),
+                    SessionId = sessionId,
+                    TurnOrdinal = 1,
+                    QuestionId = "Q01",
+                    TranscriptText = "Dependency Injection là design pattern giúp tách rời sự phụ thuộc giữa các component.",
+                    FollowUpQuestionText = "Tại sao nên dùng Scoped lifetime?",
+                    CreatedAtUtc = DateTime.UtcNow.AddMinutes(-8)
+                }
+            }
+        };
+
+        fakeSessionRepo.Sessions.Add(session);
+
+        var service = new StudentReportService(fakeRepo, fakeSessionRepo, fakeQuestionRepo, scoringService);
+        var report = await service.GetStudentReportAsync("SV_REAL", "REAL_EXAM");
+
+        Assert.NotNull(report);
+        Assert.Equal(1, report.CompletedAttemptsCount);
+        Assert.Equal(1, report.GradedAttemptsCount);
+        Assert.NotNull(report.AverageScore);
+        Assert.True(report.AverageScore > 0);
+
+        var attempt = Assert.Single(report.Attempts);
+        var question = Assert.Single(attempt.QuestionResults);
+        Assert.False(string.IsNullOrWhiteSpace(question.AiFeedback));
+        Assert.Contains("giảng viên", question.TeacherNotes, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private class FakeVivaSessionRepo : AIVES.DAL.Repositories.Interfaces.IVivaSessionRepository
+    {
+        public List<AIVES.DAL.Entities.VivaSession> Sessions { get; } = new();
+
+        public Task<AIVES.DAL.Entities.VivaSession?> GetByIdAsync(Guid sessionId, CancellationToken ct = default) =>
+            Task.FromResult(Sessions.FirstOrDefault(s => s.SessionId == sessionId));
+
+        public Task<AIVES.DAL.Entities.VivaSession?> GetWithDetailsAsync(Guid sessionId, CancellationToken ct = default) =>
+            GetByIdAsync(sessionId, ct);
+
+        public Task<Guid> CreateSessionAsync(AIVES.DAL.Entities.VivaSession session, CancellationToken ct = default)
+        {
+            Sessions.Add(session);
+            return Task.FromResult(session.SessionId);
+        }
+
+        public Task UpdateStateAsync(Guid sessionId, byte state, CancellationToken ct = default)
+        {
+            var s = Sessions.FirstOrDefault(x => x.SessionId == sessionId);
+            if (s != null) s.State = state;
+            return Task.CompletedTask;
+        }
+
+        public Task CompleteSessionAsync(Guid sessionId, DateTime completedAtUtc, CancellationToken ct = default)
+        {
+            var s = Sessions.FirstOrDefault(x => x.SessionId == sessionId);
+            if (s != null)
+            {
+                s.State = 8;
+                s.CompletedAtUtc = completedAtUtc;
+            }
+            return Task.CompletedTask;
+        }
+
+        public Task<List<AIVES.DAL.Entities.VivaSession>> GetSessionsByStudentAndExamAsync(string studentId, string examId, CancellationToken ct = default) =>
+            Task.FromResult(Sessions.Where(s => s.StudentId == studentId && s.ExamId == examId).ToList());
+
+        public Task<List<AIVES.DAL.Entities.VivaSession>> GetSessionsByExamAsync(string examId, CancellationToken ct = default) =>
+            Task.FromResult(Sessions.Where(s => s.ExamId == examId).ToList());
+    }
+
+    private class FakeVivaQuestionRepo : AIVES.DAL.Repositories.Interfaces.IVivaQuestionRepository
+    {
+        public Task<AIVES.DAL.Entities.VivaQuestion?> GetByIdAsync(string questionId, CancellationToken ct = default) =>
+            Task.FromResult<AIVES.DAL.Entities.VivaQuestion?>(null);
+
+        public Task<List<AIVES.DAL.Entities.VivaQuestion>> GetQuestionsByExamAsync(string examId, CancellationToken ct = default) =>
+            Task.FromResult(new List<AIVES.DAL.Entities.VivaQuestion>());
+
+        public Task<bool> ExamExistsAsync(string examId, CancellationToken ct = default) =>
+            Task.FromResult(true);
+
+        public Task AddQuestionsAsync(IEnumerable<AIVES.DAL.Entities.VivaQuestion> questions, CancellationToken ct = default) =>
+            Task.CompletedTask;
+
+        public Task<List<string>> GetAllExamIdsAsync(CancellationToken ct = default) =>
+            Task.FromResult(new List<string> { "REAL_EXAM" });
+
+        public Task<List<AIVES.DAL.Entities.VivaQuestion>> GetAllQuestionsAsync(CancellationToken ct = default) =>
+            Task.FromResult(new List<AIVES.DAL.Entities.VivaQuestion>());
     }
 
     private class FakeExamReportRepository : IExamReportRepository

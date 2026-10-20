@@ -58,6 +58,18 @@ public class VivaSessionOrchestratorTests
             }
             return Task.CompletedTask;
         }
+
+        public Task<List<VivaSession>> GetSessionsByStudentAndExamAsync(string studentId, string examId, CancellationToken ct = default)
+        {
+            var res = Sessions.Values.Where(s => s.StudentId == studentId && s.ExamId == examId).ToList();
+            return Task.FromResult(res);
+        }
+
+        public Task<List<VivaSession>> GetSessionsByExamAsync(string examId, CancellationToken ct = default)
+        {
+            var res = Sessions.Values.Where(s => s.ExamId == examId).ToList();
+            return Task.FromResult(res);
+        }
     }
 
     private sealed class FakeVivaQuestionRepository : IVivaQuestionRepository
@@ -74,6 +86,27 @@ public class VivaSessionOrchestratorTests
         {
             var result = Questions.FirstOrDefault(q => q.QuestionId == questionId);
             return Task.FromResult(result);
+        }
+
+        public Task<bool> ExamExistsAsync(string examId, CancellationToken ct = default)
+        {
+            return Task.FromResult(Questions.Any(q => q.ExamId == examId));
+        }
+
+        public Task AddQuestionsAsync(IEnumerable<VivaQuestion> questions, CancellationToken ct = default)
+        {
+            Questions.AddRange(questions);
+            return Task.CompletedTask;
+        }
+
+        public Task<List<string>> GetAllExamIdsAsync(CancellationToken ct = default)
+        {
+            return Task.FromResult(Questions.Select(q => q.ExamId).Distinct().ToList());
+        }
+
+        public Task<List<VivaQuestion>> GetAllQuestionsAsync(CancellationToken ct = default)
+        {
+            return Task.FromResult(Questions.ToList());
         }
     }
 

@@ -165,6 +165,141 @@ public class AccountController : Controller
     [HttpGet]
     public IActionResult StudentDashboard() => View();
 
+    #region Student Profile & Class Allocation
+
+    [Authorize]
+    [HttpGet]
+    public async Task<IActionResult> Profile(
+        [FromServices] ISystemAccountService accountService,
+        CancellationToken ct = default)
+    {
+        var subjectId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        int.TryParse(subjectId, out var accountId);
+
+        var account = accountId > 0 ? await accountService.GetAccountByIdAsync(accountId, includeDeleted: true, ct) : null;
+
+        var studentCode = Request.Cookies["Student_StudentId"] 
+            ?? (accountId == 1 ? "SV01" : (accountId == 2 ? "SV02" : (accountId == 3 ? "SV03" : (accountId > 0 ? $"SV{accountId:D2}" : "SV01"))));
+        var studentClass = Request.Cookies["Student_ClassId"] 
+            ?? (studentCode == "SV03" ? "SE1702" : "SE1701");
+        var studentPhone = Request.Cookies["Student_Phone"] ?? "0912345678";
+        var studentMajor = Request.Cookies["Student_Major"] 
+            ?? (studentClass == "SE1702" ? "Trí tuệ nhân tạo (AI)" : "Kỹ thuật phần mềm (SE)");
+        var studentLecturer = Request.Cookies["Student_Lecturer"] 
+            ?? (studentClass == "SE1702" ? "ThS. Minh Trí (GV02)" : (studentClass == "SE1703" ? "TS. Lê Văn Hải (GV03)" : "TS. Hoàng Yến (GV01)"));
+
+        var roleClaim = User.FindFirstValue(ClaimTypes.Role) ?? ApplicationRoles.Staff;
+        var friendlyRole = roleClaim switch
+        {
+            ApplicationRoles.Admin => "Quản trị viên (Admin)",
+            ApplicationRoles.Lecturer => "Giảng viên",
+            ApplicationRoles.Staff => "Sinh viên",
+            _ => roleClaim
+        };
+
+        var model = new StudentProfileViewModel
+        {
+            AccountId = accountId,
+            StudentId = studentCode,
+            StudentName = account?.AccountName ?? User.Identity?.Name ?? "Sinh viên FPT",
+            Email = account?.AccountEmail ?? User.FindFirstValue(ClaimTypes.Email) ?? "student@fpt.edu.vn",
+            Phone = studentPhone,
+            ClassId = studentClass,
+            Major = studentMajor,
+            LecturerName = studentLecturer,
+            AcademicYear = "K17 (2023 - 2027)",
+            Semester = "Fall 2026",
+            RoleName = friendlyRole
+        };
+
+        return View(model);
+    }
+
+    [Authorize]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Profile(
+        StudentProfileViewModel model,
+        [FromServices] ISystemAccountService accountService,
+        CancellationToken ct = default)
+    {
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        var subjectId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(subjectId, out var accountId))
+        {
+            accountId = model.AccountId;
+        }
+
+        try
+        {
+            if (accountId > 0)
+            {
+                var updateResult = await accountService.UpdateProfileAsync(
+                    accountId,
+                    model.StudentName.Trim(),
+                    model.Email.Trim().ToLowerInvariant(),
+                    string.IsNullOrWhiteSpace(model.NewPassword) ? null : model.NewPassword.Trim(),
+                    ct);
+
+                if (!updateResult)
+                {
+                    ModelState.AddModelError(string.Empty, "Không tìm thấy tài khoản để cập nhật.");
+                    return View(model);
+                }
+            }
+
+            var lecturer = model.ClassId switch
+            {
+                "SE1701" => "TS. Hoàng Yến (GV01)",
+                "SE1702" => "ThS. Minh Trí (GV02)",
+                "SE1703" => "TS. Lê Văn Hải (GV03)",
+                _ => "TS. Hoàng Yến (GV01)"
+            };
+
+            // Lưu thông tin tùy chỉnh vào Cookies để hiển thị nhất quán trên toàn hệ thống
+            var cookieOptions = new CookieOptions
+            {
+                Expires = DateTimeOffset.UtcNow.AddDays(30),
+                HttpOnly = false,
+                SameSite = SameSiteMode.Lax,
+                IsEssential = true
+            };
+            Response.Cookies.Append("Student_StudentId", model.StudentId ?? "SV01", cookieOptions);
+            Response.Cookies.Append("Student_Name", model.StudentName.Trim(), cookieOptions);
+            Response.Cookies.Append("Student_ClassId", model.ClassId ?? "SE1701", cookieOptions);
+            Response.Cookies.Append("Student_Phone", model.Phone ?? string.Empty, cookieOptions);
+            Response.Cookies.Append("Student_Major", model.Major ?? "Kỹ thuật phần mềm (SE)", cookieOptions);
+            Response.Cookies.Append("Student_Lecturer", lecturer, cookieOptions);
+
+            // Cập nhật Claims trong Cookie để Header ngay lập tức hiển thị tên mới
+            var role = User.FindFirstValue(ClaimTypes.Role) ?? ApplicationRoles.Staff;
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, subjectId ?? accountId.ToString()),
+                new Claim(ClaimTypes.Name, model.StudentName.Trim()),
+                new Claim(ClaimTypes.Email, model.Email.Trim().ToLowerInvariant()),
+                new Claim(ClaimTypes.Role, role)
+            };
+            var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme, ClaimTypes.Name, ClaimTypes.Role);
+            var principal = new ClaimsPrincipal(identity);
+            await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal);
+
+            TempData["SuccessMessage"] = "Cập nhật hồ sơ sinh viên và phân lớp học phần thành công!";
+            return RedirectToAction(nameof(Profile));
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            ModelState.AddModelError(string.Empty, ex.Message);
+            return View(model);
+        }
+    }
+
+    #endregion
+
     [Authorize]
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -254,10 +389,10 @@ public class AccountController : Controller
             return isStaff;
         }
 
-        // Student reports accessible to Admin and Staff
+        // Student reports accessible to Admin, Lecturer and Staff
         if (path.StartsWith("/StudentReports", StringComparison.OrdinalIgnoreCase))
         {
-            return isAdmin || isStaff;
+            return isAdmin || isLecturer || isStaff;
         }
 
         return true;

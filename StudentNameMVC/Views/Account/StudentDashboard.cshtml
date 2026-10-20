@@ -23,6 +23,9 @@
         <a asp-controller="StudentReports" asp-action="Index" class="btn btn-outline-secondary rounded-pill px-3 py-1.5 fw-bold">
             <i class="bi bi-journal-check me-1"></i> Báo cáo Cá nhân
         </a>
+        <a asp-controller="Account" asp-action="Profile" class="btn btn-outline-primary rounded-pill px-3 py-1.5 fw-bold">
+            <i class="bi bi-person-gear me-1"></i> Thông tin cá nhân
+        </a>
     </div>
 </div>
 
@@ -38,12 +41,35 @@
             <span class="hero-sparkle hero-sparkle-2">✦</span>
             <span class="hero-sparkle hero-sparkle-3">★</span>
 
-            <span class="hero-tag">ONLINE VIVA EXAM</span>
+            <span class="hero-tag">ONLINE VIVA EXAM · PHÒNG THI THẬT</span>
             <h1 class="hero-title">Rèn luyện tư duy vấn đáp thông minh cùng Giám khảo AI</h1>
             <a asp-page="/Viva/Index" class="hero-btn">
                 <span>Vào phòng thi ngay</span>
                 <span class="hero-btn-arrow"><i class="bi bi-chevron-right"></i></span>
             </a>
+        </div>
+
+        <!-- 1.5 Quick Join Card by Room Code -->
+        <div class="card border-0 rounded-4 shadow-sm mb-4 p-3" style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border: 1.5px solid #93c5fd !important;">
+            <div class="row align-items-center g-3">
+                <div class="col-md-7">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <i class="bi bi-key-fill text-primary fs-5"></i>
+                        <h6 class="fw-bold text-dark mb-0">Bạn có Mã phòng thi từ Giảng viên?</h6>
+                    </div>
+                    <small class="text-secondary">Nhập mã phòng (ví dụ: PRN222-01, VIVA-XXXX) để kết nối Giám khảo AI và làm bài thi ngay.</small>
+                </div>
+                <div class="col-md-5">
+                    <form method="post" action="/Viva/Index?handler=JoinByCode" class="d-flex gap-2">
+                        @Html.AntiForgeryToken()
+                        <input type="text" name="ExamIdInput" class="form-control font-monospace fw-bold text-uppercase rounded-pill" placeholder="MÃ PHÒNG..." required style="padding: 10px 16px; font-size: 14px;" />
+                        <button type="submit" class="btn btn-primary rounded-pill px-3.5 fw-bold flex-shrink-0 shadow-sm d-flex align-items-center gap-1">
+                            <span>Vào thi</span>
+                            <i class="bi bi-arrow-right"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
         </div>
 
         <!-- 2. Student Quick Stat Mini Cards -->

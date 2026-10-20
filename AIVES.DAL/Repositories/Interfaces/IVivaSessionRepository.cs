@@ -9,4 +9,6 @@ public interface IVivaSessionRepository
     Task<Guid> CreateSessionAsync(VivaSession session, CancellationToken ct = default);
     Task UpdateStateAsync(Guid sessionId, byte state, CancellationToken ct = default);
     Task CompleteSessionAsync(Guid sessionId, DateTime completedAtUtc, CancellationToken ct = default);
+    Task<List<VivaSession>> GetSessionsByStudentAndExamAsync(string studentId, string examId, CancellationToken ct = default);
+    Task<List<VivaSession>> GetSessionsByExamAsync(string examId, CancellationToken ct = default);
 }

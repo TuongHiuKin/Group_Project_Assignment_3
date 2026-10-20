@@ -1,0 +1,295 @@
+@model StudentNameMVC.ViewModels.StudentProfileViewModel
+@{
+    ViewData["Title"] = "Hồ sơ cá nhân & Phân lớp sinh viên";
+}
+
+<!-- Page Header Breadcrumb -->
+<div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-1 small">
+                <li class="breadcrumb-item"><a asp-controller="Account" asp-action="Dashboard" class="text-decoration-none">Dashboard</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Hồ sơ cá nhân</li>
+            </ol>
+        </nav>
+        <div class="d-flex align-items-center gap-2">
+            <h4 class="fw-bold mb-0 text-dark">Hồ sơ cá nhân & Phân lớp sinh viên</h4>
+            <span class="badge tag-purple px-3 py-1">
+                <i class="bi bi-person-gear me-1"></i> @Model.RoleName
+            </span>
+        </div>
+        <p class="text-muted small mb-0">Xem và điều chỉnh thông tin cá nhân, phân lớp học phần và giảng viên hướng dẫn</p>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <a asp-page="/Viva/Index" class="btn btn-outline-primary rounded-pill px-3 py-1.5 fw-bold shadow-sm">
+            <i class="bi bi-camera-video-fill me-1"></i> Vào phòng thi Viva
+        </a>
+        <a asp-controller="StudentReports" asp-action="Index" class="btn btn-outline-secondary rounded-pill px-3 py-1.5 fw-bold">
+            <i class="bi bi-journal-check me-1"></i> Báo cáo cá nhân
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- LEFT COLUMN: Profile Overview Card -->
+    <div class="col-lg-4">
+        <div class="card border-0 rounded-4 shadow-sm overflow-hidden mb-4">
+            <div class="p-4 text-center text-white position-relative" style="background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);">
+                <div class="position-relative d-inline-block mb-3">
+                    <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80" 
+                         alt="Avatar" class="rounded-circle shadow-lg border border-3 border-white" style="width: 100px; height: 100px; object-fit: cover;" />
+                    <span class="position-absolute bottom-0 end-0 p-2 bg-success border border-2 border-white rounded-circle" title="Trạng thái hoạt động"></span>
+                </div>
+                <h5 class="fw-bold mb-1">@Model.StudentName</h5>
+                <p class="text-white-50 small mb-2">@Model.Email</p>
+                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                    <span class="badge bg-white text-primary fw-bold shadow-sm px-2.5 py-1.5">
+                        <i class="bi bi-person-vcard me-1"></i> MSSV: @Model.StudentId
+                    </span>
+                    <span class="badge bg-white bg-opacity-25 text-white fw-bold px-2.5 py-1.5">
+                        <i class="bi bi-mortarboard me-1"></i> Lớp: @Model.ClassId
+                    </span>
+                </div>
+            </div>
+
+            <div class="card-body p-4">
+                <h6 class="fw-bold text-dark text-uppercase small mb-3 tracking-wide" style="letter-spacing: 0.5px;">
+                    <i class="bi bi-info-circle-fill text-primary me-2"></i>Thông tin học vụ
+                </h6>
+
+                <div class="d-flex flex-column gap-3 small">
+                    <div class="d-flex justify-content-between align-items-center pb-2 border-bottom">
+                        <span class="text-secondary"><i class="bi bi-building me-2"></i>Lớp học phần</span>
+                        <span class="fw-bold badge tag-purple fs-6" id="overviewClassBadge">@Model.ClassId</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center pb-2 border-bottom">
+                        <span class="text-secondary"><i class="bi bi-person-workspace me-2"></i>GV phụ trách lớp</span>
+                        <span class="fw-bold text-dark" id="overviewLecturer">@Model.LecturerName</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center pb-2 border-bottom">
+                        <span class="text-secondary"><i class="bi bi-book me-2"></i>Chuyên ngành</span>
+                        <span class="fw-bold text-dark" id="overviewMajor">@Model.Major</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center pb-2 border-bottom">
+                        <span class="text-secondary"><i class="bi bi-calendar3 me-2"></i>Khóa đào tạo</span>
+                        <span class="fw-bold text-dark">@Model.AcademicYear</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center pb-2 border-bottom">
+                        <span class="text-secondary"><i class="bi bi-clock-history me-2"></i>Học kỳ</span>
+                        <span class="badge bg-light text-dark border">@Model.Semester</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-secondary"><i class="bi bi-telephone me-2"></i>Số điện thoại</span>
+                        <span class="fw-bold text-dark">@(string.IsNullOrWhiteSpace(Model.Phone) ? "Chưa cập nhật" : Model.Phone)</span>
+                    </div>
+                </div>
+
+                <div class="alert alert-light border rounded-3 p-3 mt-4 mb-0 small text-secondary">
+                    <i class="bi bi-shield-check text-success me-1"></i>
+                    <strong>Hệ thống phân lớp AI Viva:</strong> Giảng viên bộ môn sẽ lọc danh sách sinh viên theo lớp học phần để đánh giá và xuất báo cáo kết quả thi.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT COLUMN: Edit Profile Form -->
+    <div class="col-lg-8">
+        <div class="card border-0 rounded-4 shadow-sm">
+            <div class="card-header bg-white border-bottom p-4">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="p-2.5 rounded-3 bg-primary bg-opacity-10 text-primary">
+                        <i class="bi bi-pencil-square fs-4"></i>
+                    </div>
+                    <div>
+                        <h5 class="fw-bold mb-1 text-dark">Điều chỉnh thông tin cá nhân & Phân lớp</h5>
+                        <p class="text-muted small mb-0">Cập nhật thông tin sinh viên, đổi lớp học phần (để giảng viên quản lý) hoặc đổi mật khẩu đăng nhập</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-body p-4">
+                <form asp-controller="Account" asp-action="Profile" method="post" id="profileForm">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" asp-for="AccountId" />
+                    <input type="hidden" asp-for="RoleName" />
+                    <input type="hidden" asp-for="AcademicYear" />
+                    <input type="hidden" asp-for="Semester" />
+
+                    @if (!ViewData.ModelState.IsValid && ViewData.ModelState[string.Empty]?.Errors.Count > 0)
+                    {
+                        <div class="alert alert-danger alert-dismissible fade show border-0 rounded-3 shadow-sm mb-4" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            @Html.ValidationSummary(true, "", new { @class = "text-danger mb-0 d-inline" })
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Đóng"></button>
+                        </div>
+                    }
+
+                    <!-- Section 1: Thông tin cơ bản -->
+                    <div class="mb-4">
+                        <h6 class="fw-bold text-dark mb-3 pb-2 border-bottom d-flex align-items-center gap-2">
+                            <i class="bi bi-person-fill text-primary"></i> 1. Thông tin sinh viên
+                        </h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label asp-for="StudentId" class="form-label fw-semibold text-secondary small"></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-upc-scan"></i></span>
+                                    <input asp-for="StudentId" class="form-control bg-light border-start-0" placeholder="VD: SV01" />
+                                </div>
+                                <span asp-validation-for="StudentId" class="text-danger small"></span>
+                                <small class="text-muted d-block mt-1">Mã SV định danh dùng cho việc chấm thi và lưu trữ kết quả Viva.</small>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label asp-for="StudentName" class="form-label fw-semibold text-secondary small"></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-person"></i></span>
+                                    <input asp-for="StudentName" class="form-control border-start-0" placeholder="Nhập họ và tên đầy đủ..." />
+                                </div>
+                                <span asp-validation-for="StudentName" class="text-danger small"></span>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label asp-for="Email" class="form-label fw-semibold text-secondary small"></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-envelope"></i></span>
+                                    <input asp-for="Email" class="form-control border-start-0" placeholder="name@fpt.edu.vn" />
+                                </div>
+                                <span asp-validation-for="Email" class="text-danger small"></span>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label asp-for="Phone" class="form-label fw-semibold text-secondary small"></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-telephone"></i></span>
+                                    <input asp-for="Phone" class="form-control border-start-0" placeholder="09xxxxxxxx" />
+                                </div>
+                                <span asp-validation-for="Phone" class="text-danger small"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section 2: Phân lớp học phần & Giảng viên -->
+                    <div class="mb-4">
+                        <h6 class="fw-bold text-dark mb-3 pb-2 border-bottom d-flex align-items-center gap-2">
+                            <i class="bi bi-building text-primary"></i> 2. Phân lớp học phần & Giảng viên bộ môn
+                        </h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label asp-for="ClassId" class="form-label fw-semibold text-secondary small"></label>
+                                <select asp-for="ClassId" class="form-select border" id="selectClassId">
+                                    <option value="SE1701">SE1701 — Giảng viên: TS. Hoàng Yến (GV01)</option>
+                                    <option value="SE1702">SE1702 — Giảng viên: ThS. Minh Trí (GV02)</option>
+                                    <option value="SE1703">SE1703 — Giảng viên: TS. Lê Văn Hải (GV03)</option>
+                                </select>
+                                <span asp-validation-for="ClassId" class="text-danger small"></span>
+                                <small class="text-muted d-block mt-1">Chọn lớp bạn đang theo học để Giảng viên phụ trách chấm và xem báo cáo.</small>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label asp-for="Major" class="form-label fw-semibold text-secondary small"></label>
+                                <select asp-for="Major" class="form-select border" id="selectMajor">
+                                    <option value="Kỹ thuật phần mềm (SE)">Kỹ thuật phần mềm (SE)</option>
+                                    <option value="Trí tuệ nhân tạo (AI)">Trí tuệ nhân tạo (AI)</option>
+                                    <option value="An toàn thông tin (IA)">An toàn thông tin (IA)</option>
+                                    <option value="Hệ thống thông tin (IS)">Hệ thống thông tin (IS)</option>
+                                </select>
+                                <span asp-validation-for="Major" class="text-danger small"></span>
+                            </div>
+
+                            <div class="col-12">
+                                <div class="p-3 rounded-3 bg-light border d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div class="p-2 rounded-circle bg-white shadow-sm text-primary">
+                                            <i class="bi bi-person-video3 fs-5"></i>
+                                        </div>
+                                        <div>
+                                            <div class="small text-muted">Giảng viên phụ trách lớp được chỉ định:</div>
+                                            <div class="fw-bold text-dark" id="displayLecturer">@Model.LecturerName</div>
+                                        </div>
+                                    </div>
+                                    <input type="hidden" asp-for="LecturerName" id="hiddenLecturerName" />
+                                    <span class="badge tag-cyan px-2.5 py-1.5"><i class="bi bi-check-circle me-1"></i>Tự động gán theo Lớp</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section 3: Bảo mật & Đổi mật khẩu -->
+                    <div class="mb-4">
+                        <h6 class="fw-bold text-dark mb-3 pb-2 border-bottom d-flex align-items-center gap-2">
+                            <i class="bi bi-shield-lock text-primary"></i> 3. Đổi mật khẩu đăng nhập (Tùy chọn)
+                        </h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label asp-for="NewPassword" class="form-label fw-semibold text-secondary small"></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-key"></i></span>
+                                    <input asp-for="NewPassword" class="form-control border-start-0" placeholder="Để trống nếu không đổi..." />
+                                </div>
+                                <span asp-validation-for="NewPassword" class="text-danger small"></span>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label asp-for="ConfirmPassword" class="form-label fw-semibold text-secondary small"></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-check2-circle"></i></span>
+                                    <input asp-for="ConfirmPassword" class="form-control border-start-0" placeholder="Nhập lại mật khẩu mới..." />
+                                </div>
+                                <span asp-validation-for="ConfirmPassword" class="text-danger small"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="d-flex align-items-center justify-content-end gap-2 pt-3 border-top">
+                        <a asp-controller="Account" asp-action="Dashboard" class="btn btn-light rounded-pill px-4 fw-semibold text-secondary">
+                            <i class="bi bi-x-circle me-1"></i> Hủy bỏ
+                        </a>
+                        <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold shadow-sm">
+                            <i class="bi bi-check2-circle me-1"></i> Lưu thông tin cá nhân
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const selectClass = document.getElementById('selectClassId');
+            const displayLecturer = document.getElementById('displayLecturer');
+            const hiddenLecturer = document.getElementById('hiddenLecturerName');
+            const overviewClassBadge = document.getElementById('overviewClassBadge');
+            const overviewLecturer = document.getElementById('overviewLecturer');
+
+            const classLecturerMap = {
+                'SE1701': 'TS. Hoàng Yến (GV01)',
+                'SE1702': 'ThS. Minh Trí (GV02)',
+                'SE1703': 'TS. Lê Văn Hải (GV03)'
+            };
+
+            if (selectClass) {
+                selectClass.addEventListener('change', function () {
+                    const selectedVal = selectClass.value;
+                    const lecturer = classLecturerMap[selectedVal] || 'TS. Hoàng Yến (GV01)';
+                    if (displayLecturer) displayLecturer.textContent = lecturer;
+                    if (hiddenLecturer) hiddenLecturer.value = lecturer;
+                    if (overviewClassBadge) overviewClassBadge.textContent = selectedVal;
+                    if (overviewLecturer) overviewLecturer.textContent = lecturer;
+                });
+            }
+
+            const selectMajor = document.getElementById('selectMajor');
+            const overviewMajor = document.getElementById('overviewMajor');
+            if (selectMajor && overviewMajor) {
+                selectMajor.addEventListener('change', function () {
+                    overviewMajor.textContent = selectMajor.value;
+                });
+            }
+        });
+    </script>
+}

@@ -16,9 +16,12 @@
     <div class="viva-header-card">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
             <div>
-                <div class="d-flex align-items-center gap-2 mb-1">
+                <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
                     <span class="badge tag-purple">BÁO CÁO CÁ NHÂN</span>
-                    <span class="badge tag-cyan">NHÓM 6 REPORTING</span>
+                    @if (Model != null && !string.IsNullOrWhiteSpace(Model.ExamTitle))
+                    {
+                        <span class="badge tag-cyan fw-bold"><i class="bi bi-journal-check me-1"></i>@Model.ExamTitle</span>
+                    }
                 </div>
                 <h3 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;">
                     <i class="bi bi-mortarboard-fill text-primary me-2"></i>Báo Cáo Học Tập & Phản Hồi Vấn Đáp AI
@@ -36,31 +39,15 @@
                         {
                             bool isCurrentExam = ex.ExamId == selectedExamId;
                             string modeLabel = ex.EvaluationMode == AIVES.BLL.Models.ExamReporting.ExamEvaluationMode.PassFail ? "P/F" : "Điểm";
+                            string buttonLabel = ex.ExamId.Equals("VIVA-2580", StringComparison.OrdinalIgnoreCase)
+                                ? "PRN222 (VIVA-2580)"
+                                : ex.ExamId;
                             <a asp-action="Index" asp-route-studentId="@selectedStudentId" asp-route-examId="@ex.ExamId"
                                class="btn btn-sm rounded-pill px-3 fw-bold @(isCurrentExam ? "btn-primary" : "btn-light border")"
                                title="@ex.ExamTitle">
-                                @ex.ExamId <span class="badge bg-white text-dark ms-1" style="font-size: 10px;">@modeLabel</span>
+                                @buttonLabel <span class="badge bg-white text-dark ms-1" style="font-size: 10px;">@modeLabel</span>
                             </a>
                         }
-                    </div>
-                </div>
-
-                <!-- Student Profile Switcher -->
-                <div class="d-flex align-items-center gap-2">
-                    <span class="fw-bold text-secondary small"><i class="bi bi-person-bounding-box me-1"></i>Hồ sơ SV:</span>
-                    <div class="d-flex gap-1">
-                        <a asp-action="Index" asp-route-studentId="SV01" asp-route-examId="@selectedExamId"
-                           class="btn btn-sm rounded-pill px-3 fw-bold @(selectedStudentId == "SV01" ? "btn-primary" : "btn-light border")">
-                            SV01
-                        </a>
-                        <a asp-action="Index" asp-route-studentId="SV02" asp-route-examId="@selectedExamId"
-                           class="btn btn-sm rounded-pill px-3 fw-bold @(selectedStudentId == "SV02" ? "btn-primary" : "btn-light border")">
-                            SV02
-                        </a>
-                        <a asp-action="Index" asp-route-studentId="SV03" asp-route-examId="@selectedExamId"
-                           class="btn btn-sm rounded-pill px-3 fw-bold @(selectedStudentId == "SV03" ? "btn-primary" : "btn-light border")">
-                            SV03
-                        </a>
                     </div>
                 </div>
             </div>
@@ -69,12 +56,81 @@
 
     @if (Model != null)
     {
+        <!-- Disclaimer Banner: AI Preliminary Evaluation -->
+        <div class="alert alert-warning border-warning shadow-sm rounded-4 d-flex align-items-center gap-3 my-4">
+            <i class="bi bi-exclamation-triangle-fill fs-2 text-warning flex-shrink-0"></i>
+            <div>
+                <h6 class="fw-bold mb-1 text-dark">⚠️ Thông báo quan trọng về điểm thi và nhận xét</h6>
+                <p class="mb-0 text-secondary small">
+                    Toàn bộ điểm thi, đánh giá Rubric và nhận xét chi tiết dưới đây do <strong>Giám khảo AI tự động phân tích và chấm sơ bộ</strong> từ câu trả lời giọng nói của thí sinh. <strong>Kết quả này CHƯA qua giảng viên chấm lại và thẩm định chính thức.</strong>
+                </p>
+            </div>
+        </div>
+
+        <!-- Khối Thông Tin Cá Nhân Sinh Viên & Lớp Học Phần -->
+        <div class="viva-panel-card p-4 my-4" style="background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border: 1px solid #e2e8f0; border-radius: 20px;">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 pb-3 border-bottom mb-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="brand-icon-box" style="width: 54px; height: 54px; font-size: 26px; border-radius: 16px; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white;">
+                        <i class="bi bi-person-badge-fill"></i>
+                    </div>
+                    <div>
+                        <div class="d-flex align-items-center gap-2">
+                            <h4 class="fw-bold mb-0 text-dark">@Model.StudentName</h4>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-1 small">
+                                <i class="bi bi-check-circle-fill me-1"></i>Đang theo học
+                            </span>
+                        </div>
+                        <div class="text-muted small mt-1">
+                            <i class="bi bi-envelope-at me-1 text-primary"></i>@Model.Email &bull; <i class="bi bi-mortarboard me-1 text-primary"></i>Hệ Đại học chính quy
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="badge tag-purple fs-6 px-3 py-2">
+                        <i class="bi bi-building me-1"></i>Lớp: @Model.ClassId
+                    </span>
+                    <span class="badge tag-cyan fs-6 px-3 py-2">
+                        <i class="bi bi-person-video3 me-1"></i>GV: @Model.LecturerName
+                    </span>
+                </div>
+            </div>
+
+            <!-- Chi tiết các trường thông tin học vụ và phân lớp -->
+            <div class="row g-3">
+                <div class="col-6 col-md-3">
+                    <div class="p-3 rounded-3 bg-white border shadow-sm">
+                        <span class="text-muted small text-uppercase fw-bold d-block mb-1">Mã số sinh viên (MSSV)</span>
+                        <span class="fw-bold text-primary fs-5">@Model.StudentId</span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="p-3 rounded-3 bg-white border shadow-sm">
+                        <span class="text-muted small text-uppercase fw-bold d-block mb-1">Lớp học phần (GV phân công)</span>
+                        <span class="fw-bold text-dark fs-5"><i class="bi bi-collection-fill text-purple me-1"></i>@Model.ClassId</span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="p-3 rounded-3 bg-white border shadow-sm">
+                        <span class="text-muted small text-uppercase fw-bold d-block mb-1">Chuyên ngành đào tạo</span>
+                        <span class="fw-bold text-dark fs-6 d-block text-truncate" title="@Model.Major">@Model.Major</span>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="p-3 rounded-3 bg-white border shadow-sm">
+                        <span class="text-muted small text-uppercase fw-bold d-block mb-1">Khóa học / Học kỳ</span>
+                        <span class="fw-bold text-dark fs-6">@Model.AcademicYear &bull; @Model.Semester</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- 2. Four Top Metric Cards -->
         <div class="report-metric-grid">
             <!-- Metric 1: Student Information -->
             <div class="report-metric-card">
                 <div class="report-metric-header">
-                    <span class="stat-mini-metric text-uppercase fw-bold">Thí sinh</span>
+                    <span class="stat-mini-metric text-uppercase fw-bold">Lớp & Thí sinh</span>
                     <div class="stat-mini-icon-box icon-purple">
                         <i class="bi bi-person-fill"></i>
                     </div>
@@ -82,8 +138,8 @@
                 <div>
                     <div class="report-metric-value text-primary fs-4">@Model.StudentName</div>
                     <div class="d-flex align-items-center gap-2 mt-2">
-                        <span class="badge tag-purple m-0">MSSV: @Model.StudentId</span>
-                        <span class="badge tag-cyan m-0">@(Model.EvaluationMode == AIVES.BLL.Models.ExamReporting.ExamEvaluationMode.PassFail ? "Pass/Fail" : "Điểm số")</span>
+                        <span class="badge tag-purple m-0">Lớp: @Model.ClassId</span>
+                        <span class="badge tag-cyan m-0">MSSV: @Model.StudentId</span>
                     </div>
                 </div>
             </div>

@@ -3,14 +3,30 @@
     var evalMode = ViewData["EvaluationMode"] as AIVES.BLL.Models.ExamReporting.ExamEvaluationMode? 
                    ?? Model.EvaluationMode;
     bool isPassFailMode = evalMode == AIVES.BLL.Models.ExamReporting.ExamEvaluationMode.PassFail;
+
+    // Xác định số thứ tự câu hỏi thân thiện (ví dụ: "VIVA-2580-Q01" -> "Câu 1")
+    string questionLabel;
+    var qMatch = System.Text.RegularExpressions.Regex.Match(Model.QuestionId, @"[Qq](\d+)");
+    if (qMatch.Success && int.TryParse(qMatch.Groups[1].Value, out var qNum))
+    {
+        questionLabel = $"Câu {qNum}";
+    }
+    else
+    {
+        var numMatch = System.Text.RegularExpressions.Regex.Match(Model.QuestionId, @"\d+$");
+        questionLabel = numMatch.Success && int.TryParse(numMatch.Value, out var n) ? $"Câu {n}" : $"Câu hỏi {Model.QuestionId}";
+    }
 }
 
 <div class="aives-q-card">
     <!-- KHỐI 1: Nội dung Câu hỏi chính (kèm Bloom level, mã câu hỏi) -->
     <div class="aives-q-header d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div class="d-flex align-items-center gap-2">
-            <span class="badge tag-purple fs-6">
-                <i class="bi bi-question-circle-fill me-1"></i> Câu @Model.QuestionId
+            <span class="badge tag-purple fs-6 px-3 py-2 fw-bold">
+                <i class="bi bi-question-circle-fill me-1"></i> @questionLabel
+            </span>
+            <span class="badge bg-light text-secondary border px-2 py-1 small" title="Mã định danh câu hỏi">
+                Mã: @Model.QuestionId
             </span>
             <span class="badge tag-cyan">
                 <i class="bi bi-diagram-3-fill me-1"></i>Thang Bloom: @Model.CognitiveLevel
@@ -24,9 +40,24 @@
     <div class="p-4">
         <!-- Nội dung câu hỏi chính -->
         <div class="mb-4">
-            <h5 class="fw-bold text-dark mb-0 lh-base" style="font-size: 1.15rem;">
-                @Model.QuestionTitle
-            </h5>
+            <div class="p-3 rounded-3 bg-light border border-primary-subtle shadow-sm">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2 pb-2 border-bottom">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-primary text-white fw-bold">CHỦ ĐỀ: @Model.QuestionTitle</span>
+                    </div>
+                    <span class="text-muted small">
+                        <i class="bi bi-info-circle me-1"></i>Câu hỏi chính từ Giám khảo AI
+                    </span>
+                </div>
+                <div>
+                    <div class="fw-bold text-secondary small mb-1 text-uppercase">
+                        <i class="bi bi-patch-question-fill text-primary me-1"></i> Nội dung câu hỏi vấn đáp:
+                    </div>
+                    <p class="fw-semibold text-dark fs-5 mb-0 lh-base">
+                        @(!string.IsNullOrWhiteSpace(Model.QuestionContent) ? Model.QuestionContent : Model.QuestionTitle)
+                    </p>
+                </div>
+            </div>
         </div>
 
         <!-- KHỐI 2: Câu trả lời của thí sinh & Transcript đào sâu của AI (Adaptive Follow-up) -->

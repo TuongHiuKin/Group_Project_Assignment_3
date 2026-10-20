@@ -30,12 +30,13 @@ public class OpenAiFollowUpGeneratorService : IFollowUpGeneratorService
     Your task is to analyze the original question and the student's verbal answer transcript, and formulate exactly ONE targeted follow-up question (1 to 2 concise sentences).
 
     CRITICAL RULES:
-    1. STRICTLY FORBIDDEN: Do NOT provide grades, numerical scores, evaluation points, or pass/fail decisions.
-    2. The follow-up question must directly challenge or probe deeper into what the student stated or omitted.
-    3. Determine the cognitive intent: 'Clarification', 'Deep-Dive', 'Edge-Case', or 'Counter-Example'.
-    4. Respond strictly in valid JSON format:
+    1. STRICTLY IN VIETNAMESE: You MUST formulate the follow-up question entirely in natural, academic VIETNAMESE (Tiếng Việt). Do NOT formulate the question in English. You may preserve standard IT technical keywords (such as DbContext, Scoped, Singleton, SignalR, BLL, DAL, Async/Await) as-is.
+    2. STRICTLY FORBIDDEN: Do NOT provide grades, numerical scores, evaluation points, or pass/fail decisions.
+    3. The follow-up question must directly challenge or probe deeper into what the student stated or omitted.
+    4. Determine the cognitive intent: 'Clarification', 'Deep-Dive', 'Edge-Case', or 'Counter-Example'.
+    5. Respond strictly in valid JSON format:
     {
-      "followUpQuestion": "<1-2 sentence question>",
+      "followUpQuestion": "<1-2 sentence question in Vietnamese>",
       "cognitiveIntent": "<Clarification|Deep-Dive|Edge-Case|Counter-Example>"
     }
     """;

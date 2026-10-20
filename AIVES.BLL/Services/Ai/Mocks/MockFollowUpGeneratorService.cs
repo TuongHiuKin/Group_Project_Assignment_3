@@ -81,7 +81,7 @@ public class MockFollowUpGeneratorService : IFollowUpGeneratorService
         if (string.IsNullOrWhiteSpace(text) || text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length < 4)
         {
             return (
-                "Could you please elaborate more specifically on how your approach addresses the core requirement?",
+                "Bạn có thể giải thích chi tiết và cụ thể hơn về cách tiếp cận của mình đối với yêu cầu cốt lõi này không?",
                 "Clarification"
             );
         }
@@ -90,7 +90,7 @@ public class MockFollowUpGeneratorService : IFollowUpGeneratorService
         if (text.Contains("dbcontext") || text.Contains("scoped") || text.Contains("singleton") || text.Contains("transient"))
         {
             return (
-                "Why would injecting a Scoped DbContext instance into a Singleton service cause concurrency exceptions or memory leaks?",
+                "Tại sao việc đăng ký DbContext với vòng đời Scoped và inject vào một Singleton service lại có thể gây ra lỗi xung đột đa luồng (concurrency) hoặc rò rỉ bộ nhớ?",
                 "Deep-Dive"
             );
         }
@@ -99,7 +99,7 @@ public class MockFollowUpGeneratorService : IFollowUpGeneratorService
         if (text.Contains("async") || text.Contains("await") || text.Contains("thread") || text.Contains("task") || text.Contains("concurrency"))
         {
             return (
-                "What happens to the database connection pool and thread execution if an unhandled exception occurs inside the asynchronous pipeline?",
+                "Điều gì sẽ xảy ra với connection pool của cơ sở dữ liệu nếu xuất hiện exception (ngoại lệ) không được xử lý bên trong pipeline bất đồng bộ async/await?",
                 "Edge-Case"
             );
         }
@@ -108,7 +108,7 @@ public class MockFollowUpGeneratorService : IFollowUpGeneratorService
         if (text.Contains("layer") || text.Contains("repository") || text.Contains("bll") || text.Contains("dal") || text.Contains("architecture"))
         {
             return (
-                "How does isolating business rules in BLL without referencing EF Core entities protect against architectural erosion over time?",
+                "Làm thế nào việc cô lập các quy tắc nghiệp vụ trong tầng BLL mà không phụ thuộc trực tiếp vào DbContext hay EF Core giúp bảo vệ kiến trúc dự án lâu dài?",
                 "Deep-Dive"
             );
         }
@@ -117,14 +117,14 @@ public class MockFollowUpGeneratorService : IFollowUpGeneratorService
         if (text.Contains("signalr") || text.Contains("hub") || text.Contains("websocket") || text.Contains("realtime"))
         {
             return (
-                "How do you ensure that viva examination event broadcasts are delivered reliably if a student experiences temporary network disconnection?",
+                "Làm thế nào để bạn đảm bảo các sự kiện trong phòng thi vấn đáp qua SignalR vẫn được truyền nhận chính xác nếu thí sinh bị mất kết nối mạng tạm thời?",
                 "Edge-Case"
             );
         }
 
         // Default contextual follow-up based on question
         return (
-            $"Based on your explanation, what potential trade-offs or edge cases should be considered when implementing this in a production {subjectContext} environment?",
+            $"Dựa trên phần trình bày của bạn, những điểm đánh đổi hoặc trường hợp đặc biệt (edge-case) nào cần được xem xét khi triển khai thực tế trên môi trường {subjectContext}?",
             "Deep-Dive"
         );
     }

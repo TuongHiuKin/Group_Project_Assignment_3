@@ -1,0 +1,366 @@
+@page
+@model StudentNameMVC.Pages.Viva.CreateExamModel
+@{
+    ViewData["Title"] = "Quản lý & Tạo phòng thi Vấn đáp AI";
+    var successMsg = TempData["SuccessMessage"] as string;
+}
+
+<div class="viva-exam-shell">
+    <!-- Top Hero Banner -->
+    <div class="hero-banner mb-4" style="background: linear-gradient(135deg, #0f766e 0%, #0d9488 50%, #14b8a6 100%);">
+        <span class="hero-sparkle hero-sparkle-1">✦</span>
+        <span class="hero-sparkle hero-sparkle-2">✦</span>
+        <span class="hero-sparkle hero-sparkle-3">★</span>
+
+        <div class="mb-3">
+            <a href="/Account/LecturerDashboard" class="btn btn-sm btn-outline-light rounded-pill px-3 py-1 fw-semibold d-inline-flex align-items-center">
+                <i class="bi bi-arrow-left me-1"></i> Về Dashboard Giảng viên
+            </a>
+        </div>
+        <span class="hero-tag" style="background: rgba(255, 255, 255, 0.2);">GIẢNG VIÊN KHẢO THÍ · THI THẬT</span>
+        <h1 class="hero-title mb-2">Quản lý & Tạo Phòng thi Vấn đáp AI</h1>
+        <p class="text-white-50 mb-3" style="max-width: 680px; font-size: 15px;">
+            Khởi tạo đề thi vấn đáp thật với các câu hỏi tùy chỉnh. Hệ thống sẽ phát hành <strong>Mã phòng thi</strong> độc nhất để giảng viên gửi cho thí sinh đăng nhập và thực hiện bài thi vấn đáp cùng Giám khảo AI.
+        </p>
+
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <span class="badge bg-white bg-opacity-20 px-3 py-2 rounded-pill text-white fw-semibold">
+                <i class="bi bi-database-check me-1"></i> Lưu trữ SQL Server thật
+            </span>
+            <span class="badge bg-white bg-opacity-20 px-3 py-2 rounded-pill text-white fw-semibold">
+                <i class="bi bi-qr-code-scan me-1"></i> Sinh mã phòng thi tự động
+            </span>
+            <span class="badge bg-white bg-opacity-20 px-3 py-2 rounded-pill text-white fw-semibold">
+                <i class="bi bi-robot me-1"></i> Tự động hóa giọng nói AI (TTS/STT)
+            </span>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(successMsg))
+    {
+        <div class="alert alert-success alert-dismissible fade show border-0 rounded-4 shadow-sm mb-4 p-3" role="alert" style="background: #ecfdf5; border-left: 5px solid #10b981 !important;">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-check-circle-fill text-success fs-4 me-3"></i>
+                <div class="flex-grow-1">
+                    <h6 class="fw-bold text-success mb-1">Thao tác thành công!</h6>
+                    <div class="text-dark small">@successMsg</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Đóng"></button>
+            </div>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show border-0 rounded-4 shadow-sm mb-4 p-3" role="alert">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-exclamation-triangle-fill text-danger fs-4 me-3"></i>
+                <div class="flex-grow-1">
+                    <h6 class="fw-bold text-danger mb-1">Lỗi khởi tạo phòng thi</h6>
+                    <div class="text-dark small">@Model.ErrorMessage</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Đóng"></button>
+            </div>
+        </div>
+    }
+
+    <!-- Newly Created Room Alert Card -->
+    @if (!string.IsNullOrEmpty(Model.CreatedRoomCode))
+    {
+        <div class="card border-0 rounded-4 shadow-sm mb-4 text-white overflow-hidden" style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); border: 2px solid #6366f1 !important;">
+            <div class="card-body p-4">
+                <div class="row align-items-center g-3">
+                    <div class="col-md-8">
+                        <span class="badge bg-warning text-dark px-3 py-1 rounded-pill fw-bold mb-2">PHÒNG THI MỚI SẴN SÀNG ĐÓN THÍ SINH</span>
+                        <h4 class="fw-bold text-white mb-1">Mã phòng thi: <span class="text-warning font-monospace fs-2 ms-2">@Model.CreatedRoomCode</span></h4>
+                        <p class="text-white-50 mb-0 small">Hãy gửi mã này cho thí sinh. Thí sinh chỉ cần đăng nhập tài khoản và nhập mã này tại cổng phòng thi để làm bài.</p>
+                    </div>
+                    <div class="col-md-4 text-md-end">
+                        <button type="button" class="btn btn-warning rounded-pill px-4 py-2 fw-bold text-dark shadow-sm me-2" onclick="navigator.clipboard.writeText('@Model.CreatedRoomCode'); alert('Đã sao chép mã phòng thi: @Model.CreatedRoomCode');">
+                            <i class="bi bi-clipboard-check-fill me-1"></i> Sao chép mã
+                        </button>
+                        <a href="/Viva/Index" class="btn btn-outline-light rounded-pill px-3 py-2 fw-semibold">
+                            <i class="bi bi-eye me-1"></i> Xem cổng thi
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="row g-4">
+        <!-- LEFT COLUMN: Form Create Exam Room -->
+        <div class="col-lg-7">
+            <div class="viva-panel-card mb-4">
+                <div class="viva-panel-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-folder-plus text-primary fs-5"></i>
+                        <h5 class="mb-0 fw-bold text-dark">Thiết lập thông tin phòng thi & Đề thi</h5>
+                    </div>
+                    <span class="badge tag-purple">Dữ liệu thật 100%</span>
+                </div>
+                <div class="viva-panel-body p-4">
+                    <form method="post" id="createExamForm">
+                        @Html.AntiForgeryToken()
+
+                        <!-- Exam Code & Title -->
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-secondary mb-1">Mã phòng thi / Mã đề thi <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0" style="border-radius: 12px 0 0 12px;">
+                                        <i class="bi bi-key-fill text-muted"></i>
+                                    </span>
+                                    <input asp-for="ExamId" id="txtExamId" class="form-control font-monospace fw-bold text-uppercase" style="border-radius: 0 12px 12px 0; padding: 10px;" placeholder="Ví dụ: PRN222-01" required />
+                                </div>
+                                <div class="d-flex align-items-center justify-content-between mt-1">
+                                    <small class="text-muted" style="font-size: 11px;">Mã thí sinh sẽ nhập để vào thi.</small>
+                                    <button type="button" class="btn btn-link p-0 text-decoration-none small fw-semibold" onclick="generateRandomCode()">
+                                        <i class="bi bi-shuffle me-1"></i>Tạo mã khác
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-secondary mb-1">Thời gian mỗi câu (giây) <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0" style="border-radius: 12px 0 0 12px;">
+                                        <i class="bi bi-stopwatch text-muted"></i>
+                                    </span>
+                                    <input asp-for="DefaultTimeLimitSeconds" class="form-control" type="number" min="30" max="300" style="border-radius: 0 12px 12px 0; padding: 10px;" value="90" required />
+                                </div>
+                                <small class="text-muted" style="font-size: 11px;">Mặc định 90 giây cho mỗi lượt trả lời.</small>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label small fw-bold text-secondary mb-1">Tên bài thi / Chủ đề môn học <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-light border-end-0" style="border-radius: 12px 0 0 12px;">
+                                        <i class="bi bi-card-heading text-muted"></i>
+                                    </span>
+                                    <input asp-for="ExamTitle" id="txtExamTitle" class="form-control" style="border-radius: 0 12px 12px 0; padding: 10px;" placeholder="Ví dụ: Kiểm tra Vấn đáp Kiến trúc 3 lớp & Dependency Injection" required />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Template Question Loader -->
+                        <div class="p-3 rounded-4 mb-4" style="background: #f8fafc; border: 1px dashed #cbd5e1;">
+                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                                <div class="small fw-bold text-dark">
+                                    <i class="bi bi-magic text-warning me-1"></i> Tải nhanh bộ câu hỏi mẫu chuẩn:
+                                </div>
+                            </div>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1" onclick="loadTemplate(1)">
+                                    <i class="bi bi-file-earmark-code me-1"></i> Bộ 1: .NET 8 & 3-Layer
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1" onclick="loadTemplate(2)">
+                                    <i class="bi bi-broadcast me-1"></i> Bộ 2: Realtime SignalR
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-success rounded-pill px-3 py-1" onclick="loadTemplate(3)">
+                                    <i class="bi bi-database me-1"></i> Bộ 3: C# LINQ & SQL
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Questions Container -->
+                        <div class="d-flex align-items-center justify-content-between mb-3">
+                            <h6 class="fw-bold text-dark mb-0"><i class="bi bi-chat-left-dots-fill text-primary me-2"></i>Danh sách câu hỏi vấn đáp</h6>
+                            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="addQuestionRow()">
+                                <i class="bi bi-plus-lg me-1"></i> Thêm câu hỏi
+                            </button>
+                        </div>
+
+                        <div id="questionsContainer">
+                            <!-- Question Row 1 (Default) -->
+                            <div class="question-item card border rounded-4 p-3 mb-3 bg-white shadow-sm" data-index="0">
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <span class="badge tag-purple fw-bold question-label">CÂU HỎI 1</span>
+                                    <button type="button" class="btn btn-sm btn-outline-danger border-0 p-1 rounded-circle" onclick="removeQuestionRow(this)" title="Xóa câu hỏi">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold text-muted mb-1">Tiêu đề câu hỏi</label>
+                                    <input type="text" name="QuestionTitles" class="form-control form-control-sm rounded-3 q-title" placeholder="Ví dụ: DbContext Lifetime" required />
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small fw-bold text-muted mb-1">Nội dung câu hỏi (AI sẽ đọc bằng giọng nói và hiển thị cho thí sinh)</label>
+                                    <textarea name="QuestionContents" rows="2" class="form-control form-control-sm rounded-3 q-content" placeholder="Nội dung câu hỏi cụ thể để AI phỏng vấn thí sinh..." required></textarea>
+                                </div>
+                                <div>
+                                    <label class="form-label small fw-bold text-muted mb-1">Thời gian trả lời (giây)</label>
+                                    <input type="number" name="QuestionTimes" class="form-control form-control-sm rounded-3 q-time" value="90" min="30" max="300" style="max-width: 140px;" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 pt-2">
+                            <button type="submit" class="btn btn-primary w-100 py-3 rounded-pill fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2" style="font-size: 16px;">
+                                <i class="bi bi-cloud-arrow-up-fill fs-5"></i> Tạo phòng thi & Lưu vào CSDL
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT COLUMN: Active Rooms & Guidance -->
+        <div class="col-lg-5">
+            <!-- 1. Active Exam Rooms in Database -->
+            <div class="viva-panel-card mb-4">
+                <div class="viva-panel-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-collection-fill text-success fs-5"></i>
+                        <h5 class="mb-0 fw-bold text-dark">Các phòng thi đã có trên hệ thống</h5>
+                    </div>
+                    <span class="badge tag-cyan">@Model.ExistingRooms.Count phòng thi</span>
+                </div>
+                <div class="viva-panel-body p-3">
+                    @if (Model.ExistingRooms.Count == 0)
+                    {
+                        <div class="text-center py-4 text-muted small">
+                            <i class="bi bi-inbox fs-2 d-block text-secondary mb-2"></i>
+                            Chưa có phòng thi nào. Hãy tạo phòng thi đầu tiên ở bên trái!
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="d-flex flex-column gap-3" style="max-height: 480px; overflow-y: auto;">
+                            @foreach (var room in Model.ExistingRooms)
+                            {
+                                <div class="p-3 rounded-4 border bg-light d-flex flex-column justify-content-between hover-card">
+                                    <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+                                        <div>
+                                            <span class="badge bg-dark font-monospace text-warning px-2.5 py-1 rounded-pill fw-bold">@room.ExamId</span>
+                                            <h6 class="fw-bold text-dark mb-1 mt-1.5" style="font-size: 14px;">@room.Title</h6>
+                                            <small class="text-secondary d-block">
+                                                <i class="bi bi-question-circle me-1"></i> @room.QuestionCount câu hỏi · <i class="bi bi-clock me-1"></i> @room.DefaultTimeLimitSeconds s/câu
+                                            </small>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1" onclick="navigator.clipboard.writeText('@room.ExamId'); alert('Đã sao chép mã: @room.ExamId');" title="Sao chép mã phòng thi">
+                                            <i class="bi bi-clipboard me-1"></i> Copy
+                                        </button>
+                                    </div>
+                                    <div class="pt-2 border-top d-flex align-items-center justify-content-between">
+                                        <span class="badge tag-purple" style="font-size: 11px;">Sẵn sàng làm bài</span>
+                                        <a href="/Viva/Index" class="small fw-semibold text-primary text-decoration-none">
+                                            Vào cổng thi <i class="bi bi-arrow-right"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- 2. Lecturer Quick Guide Card -->
+            <div class="viva-panel-card">
+                <div class="viva-panel-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-lightbulb-fill text-warning fs-5"></i>
+                        <h5 class="mb-0 fw-bold text-dark">Quy trình vận hành thi vấn đáp</h5>
+                    </div>
+                </div>
+                <div class="viva-panel-body p-4">
+                    <div class="d-flex gap-3 mb-3">
+                        <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold" style="width: 28px; height: 28px; min-width: 28px;">1</div>
+                        <small class="text-secondary">Giảng viên thiết lập mã phòng thi (ví dụ: <strong class="text-dark">PRN222-01</strong>) và soạn các câu hỏi vấn đáp cho sinh viên.</small>
+                    </div>
+                    <div class="d-flex gap-3 mb-3">
+                        <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold" style="width: 28px; height: 28px; min-width: 28px;">2</div>
+                        <small class="text-secondary">Hệ thống lưu trữ câu hỏi vào CSDL SQL Server thật. Giảng viên sao chép mã phòng thi và gửi cho sinh viên.</small>
+                    </div>
+                    <div class="d-flex gap-3 mb-3">
+                        <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold" style="width: 28px; height: 28px; min-width: 28px;">3</div>
+                        <small class="text-secondary">Sinh viên đăng nhập tài khoản của mình, nhập mã phòng thi tại cổng phòng thi để làm bài.</small>
+                    </div>
+                    <div class="d-flex gap-3">
+                        <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold" style="width: 28px; height: 28px; min-width: 28px;">4</div>
+                        <small class="text-secondary">Giám khảo AI sẽ đọc câu hỏi, ghi nhận giọng nói thí sinh qua Whisper và tự động hỏi xoáy câu hỏi phụ.</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function generateRandomCode() {
+            const num = Math.floor(1000 + Math.random() * 9000);
+            document.getElementById('txtExamId').value = 'VIVA-' + num;
+        }
+
+        function reindexQuestions() {
+            const container = document.getElementById('questionsContainer');
+            const items = container.querySelectorAll('.question-item');
+            items.forEach((item, idx) => {
+                item.dataset.index = idx;
+                const label = item.querySelector('.question-label');
+                if (label) label.textContent = 'CÂU HỎI ' + (idx + 1);
+            });
+        }
+
+        function addQuestionRow(title = '', content = '', time = 90) {
+            const container = document.getElementById('questionsContainer');
+            const nextIdx = container.querySelectorAll('.question-item').length;
+            const div = document.createElement('div');
+            div.className = 'question-item card border rounded-4 p-3 mb-3 bg-white shadow-sm';
+            div.dataset.index = nextIdx;
+            div.innerHTML = `
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <span class="badge tag-purple fw-bold question-label">CÂU HỎI ${nextIdx + 1}</span>
+                    <button type="button" class="btn btn-sm btn-outline-danger border-0 p-1 rounded-circle" onclick="removeQuestionRow(this)" title="Xóa câu hỏi">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small fw-bold text-muted mb-1">Tiêu đề câu hỏi</label>
+                    <input type="text" name="QuestionTitles" class="form-control form-control-sm rounded-3 q-title" value="${title}" placeholder="Nhập tiêu đề câu hỏi..." required />
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small fw-bold text-muted mb-1">Nội dung câu hỏi (AI sẽ đọc bằng giọng nói)</label>
+                    <textarea name="QuestionContents" rows="2" class="form-control form-control-sm rounded-3 q-content" placeholder="Nội dung câu hỏi cụ thể..." required>${content}</textarea>
+                </div>
+                <div>
+                    <label class="form-label small fw-bold text-muted mb-1">Thời gian trả lời (giây)</label>
+                    <input type="number" name="QuestionTimes" class="form-control form-control-sm rounded-3 q-time" value="${time}" min="30" max="300" style="max-width: 140px;" />
+                </div>
+            `;
+            container.appendChild(div);
+            reindexQuestions();
+        }
+
+        function removeQuestionRow(btn) {
+            const container = document.getElementById('questionsContainer');
+            if (container.querySelectorAll('.question-item').length <= 1) {
+                alert('Bài thi phải có ít nhất 1 câu hỏi.');
+                return;
+            }
+            btn.closest('.question-item').remove();
+            reindexQuestions();
+        }
+
+        function loadTemplate(type) {
+            const container = document.getElementById('questionsContainer');
+            container.innerHTML = '';
+
+            if (type === 1) {
+                document.getElementById('txtExamTitle').value = 'Kiến trúc 3 lớp & Dependency Injection trong .NET 8';
+                addQuestionRow('DbContext Lifetime', 'Hãy giải thích vì sao DbContext trong ASP.NET Core phải được đăng ký với Scoped lifetime thay vì Singleton, và điều gì sẽ xảy ra nếu một Singleton service giữ tham chiếu tới DbContext?', 90);
+                addQuestionRow('Kiến trúc 3 lớp AIVES', 'Trong kiến trúc 3 lớp của hệ thống AIVES, vì sao Presentation Layer không được phép inject trực tiếp Repositories hay DbContext, mà bắt buộc phải thông qua BLL Services?', 90);
+                addQuestionRow('SignalR Group Security', 'Tại sao trong phương thức JoinSession của VivaHub, hệ thống bắt buộc phải xác thực danh tính người dùng và kiểm tra quyền sở hữu phiên thi trước khi thêm kết nối vào SignalR Group?', 90);
+            } else if (type === 2) {
+                document.getElementById('txtExamTitle').value = 'Thiết kế Realtime SignalR & Luồng Xử lý Âm thanh WebAudio';
+                addQuestionRow('SignalR Hub Connection', 'Trình bày vòng đời kết nối SignalR từ Client tới Hub và cách xử lý khi đường truyền mạng của thí sinh bị gián đoạn giữa chừng trong bài thi.', 90);
+                addQuestionRow('WebAudio & Microphone API', 'Giải thích cách thức thu âm qua Microphone sử dụng MediaStream và AudioContext trong trình duyệt mà không làm đơ giao diện người dùng.', 90);
+            } else if (type === 3) {
+                document.getElementById('txtExamTitle').value = 'Lập trình C# Nâng cao & Tối ưu Truy vấn Entity Framework Core';
+                addQuestionRow('AsNoTracking trong LINQ', 'Giải thích lợi ích của việc sử dụng AsNoTracking() trong các truy vấn chỉ đọc của EF Core và khi nào thì không nên dùng nó?', 90);
+                addQuestionRow('Asynchronous Programming C#', 'Sự khác biệt giữa việc trả về Task trực tiếp và sử dụng từ khóa async/await trong các phương thức Repository là gì?', 90);
+            }
+        }
+    </script>
+}

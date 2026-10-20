@@ -44,6 +44,42 @@ public sealed class VivaSessionRepository(AIVESDbContext context) : IVivaSession
         await SaveChangesSafeAsync(ct);
     }
 
+    private static readonly Dictionary<string, string[]> EquivalentIdMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["SV01"] = new[] { "SV01", "1" },
+        ["1"] = new[] { "SV01", "1" },
+        ["SV02"] = new[] { "SV02", "2" },
+        ["2"] = new[] { "SV02", "2" },
+        ["SV03"] = new[] { "SV03", "3" },
+        ["3"] = new[] { "SV03", "3" }
+    };
+
+    private static string[] GetCandidateStudentIds(string studentId)
+    {
+        if (EquivalentIdMap.TryGetValue(studentId, out var aliases))
+            return aliases;
+        return new[] { studentId };
+    }
+
+    public Task<List<VivaSession>> GetSessionsByStudentAndExamAsync(string studentId, string examId, CancellationToken ct = default)
+    {
+        var candidateIds = GetCandidateStudentIds(studentId);
+        return context.VivaSessions.AsNoTracking()
+            .Include(x => x.Turns)
+                .ThenInclude(t => t.Question)
+            .Where(x => candidateIds.Contains(x.StudentId) && x.ExamId == examId)
+            .OrderBy(x => x.StartedAtUtc)
+            .ToListAsync(ct);
+    }
+
+    public Task<List<VivaSession>> GetSessionsByExamAsync(string examId, CancellationToken ct = default) =>
+        context.VivaSessions.AsNoTracking()
+            .Include(x => x.Turns)
+                .ThenInclude(t => t.Question)
+            .Where(x => x.ExamId == examId)
+            .OrderBy(x => x.StartedAtUtc)
+            .ToListAsync(ct);
+
     private async Task SaveChangesSafeAsync(CancellationToken ct)
     {
         try { await context.SaveChangesAsync(ct); }

@@ -55,7 +55,7 @@ public class OpenAiOptions
     public string Model { get; set; } = "gpt-4o-mini";
     public string WhisperModel { get; set; } = "whisper-1";
     public string TtsModel { get; set; } = "tts-1";
-    public string TtsVoice { get; set; } = "alloy";
+    public string TtsVoice { get; set; } = "nova";
     public string? BaseUrl { get; set; }
     public string? OrganizationId { get; set; }
 

@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using AIVES.BLL.Interfaces.VivaInterview;
+using AIVES.BLL.Models.VivaInterview;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -15,6 +17,7 @@ namespace StudentNameMVC.Pages.Viva;
 public class IndexModel : PageModel
 {
     private readonly IVivaSessionOrchestrator? _orchestrator;
+    private readonly IVivaExamRoomService? _examRoomService;
     private readonly ILogger<IndexModel> _logger;
 
     public IndexModel(ILogger<IndexModel> logger) : this(logger, null)
@@ -26,20 +29,34 @@ public class IndexModel : PageModel
     {
         _logger = logger;
         _orchestrator = serviceProvider?.GetService<IVivaSessionOrchestrator>();
+        _examRoomService = serviceProvider?.GetService<IVivaExamRoomService>();
     }
 
     [BindProperty]
     public string? SessionIdInput { get; set; }
 
     [BindProperty]
-    public string ExamIdInput { get; set; } = "EXAM01";
+    public string ExamIdInput { get; set; } = string.Empty;
+
+    public List<ExamRoomSummaryDto> AvailableRooms { get; set; } = new();
 
     public string? ErrorMessage { get; set; }
 
     public bool IsOrchestratorAvailable => _orchestrator != null;
 
-    public void OnGet()
+    public async Task OnGetAsync(CancellationToken ct = default)
     {
+        if (_examRoomService != null)
+        {
+            try
+            {
+                AvailableRooms = await _examRoomService.GetAvailableExamRoomsAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to load available exam rooms on Viva index page.");
+            }
+        }
     }
 
     public IActionResult OnPost()
@@ -59,11 +76,11 @@ public class IndexModel : PageModel
         return RedirectToPage("/Viva/Exam", new { sessionId = sessionGuid });
     }
 
-    public async Task<IActionResult> OnPostCreateAsync(CancellationToken ct = default)
+    public async Task<IActionResult> OnPostJoinByCodeAsync(CancellationToken ct = default)
     {
         if (_orchestrator == null)
         {
-            ErrorMessage = "Chức năng thi vấn đáp chưa được bật.";
+            ErrorMessage = "Chức năng thi vấn đáp chưa được kích hoạt.";
             return Page();
         }
 
@@ -73,28 +90,94 @@ public class IndexModel : PageModel
             return Challenge();
         }
 
+        var email = User.FindFirst(ClaimTypes.Email)?.Value;
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            if (email.Contains("sv02", StringComparison.OrdinalIgnoreCase) || email.Contains("student2", StringComparison.OrdinalIgnoreCase))
+                studentId = "SV02";
+            else if (email.Contains("sv03", StringComparison.OrdinalIgnoreCase) || email.Contains("student3", StringComparison.OrdinalIgnoreCase))
+                studentId = "SV03";
+            else if (email.Contains("sv01", StringComparison.OrdinalIgnoreCase) || email.Contains("student", StringComparison.OrdinalIgnoreCase) || studentId == "1")
+                studentId = "SV01";
+        }
+        else if (studentId == "1")
+        {
+            studentId = "SV01";
+        }
+
         if (string.IsNullOrWhiteSpace(ExamIdInput))
         {
-            ErrorMessage = "Vui lòng nhập mã đề thi (Exam ID).";
+            ErrorMessage = "Vui lòng nhập mã phòng thi do giảng viên cung cấp.";
+            await ReloadRoomsAsync(ct);
             return Page();
+        }
+
+        var examCode = ExamIdInput.Trim().ToUpperInvariant();
+
+        // Validate that exam room exists in DB
+        if (_examRoomService != null)
+        {
+            var exists = await _examRoomService.ValidateExamRoomCodeAsync(examCode, ct);
+            if (!exists)
+            {
+                ErrorMessage = $"Mã phòng thi '{examCode}' không tồn tại hoặc chưa có câu hỏi. Vui lòng kiểm tra lại với giảng viên của bạn.";
+                await ReloadRoomsAsync(ct);
+                return Page();
+            }
         }
 
         try
         {
-            var result = await _orchestrator.InitializeSessionAsync(ExamIdInput.Trim(), studentId, ct);
+            var result = await _orchestrator.InitializeSessionAsync(examCode, studentId, ct);
+            _logger.LogInformation("Student {StudentId} joined exam room {ExamId} with session {SessionId}",
+                studentId, examCode, result.SessionId);
             return RedirectToPage("/Viva/Exam", new { sessionId = result.SessionId });
         }
         catch (ArgumentException ex)
         {
-            _logger.LogWarning(ex, "Invalid argument when initializing viva session for exam {ExamId}", ExamIdInput);
+            _logger.LogWarning(ex, "Invalid argument when initializing viva session for exam {ExamId}", examCode);
             ErrorMessage = ex.Message;
+            await ReloadRoomsAsync(ct);
             return Page();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error initializing viva session for exam {ExamId}", ExamIdInput);
-            ErrorMessage = "Đã xảy ra lỗi khi tạo phiên thi vấn đáp. Vui lòng thử lại sau.";
+            _logger.LogError(ex, "Unexpected error initializing viva session for exam {ExamId}", examCode);
+            ErrorMessage = "Đã xảy ra lỗi khi khởi tạo phiên thi vấn đáp. Vui lòng thử lại sau.";
+            await ReloadRoomsAsync(ct);
             return Page();
+        }
+    }
+
+    public Task<IActionResult> OnPostCreateAsync(CancellationToken ct = default)
+    {
+        if (_orchestrator == null)
+        {
+            ErrorMessage = "Chức năng thi vấn đáp chưa được bật.";
+            return Task.FromResult<IActionResult>(Page());
+        }
+
+        var studentId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(studentId))
+        {
+            return Task.FromResult<IActionResult>(Challenge());
+        }
+
+        return OnPostJoinByCodeAsync(ct);
+    }
+
+    private async Task ReloadRoomsAsync(CancellationToken ct)
+    {
+        if (_examRoomService != null)
+        {
+            try
+            {
+                AvailableRooms = await _examRoomService.GetAvailableExamRoomsAsync(ct);
+            }
+            catch
+            {
+                // Ignore reload error
+            }
         }
     }
 }

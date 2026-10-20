@@ -13,6 +13,32 @@
     var currentAct = ViewContext.RouteData.Values["action"]?.ToString();
     var currentPage = ViewContext.RouteData.Values["page"]?.ToString();
     var isAuth = User.Identity?.IsAuthenticated == true;
+
+    var emailClaim = User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email)?.Value ?? "";
+    var subClaim = User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "";
+
+    var sessionMssv = Context.Request.Cookies["Student_StudentId"];
+    var sessionClass = Context.Request.Cookies["Student_ClassId"];
+    var sessionName = Context.Request.Cookies["Student_Name"];
+
+    string studentMssv = !string.IsNullOrWhiteSpace(sessionMssv) ? sessionMssv : "SV01";
+    if (string.IsNullOrWhiteSpace(sessionMssv))
+    {
+        if (emailClaim.Contains("sv02", StringComparison.OrdinalIgnoreCase) || emailClaim.Contains("student2", StringComparison.OrdinalIgnoreCase) || subClaim == "2")
+            studentMssv = "SV02";
+        else if (emailClaim.Contains("sv03", StringComparison.OrdinalIgnoreCase) || emailClaim.Contains("student3", StringComparison.OrdinalIgnoreCase) || subClaim == "3")
+            studentMssv = "SV03";
+    }
+
+    string studentClass = !string.IsNullOrWhiteSpace(sessionClass) ? sessionClass : (studentMssv == "SV03" ? "SE1702" : "SE1701");
+    string studentMajor = Context.Request.Cookies["Student_Major"] ?? (studentClass == "SE1702" ? "Trí tuệ nhân tạo (AI)" : "Kỹ thuật phần mềm (SE)");
+    string studentTeacher = Context.Request.Cookies["Student_Lecturer"] ?? (studentClass == "SE1702" ? "ThS. Minh Trí (GV02)" : (studentClass == "SE1703" ? "TS. Lê Văn Hải (GV03)" : "TS. Hoàng Yến (GV01)"));
+    string studentFullName = !string.IsNullOrWhiteSpace(sessionName) ? sessionName : (User.Identity?.Name ?? (studentMssv switch
+    {
+        "SV02" => "Trần Thị B",
+        "SV03" => "Lê Văn C",
+        _ => "Nguyễn Văn A"
+    }));
 }
 <!DOCTYPE html>
 <html lang="vi">
@@ -68,10 +94,16 @@
                                         <span>Báo cáo Học vụ</span>
                                     </a>
                                 </li>
-                                <li class="sidebar-nav-item @(currentPage != null && currentPage.StartsWith("/Viva", StringComparison.OrdinalIgnoreCase) ? "active" : "")">
+                                <li class="sidebar-nav-item @(currentPage != null && currentPage.Equals("/Viva/CreateExam", StringComparison.OrdinalIgnoreCase) ? "active" : "")">
+                                    <a asp-page="/Viva/CreateExam">
+                                        <i class="bi bi-plus-circle-fill"></i>
+                                        <span>Tạo phòng thi</span>
+                                    </a>
+                                </li>
+                                <li class="sidebar-nav-item @(currentPage != null && currentPage.Equals("/Viva/Index", StringComparison.OrdinalIgnoreCase) ? "active" : "")">
                                     <a asp-page="/Viva/Index">
                                         <i class="bi bi-mic-fill"></i>
-                                        <span>Thử nghiệm Viva</span>
+                                        <span>Cổng thi Viva</span>
                                     </a>
                                 </li>
                                 <li class="sidebar-nav-item @(currentPage != null && currentPage.StartsWith("/Admin/AiSettings", StringComparison.OrdinalIgnoreCase) ? "active" : "")">
@@ -98,10 +130,16 @@
                                         <span>Thống kê Lớp học</span>
                                     </a>
                                 </li>
-                                <li class="sidebar-nav-item @(currentPage != null && currentPage.StartsWith("/Viva", StringComparison.OrdinalIgnoreCase) ? "active" : "")">
+                                <li class="sidebar-nav-item @(currentPage != null && currentPage.Equals("/Viva/CreateExam", StringComparison.OrdinalIgnoreCase) ? "active" : "")">
+                                    <a asp-page="/Viva/CreateExam">
+                                        <i class="bi bi-plus-circle-fill"></i>
+                                        <span>Tạo phòng thi Viva</span>
+                                    </a>
+                                </li>
+                                <li class="sidebar-nav-item @(currentPage != null && currentPage.Equals("/Viva/Index", StringComparison.OrdinalIgnoreCase) ? "active" : "")">
                                     <a asp-page="/Viva/Index">
                                         <i class="bi bi-camera-video-fill"></i>
-                                        <span>Phòng thi Viva</span>
+                                        <span>Cổng thi Viva</span>
                                     </a>
                                 </li>
                             </ul>
@@ -126,6 +164,12 @@
                                     <a asp-controller="StudentReports" asp-action="Index">
                                         <i class="bi bi-journal-check"></i>
                                         <span>Báo cáo cá nhân</span>
+                                    </a>
+                                </li>
+                                <li class="sidebar-nav-item @(string.Equals(currentCtrl, "Account", StringComparison.OrdinalIgnoreCase) && string.Equals(currentAct, "Profile", StringComparison.OrdinalIgnoreCase) ? "active" : "")">
+                                    <a asp-controller="Account" asp-action="Profile">
+                                        <i class="bi bi-person-vcard-fill"></i>
+                                        <span>Thông tin cá nhân</span>
                                     </a>
                                 </li>
                             </ul>
@@ -207,9 +251,21 @@
                                 <ul class="dropdown-menu dropdown-menu-end topbar-user-dropdown shadow-sm" aria-labelledby="userProfileDropdown">
                                     <li class="topbar-dropdown-header px-3 py-2">
                                         <div class="fw-bold text-dark text-truncate">@(User.Identity?.Name ?? "Người dùng")</div>
-                                        <div class="small text-muted">@friendlyRole</div>
+                                        <div class="small text-muted d-flex align-items-center gap-1">
+                                            <span>@friendlyRole</span>
+                                            @if (roleClaimValue == ApplicationRoles.Staff)
+                                            {
+                                                <span class="badge tag-purple" style="font-size: 10px;">Lớp @studentClass</span>
+                                            }
+                                        </div>
                                     </li>
                                     <li><hr class="dropdown-divider my-1" /></li>
+                                    <li>
+                                        <a class="dropdown-item d-flex align-items-center gap-2 py-2 @(string.Equals(currentCtrl, "Account", StringComparison.OrdinalIgnoreCase) && string.Equals(currentAct, "Profile", StringComparison.OrdinalIgnoreCase) ? "active" : "")" asp-controller="Account" asp-action="Profile">
+                                            <i class="bi bi-person-badge text-primary"></i>
+                                            <span>Thông tin cá nhân</span>
+                                        </a>
+                                    </li>
                                     <li>
                                         <a class="dropdown-item d-flex align-items-center gap-2 py-2" asp-controller="Account" asp-action="Dashboard">
                                             <i class="bi bi-gear text-secondary"></i>
@@ -266,6 +322,105 @@
 
     <!-- Nơi render Popup Modal động -->
     <div id="modalContainer" aria-live="polite"></div>
+
+    <!-- Modal: Thông tin cá nhân sinh viên & Phân lớp học phần -->
+    <div class="modal fade" id="userProfileModal" tabindex="-1" aria-labelledby="userProfileModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                <div class="modal-header border-0 pb-0 text-white" style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-person-badge-fill fs-4"></i>
+                        <h5 class="modal-title fw-bold" id="userProfileModalLabel">
+                            @(roleClaimValue == ApplicationRoles.Staff ? "Hồ Sơ Sinh Viên & Lớp Học Phần" : "Thông Tin Tài Khoản")
+                        </h5>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                </div>
+                <div class="modal-body p-4 pt-3">
+                    <div class="text-center pb-3 border-bottom mb-3">
+                        <div class="position-relative d-inline-block mb-2">
+                            <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80" 
+                                 alt="Avatar" class="rounded-circle shadow-sm border border-3 border-white" style="width: 80px; height: 80px; object-fit: cover;" />
+                            <span class="position-absolute bottom-0 end-0 p-1 bg-success border border-white rounded-circle" title="Trạng thái hoạt động"></span>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-1">
+                            @(roleClaimValue == ApplicationRoles.Staff ? $"{studentFullName} ({studentMssv})" : (User.Identity?.Name ?? "Người dùng"))
+                        </h5>
+                        <div class="d-flex justify-content-center gap-2">
+                            <span class="badge tag-purple">@friendlyRole</span>
+                            @if (roleClaimValue == ApplicationRoles.Staff)
+                            {
+                                <span class="badge tag-cyan"><i class="bi bi-building me-1"></i>Lớp: @studentClass</span>
+                            }
+                        </div>
+                    </div>
+
+                    @if (roleClaimValue == ApplicationRoles.Staff)
+                    {
+                        <!-- Chi tiết thông tin sinh viên và phân lớp cho Giảng viên -->
+                        <div class="vstack gap-2">
+                            <div class="d-flex justify-content-between align-items-center p-2 rounded-3 bg-light">
+                                <span class="text-muted small fw-semibold"><i class="bi bi-card-text me-2 text-primary"></i>Mã số sinh viên (MSSV)</span>
+                                <span class="fw-bold text-primary">@studentMssv</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center p-2 rounded-3 bg-light">
+                                <span class="text-muted small fw-semibold"><i class="bi bi-collection-fill me-2 text-purple"></i>Lớp học phần (GV chia lớp)</span>
+                                <span class="fw-bold text-dark badge tag-purple fs-6">@studentClass</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center p-2 rounded-3 bg-light">
+                                <span class="text-muted small fw-semibold"><i class="bi bi-person-video3 me-2 text-info"></i>Giảng viên phụ trách lớp</span>
+                                <span class="fw-bold text-dark">@studentTeacher</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center p-2 rounded-3 bg-light">
+                                <span class="text-muted small fw-semibold"><i class="bi bi-envelope-at me-2 text-danger"></i>Email học vụ</span>
+                                <span class="fw-semibold text-dark">@(string.IsNullOrWhiteSpace(emailClaim) ? $"{studentMssv.ToLowerInvariant()}@fpt.edu.vn" : emailClaim)</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center p-2 rounded-3 bg-light">
+                                <span class="text-muted small fw-semibold"><i class="bi bi-mortarboard-fill me-2 text-warning"></i>Ngành đào tạo</span>
+                                <span class="fw-semibold text-dark">@studentMajor</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center p-2 rounded-3 bg-light">
+                                <span class="text-muted small fw-semibold"><i class="bi bi-calendar3 me-2 text-secondary"></i>Khóa & Học kỳ</span>
+                                <span class="fw-semibold text-dark">K17 &bull; Fall 2026</span>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 pt-2 border-top d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <a asp-controller="Account" asp-action="Profile" class="btn btn-sm btn-primary rounded-pill px-3 fw-bold">
+                                <i class="bi bi-pencil-square me-1"></i> Điều chỉnh thông tin
+                            </a>
+                            <div class="d-flex gap-2">
+                                <a asp-controller="StudentReports" asp-action="Index" class="btn btn-sm btn-outline-secondary rounded-pill px-3 fw-bold">
+                                    <i class="bi bi-journal-text me-1"></i> Bảng điểm
+                                </a>
+                                <button type="button" class="btn btn-sm btn-light border rounded-pill px-3" data-bs-dismiss="modal">Đóng</button>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="vstack gap-2">
+                            <div class="d-flex justify-content-between align-items-center p-2 rounded-3 bg-light">
+                                <span class="text-muted small fw-semibold">Tên tài khoản</span>
+                                <span class="fw-bold text-dark">@(User.Identity?.Name ?? "—")</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center p-2 rounded-3 bg-light">
+                                <span class="text-muted small fw-semibold">Email</span>
+                                <span class="fw-semibold text-dark">@emailClaim</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center p-2 rounded-3 bg-light">
+                                <span class="text-muted small fw-semibold">Vai trò</span>
+                                <span class="badge tag-purple">@friendlyRole</span>
+                            </div>
+                        </div>
+                        <div class="mt-4 pt-2 border-top text-end">
+                            <button type="button" class="btn btn-sm btn-secondary rounded-pill px-3" data-bs-dismiss="modal">Đóng</button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
 
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>

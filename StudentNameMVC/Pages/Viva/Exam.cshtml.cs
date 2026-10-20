@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AIVES.BLL.Interfaces.ExamReporting;
 using AIVES.BLL.Interfaces.VivaInterview;
 using AIVES.BLL.Models.VivaInterview;
 using AIVES.BLL.Security;
@@ -14,6 +15,7 @@ public class ExamModel : PageModel
 {
     private readonly IVivaSessionOrchestrator? _orchestrator;
     private readonly IVivaRealtimeSessionService? _realtimeService;
+    private readonly IStudentReportService? _reportService;
     private readonly ILogger<ExamModel> _logger;
 
     public ExamModel(ILogger<ExamModel> logger, IServiceProvider serviceProvider)
@@ -21,6 +23,7 @@ public class ExamModel : PageModel
         _logger = logger;
         _orchestrator = serviceProvider.GetService<IVivaSessionOrchestrator>();
         _realtimeService = serviceProvider.GetService<IVivaRealtimeSessionService>();
+        _reportService = serviceProvider.GetService<IStudentReportService>();
     }
 
     [BindProperty(SupportsGet = true)]
@@ -47,6 +50,13 @@ public class ExamModel : PageModel
     public string? InitialFollowUpAudioUrl { get; set; }
     public int? InitialSecondsRemaining { get; set; }
 
+    public decimal? FinalScore { get; set; }
+    public bool? IsFinalPassed { get; set; }
+    public string? FinalAiFeedback { get; set; }
+    public string? FinalStrengths { get; set; }
+    public string? FinalWeaknesses { get; set; }
+    public string DisclaimerText { get; set; } = "⚠️ Thông báo: Đây là điểm thi sơ bộ do Giám khảo AI tự động chấm, chưa qua giảng viên chấm lại.";
+
     public string? ErrorMessage { get; set; }
     public bool IsOrchestratorAvailable => _orchestrator != null;
 
@@ -63,6 +73,20 @@ public class ExamModel : PageModel
         }
 
         StudentId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? string.Empty;
+        var email = User.FindFirst(ClaimTypes.Email)?.Value;
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            if (email.Contains("sv02", StringComparison.OrdinalIgnoreCase) || email.Contains("student2", StringComparison.OrdinalIgnoreCase))
+                StudentId = "SV02";
+            else if (email.Contains("sv03", StringComparison.OrdinalIgnoreCase) || email.Contains("student3", StringComparison.OrdinalIgnoreCase))
+                StudentId = "SV03";
+            else if (email.Contains("sv01", StringComparison.OrdinalIgnoreCase) || email.Contains("student", StringComparison.OrdinalIgnoreCase) || StudentId == "1")
+                StudentId = "SV01";
+        }
+        else if (StudentId == "1")
+        {
+            StudentId = "SV01";
+        }
         CandidateName = User.Identity?.Name ?? StudentId;
         CandidateRole = User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Role)?.Value switch
         {
@@ -137,7 +161,93 @@ public class ExamModel : PageModel
             }
         }
 
+        // Nếu phiên thi đã hoàn thành, tải trước điểm thi và nhận xét AI
+        if (SessionState == VivaSessionState.Completed && _reportService != null && !string.IsNullOrWhiteSpace(ExamId))
+        {
+            try
+            {
+                var report = await _reportService.GetStudentReportAsync(StudentId, ExamId, ct);
+                var latestAttempt = report?.Attempts.LastOrDefault();
+                if (latestAttempt != null)
+                {
+                    var latestQuestion = latestAttempt.QuestionResults.LastOrDefault();
+                    FinalScore = latestAttempt.NormalizedScore;
+                    IsFinalPassed = latestAttempt.IsPassed;
+                    FinalAiFeedback = latestQuestion?.AiFeedback;
+                    FinalStrengths = latestQuestion?.Strengths;
+                    FinalWeaknesses = latestQuestion?.Weaknesses;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not pre-load score for completed session {SessionId}", SessionId.Value);
+            }
+        }
+
         return Page();
+    }
+
+    public async Task<IActionResult> OnGetScoreSummaryAsync(Guid sessionId, string? examId, CancellationToken ct = default)
+    {
+        var studentId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? string.Empty;
+        var email = User.FindFirst(ClaimTypes.Email)?.Value;
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            if (email.Contains("sv02", StringComparison.OrdinalIgnoreCase) || email.Contains("student2", StringComparison.OrdinalIgnoreCase))
+                studentId = "SV02";
+            else if (email.Contains("sv03", StringComparison.OrdinalIgnoreCase) || email.Contains("student3", StringComparison.OrdinalIgnoreCase))
+                studentId = "SV03";
+            else if (email.Contains("sv01", StringComparison.OrdinalIgnoreCase) || email.Contains("student", StringComparison.OrdinalIgnoreCase) || studentId == "1")
+                studentId = "SV01";
+        }
+        else if (studentId == "1")
+        {
+            studentId = "SV01";
+        }
+        if (string.IsNullOrWhiteSpace(studentId) || _reportService == null)
+        {
+            return BadRequest(new { message = "Không xác định được danh tính thí sinh hoặc dịch vụ chấm điểm." });
+        }
+
+        try
+        {
+            var targetExamId = !string.IsNullOrWhiteSpace(examId) ? examId : ExamId;
+            var report = await _reportService.GetStudentReportAsync(studentId, targetExamId, ct);
+            if (report == null || report.Attempts.Count == 0)
+            {
+                return new JsonResult(new
+                {
+                    success = false,
+                    message = "Chưa có kết quả chấm điểm cho phiên thi này."
+                });
+            }
+
+            var latestAttempt = report.Attempts.Last();
+            var latestQuestion = latestAttempt.QuestionResults.LastOrDefault();
+
+            return new JsonResult(new
+            {
+                success = true,
+                score = latestAttempt.NormalizedScore,
+                totalScore = latestAttempt.TotalEarnedScore,
+                maxScore = latestAttempt.TotalMaxScore,
+                isPassed = latestAttempt.IsPassed,
+                evaluationMode = latestAttempt.EvaluationMode.ToString(),
+                feedback = latestQuestion?.AiFeedback ?? "AI đã hoàn tất chấm điểm toàn bộ câu trả lời của bạn.",
+                strengths = latestQuestion?.Strengths,
+                weaknesses = latestQuestion?.Weaknesses,
+                disclaimer = DisclaimerText
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting score summary for session {SessionId}", sessionId);
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                success = false,
+                message = "Lỗi khi lấy thông tin điểm: " + ex.Message
+            });
+        }
     }
 
     public async Task<IActionResult> OnPostStartSessionAsync([FromForm] Guid sessionId, CancellationToken ct = default)
