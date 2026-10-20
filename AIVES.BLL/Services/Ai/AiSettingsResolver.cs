@@ -1,4 +1,5 @@
 using AIVES.BLL.Interfaces.Ai;
+using AIVES.BLL.Models.Ai;
 using AIVES.BLL.Options;
 
 namespace AIVES.BLL.Services.Ai;
@@ -38,14 +39,51 @@ public static class AiSettingsResolver
 
         if (store != null)
         {
-            var status = store.GetStatus();
-            if (status.HasApiKey)
+            var config = store.GetConfiguration();
+            copy.UseMock = !config.UseRealAi;
+
+            var primaryProfile = config.FindProfile(config.Routing.Llm.ProfileId)
+                ?? config.Profiles.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p.ApiKey));
+
+            if (primaryProfile != null)
             {
-                copy.OpenAI.ApiKey = store.GetApiKey();
-                copy.UseMock = !status.UseRealAi;
+                copy.OpenAI.ApiKey = primaryProfile.ApiKey;
+                if (!string.IsNullOrWhiteSpace(primaryProfile.BaseUrl))
+                {
+                    copy.OpenAI.BaseUrl = primaryProfile.BaseUrl;
+                }
             }
         }
 
         return copy;
+    }
+
+    public static string GetStartupSummary(AiConfigurationModel config, IAiProviderRegistry registry)
+    {
+        if (!config.UseRealAi)
+        {
+            return "Mock";
+        }
+
+        var sttProfile = config.FindProfile(config.Routing.Stt.ProfileId);
+        var ttsProfile = config.FindProfile(config.Routing.Tts.ProfileId);
+        var llmProfile = config.FindProfile(config.Routing.Llm.ProfileId);
+
+        var sttDesc = FormatDesc(sttProfile, config.Routing.Stt.Model, AiCapability.SpeechToText, registry);
+        var ttsDesc = FormatDesc(ttsProfile, config.Routing.Tts.Model, AiCapability.TextToSpeech, registry);
+        var llmDesc = FormatDesc(llmProfile, config.Routing.Llm.Model, AiCapability.FollowUpLlm, registry);
+
+        return $"Real [STT={sttDesc}, TTS={ttsDesc}, LLM={llmDesc}]";
+    }
+
+    private static string FormatDesc(AiProviderProfile? profile, string? model, AiCapability cap, IAiProviderRegistry registry)
+    {
+        if (profile == null) return "Mock";
+        var adapter = registry.GetAdapter(profile.Kind);
+        if (adapter == null || !profile.CustomCapabilities.HasFlag(cap)) return "Mock";
+
+        var name = string.IsNullOrWhiteSpace(profile.Name) ? profile.Kind : profile.Name;
+        var modelStr = string.IsNullOrWhiteSpace(model) ? adapter.GetDefaultModel(cap) : model;
+        return $"{name}/{modelStr}";
     }
 }

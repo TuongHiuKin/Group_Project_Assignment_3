@@ -109,9 +109,11 @@ var app = builder.Build();
 
 if (vivaEnabled)
 {
-    var configured = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptionsMonitor<AiServiceOptions>>().CurrentValue;
-    var ai = AIVES.BLL.Services.Ai.AiSettingsResolver.Resolve(configured, app.Services.GetRequiredService<AIVES.BLL.Interfaces.Ai.IAiCredentialStore>());
-    app.Logger.LogInformation("AI mode at startup: {Mode}", ai.UsesRealProviders ? "OpenAI (real providers)" : "Mock");
+    var store = app.Services.GetRequiredService<AIVES.BLL.Interfaces.Ai.IAiCredentialStore>();
+    var registry = app.Services.GetRequiredService<AIVES.BLL.Interfaces.Ai.IAiProviderRegistry>();
+    var config = store.GetConfiguration();
+    var summary = AIVES.BLL.Services.Ai.AiSettingsResolver.GetStartupSummary(config, registry);
+    app.Logger.LogInformation("AI mode at startup: {Mode}", summary);
 }
 
 if (!app.Environment.IsDevelopment())

@@ -1,20 +1,16 @@
-using System;
 using System.Diagnostics;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using AIVES.BLL.Interfaces.Ai;
 using AIVES.BLL.Options;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace AIVES.BLL.Services.Ai;
 
 /// <summary>
-/// Follow-up question generator adapter using OpenAI Chat Completion API (GPT-4o-mini).
+/// Follow-up question generator adapter using OpenAI or OpenAI-compatible Chat Completion API.
 /// Strictly generates targeted viva probing questions without grading or scoring (Assignment 2 scope).
 /// </summary>
 public class OpenAiFollowUpGeneratorService : IFollowUpGeneratorService
@@ -24,21 +20,6 @@ public class OpenAiFollowUpGeneratorService : IFollowUpGeneratorService
     private readonly IOptions<AiServiceOptions> _options;
     private readonly IFollowUpGeneratorService? _fallbackService;
     private readonly ILogger<OpenAiFollowUpGeneratorService>? _logger;
-
-    private const string SystemPrompt = """
-    You are an expert IT viva examination examiner.
-    Your task is to analyze the original question and the student's verbal answer transcript, and formulate exactly ONE targeted follow-up question (1 to 2 concise sentences).
-
-    CRITICAL RULES:
-    1. STRICTLY FORBIDDEN: Do NOT provide grades, numerical scores, evaluation points, or pass/fail decisions.
-    2. The follow-up question must directly challenge or probe deeper into what the student stated or omitted.
-    3. Determine the cognitive intent: 'Clarification', 'Deep-Dive', 'Edge-Case', or 'Counter-Example'.
-    4. Respond strictly in valid JSON format:
-    {
-      "followUpQuestion": "<1-2 sentence question>",
-      "cognitiveIntent": "<Clarification|Deep-Dive|Edge-Case|Counter-Example>"
-    }
-    """;
 
     public OpenAiFollowUpGeneratorService(
         HttpClient httpClient,
@@ -68,9 +49,11 @@ public class OpenAiFollowUpGeneratorService : IFollowUpGeneratorService
         }
 
         var config = _options.Value;
+        var isCustomEndpoint = !string.IsNullOrWhiteSpace(config.OpenAI.BaseUrl) &&
+            !config.OpenAI.BaseUrl.Contains("api.openai.com", StringComparison.OrdinalIgnoreCase);
 
-        // Fallback to mock if configured or if no API key is available
-        if (config.UseMock || string.IsNullOrWhiteSpace(config.OpenAI.ApiKey))
+        // Fallback to mock if configured or if no API key is available (unless using a custom/local endpoint without auth)
+        if (config.UseMock || (string.IsNullOrWhiteSpace(config.OpenAI.ApiKey) && !isCustomEndpoint))
         {
             if (_fallbackService != null)
             {
@@ -95,7 +78,10 @@ public class OpenAiFollowUpGeneratorService : IFollowUpGeneratorService
             : $"{config.OpenAI.BaseUrl.TrimEnd('/')}/chat/completions";
 
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.OpenAI.ApiKey);
+        if (!string.IsNullOrWhiteSpace(config.OpenAI.ApiKey))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.OpenAI.ApiKey);
+        }
         if (!string.IsNullOrWhiteSpace(config.OpenAI.OrganizationId))
         {
             request.Headers.Add("OpenAI-Organization", config.OpenAI.OrganizationId);
@@ -112,7 +98,7 @@ public class OpenAiFollowUpGeneratorService : IFollowUpGeneratorService
             model = config.OpenAI.Model ?? "gpt-4o-mini",
             messages = new[]
             {
-                new { role = "system", content = SystemPrompt },
+                new { role = "system", content = AiPrompts.VivaFollowUpSystemPrompt },
                 new { role = "user", content = userContent }
             },
             response_format = new { type = "json_object" },
@@ -139,12 +125,21 @@ public class OpenAiFollowUpGeneratorService : IFollowUpGeneratorService
         catch (OperationCanceledException)
         {
             _logger?.LogWarning("Follow-up generation timed out after {Timeout} seconds.", timeoutSeconds);
+            if (_fallbackService != null)
+            {
+                return await _fallbackService.GenerateFollowUpQuestionAsync(originalQuestion, studentAnswerTranscript, subjectContext, ct);
+            }
             return new FollowUpResult(false, string.Empty, string.Empty, $"Follow-up generation timed out after {timeoutSeconds} seconds.");
         }
         catch (HttpRequestException ex)
         {
-            _logger?.LogError(ex, "HTTP exception during follow-up generation.");
-            return new FollowUpResult(false, string.Empty, string.Empty, $"Network error contacting LLM service: {ex.Message}");
+            var sanitizedErr = AiKeySanitizer.Sanitize(ex.Message, config.OpenAI.ApiKey);
+            _logger?.LogError(ex, "HTTP exception during follow-up generation: {Error}", sanitizedErr);
+            if (_fallbackService != null)
+            {
+                return await _fallbackService.GenerateFollowUpQuestionAsync(originalQuestion, studentAnswerTranscript, subjectContext, ct);
+            }
+            return new FollowUpResult(false, string.Empty, string.Empty, $"Network error contacting LLM service: {sanitizedErr}");
         }
 
         sw.Stop();
@@ -153,9 +148,15 @@ public class OpenAiFollowUpGeneratorService : IFollowUpGeneratorService
 
         if (!response.IsSuccessStatusCode)
         {
-            var errorMsg = ExtractErrorMessage(responseBody) ?? $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}";
+            var sanitizedBody = AiKeySanitizer.Sanitize(responseBody, config.OpenAI.ApiKey);
+            var errorMsg = ExtractErrorMessage(sanitizedBody) ?? $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}";
             _logger?.LogWarning("OpenAI LLM failed with status {StatusCode} in {Elapsed}ms: {Error}",
                 (int)response.StatusCode, sw.ElapsedMilliseconds, errorMsg);
+
+            if (_fallbackService != null)
+            {
+                return await _fallbackService.GenerateFollowUpQuestionAsync(originalQuestion, studentAnswerTranscript, subjectContext, ct);
+            }
             return new FollowUpResult(false, string.Empty, string.Empty, $"LLM service error: {errorMsg}");
         }
 

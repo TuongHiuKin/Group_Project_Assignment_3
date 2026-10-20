@@ -227,9 +227,128 @@ public sealed class AdminAiSettingsTests : IClassFixture<AdminAiSettingsTests.Ad
         Assert.Equal("Chưa cấu hình OpenAI API key.", model.TempData["TestErrorMessage"]);
     }
 
+    [Fact]
+    public async Task OnPostSaveRouting_WhenProfileDoesNotSupportCapability_AddsModelErrorAndReturnsPage()
+    {
+        var config = new AIVES.BLL.Models.Ai.AiConfigurationModel
+        {
+            UseRealAi = true,
+            Profiles =
+            [
+                new AIVES.BLL.Models.Ai.AiProviderProfile
+                {
+                    Id = "tts-only-profile",
+                    Name = "ElevenLabs",
+                    Kind = AIVES.BLL.Models.Ai.AiProviderKinds.OpenAiCompatible,
+                    ApiKey = "sk-1234567890",
+                    BaseUrl = "https://api.elevenlabs.io",
+                    CustomCapabilities = AIVES.BLL.Models.Ai.AiCapability.TextToSpeech
+                }
+            ]
+        };
+
+        var fakeStore = new InMemoryCredentialStore("sk-1234567890", useRealAi: true, config);
+        var tester = new DummyConnectionTester(true, "OK");
+        var model = CreatePageModel(fakeStore, tester);
+
+        model.RoutingInput = new AiSettingsModel.RoutingInputModel
+        {
+            UseRealAi = true,
+            SttProfileId = "tts-only-profile",
+            SttModel = "whisper-1"
+        };
+
+        var result = await model.OnPostSaveRoutingAsync();
+
+        Assert.IsType<PageResult>(result);
+        Assert.False(model.ModelState.IsValid);
+        Assert.True(model.ModelState.ContainsKey("RoutingInput.SttProfileId"));
+        Assert.Contains("không hỗ trợ", model.ModelState["RoutingInput.SttProfileId"]!.Errors[0].ErrorMessage);
+    }
+
+    [Fact]
+    public async Task OnPostSaveProfile_WhenKindChanges_UpdatesRoutedModelsToNewKindDefaults()
+    {
+        var config = new AIVES.BLL.Models.Ai.AiConfigurationModel
+        {
+            UseRealAi = true,
+            Profiles =
+            [
+                new AIVES.BLL.Models.Ai.AiProviderProfile
+                {
+                    Id = "p1",
+                    Name = "MultiProvider",
+                    Kind = AIVES.BLL.Models.Ai.AiProviderKinds.OpenAi,
+                    ApiKey = "sk-1234567890",
+                    BaseUrl = "https://api.openai.com/v1",
+                    CustomCapabilities = AIVES.BLL.Models.Ai.AiCapability.All
+                }
+            ],
+            Routing = new AIVES.BLL.Models.Ai.AiCapabilityRouting
+            {
+                Stt = new AIVES.BLL.Models.Ai.AiCapabilityTarget { ProfileId = "p1", Model = "whisper-1" },
+                Tts = new AIVES.BLL.Models.Ai.AiTtsCapabilityTarget { ProfileId = "p1", Model = "tts-1", Voice = "alloy" },
+                Llm = new AIVES.BLL.Models.Ai.AiCapabilityTarget { ProfileId = "p1", Model = "gpt-4o-mini" }
+            }
+        };
+
+        var fakeStore = new InMemoryCredentialStore("sk-1234567890", useRealAi: true, config);
+        var tester = new DummyConnectionTester(true, "OK");
+        var model = CreatePageModel(fakeStore, tester);
+
+        model.ProfileInput = new AiSettingsModel.ProfileInputModel
+        {
+            Id = "p1",
+            Name = "MultiProvider Gemini",
+            Kind = AIVES.BLL.Models.Ai.AiProviderKinds.Gemini,
+            BaseUrl = "https://generativelanguage.googleapis.com/v1beta",
+            ApiKey = "AIzaSyTest1234567890",
+            EnableStt = true,
+            EnableTts = true,
+            EnableLlm = true
+        };
+
+        var result = await model.OnPostSaveProfileAsync();
+
+        Assert.IsType<RedirectToPageResult>(result);
+        var updated = fakeStore.GetConfiguration();
+        Assert.Equal("gemini-2.5-flash", updated.Routing.Stt.Model);
+        Assert.Equal("gemini-2.5-flash-preview-tts", updated.Routing.Tts.Model);
+        Assert.Equal("Puck", updated.Routing.Tts.Voice);
+        Assert.Equal("gemini-2.5-flash", updated.Routing.Llm.Model);
+    }
+
+    [Fact]
+    public async Task OnPostSaveProfile_LocalOrLanBaseUrl_DoesNotRequireApiKey()
+    {
+        var fakeStore = new InMemoryCredentialStore(null, useRealAi: false);
+        var tester = new DummyConnectionTester(true, "OK");
+        var model = CreatePageModel(fakeStore, tester);
+
+        model.ProfileInput = new AiSettingsModel.ProfileInputModel
+        {
+            Name = "Local Ollama on LAN",
+            Kind = AIVES.BLL.Models.Ai.AiProviderKinds.OpenAiCompatible,
+            BaseUrl = "http://192.168.1.55:11434/v1",
+            ApiKey = null,
+            EnableLlm = true
+        };
+
+        var result = await model.OnPostSaveProfileAsync();
+
+        Assert.IsType<RedirectToPageResult>(result);
+        Assert.True(model.ModelState.IsValid);
+        Assert.True(fakeStore.SaveCalled);
+    }
+
     private static AiSettingsModel CreatePageModel(IAiCredentialStore store, IAiConnectionTester tester)
     {
-        var model = new AiSettingsModel(store, tester, NullLogger<AiSettingsModel>.Instance);
+        var registry = new AIVES.BLL.Services.Ai.AiProviderRegistry([
+            new AIVES.BLL.Services.Ai.Adapters.OpenAiProviderAdapter(),
+            new AIVES.BLL.Services.Ai.Adapters.GeminiProviderAdapter(),
+            new AIVES.BLL.Services.Ai.Adapters.OpenAiCompatibleProviderAdapter()
+        ]);
+        var model = new AiSettingsModel(store, tester, registry, NullLogger<AiSettingsModel>.Instance);
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, "ADMIN01"),
@@ -250,16 +369,18 @@ public sealed class AdminAiSettingsTests : IClassFixture<AdminAiSettingsTests.Ad
     {
         private string? _key;
         private bool _useRealAi;
+        private AIVES.BLL.Models.Ai.AiConfigurationModel? _customConfig;
 
         public bool SaveCalled { get; private set; }
         public string? SavedKey { get; private set; }
         public bool SavedUseRealAi { get; private set; }
         public bool ClearCalled { get; private set; }
 
-        public InMemoryCredentialStore(string? initialKey, bool useRealAi)
+        public InMemoryCredentialStore(string? initialKey, bool useRealAi, AIVES.BLL.Models.Ai.AiConfigurationModel? customConfig = null)
         {
             _key = initialKey;
             _useRealAi = useRealAi;
+            _customConfig = customConfig;
         }
 
         public AiCredentialStatus GetStatus() =>
@@ -284,6 +405,34 @@ public sealed class AdminAiSettingsTests : IClassFixture<AdminAiSettingsTests.Ad
             _useRealAi = false;
             return Task.CompletedTask;
         }
+
+        public AIVES.BLL.Models.Ai.AiConfigurationModel GetConfiguration()
+        {
+            if (_customConfig != null) return _customConfig;
+
+            return new()
+            {
+                UseRealAi = _useRealAi,
+                Profiles = string.IsNullOrWhiteSpace(_key) ? [] : [new AIVES.BLL.Models.Ai.AiProviderProfile { Id = "p1", Name = "OpenAI", Kind = AIVES.BLL.Models.Ai.AiProviderKinds.OpenAi, ApiKey = _key, BaseUrl = "https://api.openai.com/v1" }],
+                Routing = new AIVES.BLL.Models.Ai.AiCapabilityRouting
+                {
+                    Stt = new AIVES.BLL.Models.Ai.AiCapabilityTarget { ProfileId = "p1", Model = "whisper-1" },
+                    Tts = new AIVES.BLL.Models.Ai.AiTtsCapabilityTarget { ProfileId = "p1", Model = "tts-1", Voice = "alloy" },
+                    Llm = new AIVES.BLL.Models.Ai.AiCapabilityTarget { ProfileId = "p1", Model = "gpt-4o-mini" }
+                }
+            };
+        }
+
+        public Task SaveConfigurationAsync(AIVES.BLL.Models.Ai.AiConfigurationModel config, CancellationToken ct = default)
+        {
+            SaveCalled = true;
+            _customConfig = config;
+            _useRealAi = config.UseRealAi;
+            _key = config.Profiles.FirstOrDefault()?.ApiKey;
+            SavedKey = _key;
+            SavedUseRealAi = _useRealAi;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class DummyConnectionTester : IAiConnectionTester
@@ -299,6 +448,12 @@ public sealed class AdminAiSettingsTests : IClassFixture<AdminAiSettingsTests.Ad
 
         public Task<(bool Ok, string Message)> TestConnectionAsync(CancellationToken ct = default) =>
             Task.FromResult((_ok, _msg));
+
+        public Task<(bool Ok, string Message)> TestProfileAsync(AIVES.BLL.Models.Ai.AiProviderProfile profile, CancellationToken ct = default) =>
+            Task.FromResult((_ok, _msg));
+
+        public Task<IReadOnlyList<string>> ListModelsAsync(AIVES.BLL.Models.Ai.AiProviderProfile profile, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<string>>(["gpt-4o-mini", "gemini-2.5-flash"]);
     }
 
     private sealed class TempDataProviderStub : ITempDataProvider
