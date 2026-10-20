@@ -341,6 +341,102 @@ public sealed class AdminAiSettingsTests : IClassFixture<AdminAiSettingsTests.Ad
         Assert.True(fakeStore.SaveCalled);
     }
 
+    [Fact]
+    public async Task OnPostSaveRouting_WhenModelIsEmpty_AssignsDefaultModelForProfile()
+    {
+        var config = new AIVES.BLL.Models.Ai.AiConfigurationModel
+        {
+            UseRealAi = true,
+            Profiles =
+            [
+                new AIVES.BLL.Models.Ai.AiProviderProfile
+                {
+                    Id = "gemini-profile",
+                    Name = "Google Gemini",
+                    Kind = AIVES.BLL.Models.Ai.AiProviderKinds.Gemini,
+                    ApiKey = "AIzaSyTest1234567890",
+                    BaseUrl = "https://generativelanguage.googleapis.com/v1beta",
+                    CustomCapabilities = AIVES.BLL.Models.Ai.AiCapability.All
+                }
+            ]
+        };
+
+        var fakeStore = new InMemoryCredentialStore("AIzaSyTest1234567890", useRealAi: true, config);
+        var tester = new DummyConnectionTester(true, "OK");
+        var model = CreatePageModel(fakeStore, tester);
+
+        model.RoutingInput = new AiSettingsModel.RoutingInputModel
+        {
+            UseRealAi = true,
+            SttProfileId = "gemini-profile",
+            SttModel = "", // Empty
+            TtsProfileId = "gemini-profile",
+            TtsModel = null, // Null
+            TtsVoice = "", // Empty
+            LlmProfileId = "gemini-profile",
+            LlmModel = "  " // Whitespace
+        };
+
+        var result = await model.OnPostSaveRoutingAsync();
+
+        Assert.IsType<RedirectToPageResult>(result);
+        Assert.True(model.ModelState.IsValid);
+
+        var saved = fakeStore.GetConfiguration();
+        Assert.Equal("gemini-2.5-flash", saved.Routing.Stt.Model);
+        Assert.Equal("gemini-2.5-flash-preview-tts", saved.Routing.Tts.Model);
+        Assert.Equal("Puck", saved.Routing.Tts.Voice);
+        Assert.Equal("gemini-2.5-flash", saved.Routing.Llm.Model);
+    }
+
+    [Fact]
+    public async Task OnPostSaveRouting_WhenModelIsFromAnotherVendor_AddsModelError()
+    {
+        var config = new AIVES.BLL.Models.Ai.AiConfigurationModel
+        {
+            UseRealAi = true,
+            Profiles =
+            [
+                new AIVES.BLL.Models.Ai.AiProviderProfile
+                {
+                    Id = "gemini-profile",
+                    Name = "Google Gemini",
+                    Kind = AIVES.BLL.Models.Ai.AiProviderKinds.Gemini,
+                    ApiKey = "AIzaSyTest1234567890",
+                    BaseUrl = "https://generativelanguage.googleapis.com/v1beta",
+                    CustomCapabilities = AIVES.BLL.Models.Ai.AiCapability.All
+                }
+            ]
+        };
+
+        var fakeStore = new InMemoryCredentialStore("AIzaSyTest1234567890", useRealAi: true, config);
+        var tester = new DummyConnectionTester(true, "OK");
+        var model = CreatePageModel(fakeStore, tester);
+
+        // Assign OpenAI model names to a Gemini profile
+        model.RoutingInput = new AiSettingsModel.RoutingInputModel
+        {
+            UseRealAi = true,
+            SttProfileId = "gemini-profile",
+            SttModel = "whisper-1", // OpenAI model!
+            TtsProfileId = "gemini-profile",
+            TtsModel = "tts-1", // OpenAI model!
+            LlmProfileId = "gemini-profile",
+            LlmModel = "gpt-4o-mini" // OpenAI model!
+        };
+
+        var result = await model.OnPostSaveRoutingAsync();
+
+        Assert.IsType<PageResult>(result);
+        Assert.False(model.ModelState.IsValid);
+        Assert.True(model.ModelState.ContainsKey("RoutingInput.SttModel"));
+        Assert.Contains("OpenAI", model.ModelState["RoutingInput.SttModel"]!.Errors[0].ErrorMessage);
+        Assert.True(model.ModelState.ContainsKey("RoutingInput.TtsModel"));
+        Assert.Contains("OpenAI", model.ModelState["RoutingInput.TtsModel"]!.Errors[0].ErrorMessage);
+        Assert.True(model.ModelState.ContainsKey("RoutingInput.LlmModel"));
+        Assert.Contains("OpenAI", model.ModelState["RoutingInput.LlmModel"]!.Errors[0].ErrorMessage);
+    }
+
     private static AiSettingsModel CreatePageModel(IAiCredentialStore store, IAiConnectionTester tester)
     {
         var registry = new AIVES.BLL.Services.Ai.AiProviderRegistry([
