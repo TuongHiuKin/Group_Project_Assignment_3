@@ -175,11 +175,11 @@
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label small text-muted mb-1">Nhà cung cấp:</label>
-                                <select class="form-select" name="RoutingInput.SttProfileId" id="sttProfileSelect">
+                                <select class="form-select" name="RoutingInput.SttProfileId" id="sttProfileSelect" onchange="onRoutingProfileChange('stt')">
                                     <option value="">-- Dùng Mock (Mô phỏng) --</option>
                                     @foreach (var p in Model.Configuration.Profiles.Where(p => p.CustomCapabilities.HasFlag(AiCapability.SpeechToText)))
                                     {
-                                        <option value="@p.Id" selected="@(p.Id == Model.RoutingInput.SttProfileId)">
+                                        <option value="@p.Id" data-kind="@p.Kind" selected="@(p.Id == Model.RoutingInput.SttProfileId)">
                                             @p.Name (@p.Kind)
                                         </option>
                                     }
@@ -211,11 +211,11 @@
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label small text-muted mb-1">Nhà cung cấp:</label>
-                                <select class="form-select" name="RoutingInput.TtsProfileId" id="ttsProfileSelect">
+                                <select class="form-select" name="RoutingInput.TtsProfileId" id="ttsProfileSelect" onchange="onRoutingProfileChange('tts')">
                                     <option value="">-- Dùng Mock (Mô phỏng) --</option>
                                     @foreach (var p in Model.Configuration.Profiles.Where(p => p.CustomCapabilities.HasFlag(AiCapability.TextToSpeech)))
                                     {
-                                        <option value="@p.Id" selected="@(p.Id == Model.RoutingInput.TtsProfileId)">
+                                        <option value="@p.Id" data-kind="@p.Kind" selected="@(p.Id == Model.RoutingInput.TtsProfileId)">
                                             @p.Name (@p.Kind)
                                         </option>
                                     }
@@ -238,7 +238,7 @@
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label small text-muted mb-1">Giọng đọc (Voice):</label>
-                                <input type="text" class="form-control" name="RoutingInput.TtsVoice"
+                                <input type="text" class="form-control" name="RoutingInput.TtsVoice" id="ttsVoiceInput"
                                        value="@Model.RoutingInput.TtsVoice" placeholder="alloy / Puck / Kore" list="voiceDatalist" />
                                 <datalist id="voiceDatalist">
                                     <option value="alloy" />
@@ -264,11 +264,11 @@
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label small text-muted mb-1">Nhà cung cấp:</label>
-                                <select class="form-select" name="RoutingInput.LlmProfileId" id="llmProfileSelect">
+                                <select class="form-select" name="RoutingInput.LlmProfileId" id="llmProfileSelect" onchange="onRoutingProfileChange('llm')">
                                     <option value="">-- Dùng Mock (Mô phỏng) --</option>
                                     @foreach (var p in Model.Configuration.Profiles.Where(p => p.CustomCapabilities.HasFlag(AiCapability.FollowUpLlm)))
                                     {
-                                        <option value="@p.Id" selected="@(p.Id == Model.RoutingInput.LlmProfileId)">
+                                        <option value="@p.Id" data-kind="@p.Kind" selected="@(p.Id == Model.RoutingInput.LlmProfileId)">
                                             @p.Name (@p.Kind)
                                         </option>
                                     }
@@ -569,6 +569,81 @@
                 }
             }
         }
+
+        function onRoutingProfileChange(cap) {
+            if (cap === 'stt') {
+                const sel = document.getElementById('sttProfileSelect');
+                const input = document.getElementById('sttModelInput');
+                if (!sel || !input) return;
+                const opt = sel.options[sel.selectedIndex];
+                const kind = opt ? opt.getAttribute('data-kind') : '';
+                if (kind === '@AiProviderKinds.Gemini') {
+                    if (!input.value || isLikelyOpenAiModel(input.value)) {
+                        input.value = 'gemini-2.5-flash';
+                    }
+                } else if (kind === '@AiProviderKinds.OpenAi' || kind === '@AiProviderKinds.OpenAiCompatible') {
+                    if (!input.value || isLikelyGeminiModel(input.value)) {
+                        input.value = 'whisper-1';
+                    }
+                }
+            } else if (cap === 'tts') {
+                const sel = document.getElementById('ttsProfileSelect');
+                const input = document.getElementById('ttsModelInput');
+                const voiceInput = document.getElementById('ttsVoiceInput');
+                if (!sel || !input) return;
+                const opt = sel.options[sel.selectedIndex];
+                const kind = opt ? opt.getAttribute('data-kind') : '';
+                if (kind === '@AiProviderKinds.Gemini') {
+                    if (!input.value || isLikelyOpenAiModel(input.value)) {
+                        input.value = 'gemini-2.5-flash-preview-tts';
+                    }
+                    if (voiceInput && (!voiceInput.value || voiceInput.value === 'alloy')) {
+                        voiceInput.value = 'Puck';
+                    }
+                } else if (kind === '@AiProviderKinds.OpenAi' || kind === '@AiProviderKinds.OpenAiCompatible') {
+                    if (!input.value || isLikelyGeminiModel(input.value)) {
+                        input.value = 'tts-1';
+                    }
+                    if (voiceInput && (!voiceInput.value || voiceInput.value === 'Puck')) {
+                        voiceInput.value = 'alloy';
+                    }
+                }
+            } else if (cap === 'llm') {
+                const sel = document.getElementById('llmProfileSelect');
+                const input = document.getElementById('llmModelInput');
+                if (!sel || !input) return;
+                const opt = sel.options[sel.selectedIndex];
+                const kind = opt ? opt.getAttribute('data-kind') : '';
+                if (kind === '@AiProviderKinds.Gemini') {
+                    if (!input.value || isLikelyOpenAiModel(input.value)) {
+                        input.value = 'gemini-2.5-flash';
+                    }
+                } else if (kind === '@AiProviderKinds.OpenAi' || kind === '@AiProviderKinds.OpenAiCompatible') {
+                    if (!input.value || isLikelyGeminiModel(input.value)) {
+                        input.value = 'gpt-4o-mini';
+                    }
+                }
+            }
+        }
+
+        function isLikelyOpenAiModel(m) {
+            if (!m) return false;
+            const s = m.trim().toLowerCase();
+            return s.startsWith('whisper') || s.startsWith('tts-') || s.startsWith('gpt-') || s.startsWith('o1-') || s.startsWith('o3-') || s.startsWith('text-embedding');
+        }
+
+        function isLikelyGeminiModel(m) {
+            if (!m) return false;
+            const s = m.trim().toLowerCase();
+            return s.startsWith('gemini-') || s.startsWith('models/gemini-');
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            // Check if any initial routing has a model mismatched with its selected profile vendor
+            onRoutingProfileChange('stt');
+            onRoutingProfileChange('tts');
+            onRoutingProfileChange('llm');
+        });
 
         async function fetchModels(profileSelectId, datalistId) {
             const select = document.getElementById(profileSelectId);

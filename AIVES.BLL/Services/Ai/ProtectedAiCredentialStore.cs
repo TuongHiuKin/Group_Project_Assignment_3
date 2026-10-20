@@ -260,6 +260,30 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
                         });
                     }
 
+                    // Fix-up for any legacy migration where an OpenAI profile inadvertently held a Google Gemini key (AIzaSy)
+                    var geminiProfiles = loadedConfig.Profiles
+                        .Where(p => string.Equals(p.Kind, AiProviderKinds.Gemini, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+
+                    foreach (var p in loadedConfig.Profiles)
+                    {
+                        if (string.Equals(p.Kind, AiProviderKinds.OpenAi, StringComparison.OrdinalIgnoreCase)
+                            && !string.IsNullOrWhiteSpace(p.ApiKey)
+                            && p.ApiKey.StartsWith("AIzaSy", StringComparison.Ordinal))
+                        {
+                            if (geminiProfiles.Count > 0)
+                            {
+                                p.ApiKey = null;
+                            }
+                            else
+                            {
+                                p.Kind = AiProviderKinds.Gemini;
+                                p.Name = "Google Gemini";
+                                p.BaseUrl = "https://generativelanguage.googleapis.com/v1beta";
+                            }
+                        }
+                    }
+
                     _configuration = loadedConfig;
                     return;
                 }
@@ -282,14 +306,44 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
                     }
                 }
 
-                _configuration = CreateDefaultConfiguration();
-                _configuration.UseRealAi = legacy.UseRealAi;
-                _configuration.UpdatedAtUtc = legacy.UpdatedAtUtc;
-
-                var defaultProfile = _configuration.Profiles.FirstOrDefault();
-                if (defaultProfile != null)
+                if (!string.IsNullOrWhiteSpace(legacyKey) && legacyKey.StartsWith("AIzaSy", StringComparison.Ordinal))
                 {
-                    defaultProfile.ApiKey = legacyKey;
+                    _configuration = new AiConfigurationModel
+                    {
+                        SchemaVersion = 2,
+                        UseRealAi = legacy.UseRealAi,
+                        UpdatedAtUtc = legacy.UpdatedAtUtc,
+                        Profiles =
+                        [
+                            new AiProviderProfile
+                            {
+                                Id = "gemini-default",
+                                Name = "Google Gemini",
+                                Kind = AiProviderKinds.Gemini,
+                                BaseUrl = "https://generativelanguage.googleapis.com/v1beta",
+                                ApiKey = legacyKey,
+                                CustomCapabilities = AiCapability.All
+                            }
+                        ],
+                        Routing = new AiCapabilityRouting
+                        {
+                            Stt = new AiCapabilityTarget { ProfileId = "gemini-default", Model = "gemini-2.5-flash" },
+                            Tts = new AiTtsCapabilityTarget { ProfileId = "gemini-default", Model = "gemini-2.5-flash-preview-tts", Voice = "Puck" },
+                            Llm = new AiCapabilityTarget { ProfileId = "gemini-default", Model = "gemini-2.5-flash" }
+                        }
+                    };
+                }
+                else
+                {
+                    _configuration = CreateDefaultConfiguration();
+                    _configuration.UseRealAi = legacy.UseRealAi;
+                    _configuration.UpdatedAtUtc = legacy.UpdatedAtUtc;
+
+                    var defaultProfile = _configuration.Profiles.FirstOrDefault();
+                    if (defaultProfile != null)
+                    {
+                        defaultProfile.ApiKey = legacyKey;
+                    }
                 }
             }
         }

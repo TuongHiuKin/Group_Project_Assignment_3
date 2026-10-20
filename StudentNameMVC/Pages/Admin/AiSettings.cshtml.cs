@@ -243,6 +243,29 @@ public class AiSettingsModel : PageModel
             {
                 ModelState.AddModelError("RoutingInput.SttProfileId", $"Hồ sơ '{p.Name}' không hỗ trợ năng lực Speech-to-Text (STT).");
             }
+            else
+            {
+                var adapter = _providerRegistry.GetAdapter(p.Kind);
+                var defaultModel = adapter?.GetDefaultModel(AiCapability.SpeechToText) ?? (p.Kind == AiProviderKinds.Gemini ? "gemini-2.5-flash" : "whisper-1");
+                if (string.IsNullOrWhiteSpace(RoutingInput.SttModel))
+                {
+                    RoutingInput.SttModel = defaultModel;
+                }
+                else
+                {
+                    var modelTrimmed = RoutingInput.SttModel.Trim();
+                    if (p.Kind == AiProviderKinds.Gemini && IsLikelyOpenAiModel(modelTrimmed))
+                    {
+                        ModelState.AddModelError("RoutingInput.SttModel",
+                            $"Model '{modelTrimmed}' là của OpenAI, không tương thích với nhà cung cấp Google Gemini. Vui lòng sử dụng '{defaultModel}' hoặc để trống.");
+                    }
+                    else if (p.Kind == AiProviderKinds.OpenAi && IsLikelyGeminiModel(modelTrimmed))
+                    {
+                        ModelState.AddModelError("RoutingInput.SttModel",
+                            $"Model '{modelTrimmed}' là của Google Gemini, không tương thích với nhà cung cấp OpenAI. Vui lòng sử dụng '{defaultModel}' hoặc để trống.");
+                    }
+                }
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(RoutingInput.TtsProfileId))
@@ -256,6 +279,36 @@ public class AiSettingsModel : PageModel
             {
                 ModelState.AddModelError("RoutingInput.TtsProfileId", $"Hồ sơ '{p.Name}' không hỗ trợ năng lực Text-to-Speech (TTS).");
             }
+            else
+            {
+                var adapter = _providerRegistry.GetAdapter(p.Kind);
+                var defaultModel = adapter?.GetDefaultModel(AiCapability.TextToSpeech) ?? (p.Kind == AiProviderKinds.Gemini ? "gemini-2.5-flash-preview-tts" : "tts-1");
+                var defaultVoice = p.Kind == AiProviderKinds.Gemini ? "Puck" : "alloy";
+
+                if (string.IsNullOrWhiteSpace(RoutingInput.TtsModel))
+                {
+                    RoutingInput.TtsModel = defaultModel;
+                }
+                else
+                {
+                    var modelTrimmed = RoutingInput.TtsModel.Trim();
+                    if (p.Kind == AiProviderKinds.Gemini && IsLikelyOpenAiModel(modelTrimmed))
+                    {
+                        ModelState.AddModelError("RoutingInput.TtsModel",
+                            $"Model '{modelTrimmed}' là của OpenAI, không tương thích với nhà cung cấp Google Gemini. Vui lòng sử dụng '{defaultModel}' hoặc để trống.");
+                    }
+                    else if (p.Kind == AiProviderKinds.OpenAi && IsLikelyGeminiModel(modelTrimmed))
+                    {
+                        ModelState.AddModelError("RoutingInput.TtsModel",
+                            $"Model '{modelTrimmed}' là của Google Gemini, không tương thích với nhà cung cấp OpenAI. Vui lòng sử dụng '{defaultModel}' hoặc để trống.");
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(RoutingInput.TtsVoice))
+                {
+                    RoutingInput.TtsVoice = defaultVoice;
+                }
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(RoutingInput.LlmProfileId))
@@ -268,6 +321,30 @@ public class AiSettingsModel : PageModel
             else if (!p.CustomCapabilities.HasFlag(AiCapability.FollowUpLlm))
             {
                 ModelState.AddModelError("RoutingInput.LlmProfileId", $"Hồ sơ '{p.Name}' không hỗ trợ năng lực Follow-up LLM.");
+            }
+            else
+            {
+                var adapter = _providerRegistry.GetAdapter(p.Kind);
+                var defaultModel = adapter?.GetDefaultModel(AiCapability.FollowUpLlm) ?? (p.Kind == AiProviderKinds.Gemini ? "gemini-2.5-flash" : "gpt-4o-mini");
+
+                if (string.IsNullOrWhiteSpace(RoutingInput.LlmModel))
+                {
+                    RoutingInput.LlmModel = defaultModel;
+                }
+                else
+                {
+                    var modelTrimmed = RoutingInput.LlmModel.Trim();
+                    if (p.Kind == AiProviderKinds.Gemini && IsLikelyOpenAiModel(modelTrimmed))
+                    {
+                        ModelState.AddModelError("RoutingInput.LlmModel",
+                            $"Model '{modelTrimmed}' là của OpenAI, không tương thích với nhà cung cấp Google Gemini. Vui lòng sử dụng '{defaultModel}' hoặc để trống.");
+                    }
+                    else if (p.Kind == AiProviderKinds.OpenAi && IsLikelyGeminiModel(modelTrimmed))
+                    {
+                        ModelState.AddModelError("RoutingInput.LlmModel",
+                            $"Model '{modelTrimmed}' là của Google Gemini, không tương thích với nhà cung cấp OpenAI. Vui lòng sử dụng '{defaultModel}' hoặc để trống.");
+                    }
+                }
             }
         }
 
@@ -292,6 +369,20 @@ public class AiSettingsModel : PageModel
         await _credentialStore.SaveConfigurationAsync(config, ct);
         TempData["SuccessMessage"] = "Đã lưu thiết lập định tuyến năng lực AI thành công.";
         return RedirectToPage();
+    }
+
+    private static bool IsLikelyOpenAiModel(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return false;
+        var m = model.Trim().ToLowerInvariant();
+        return m.StartsWith("whisper") || m.StartsWith("tts-") || m.StartsWith("gpt-") || m.StartsWith("o1-") || m.StartsWith("o3-") || m.StartsWith("text-embedding");
+    }
+
+    private static bool IsLikelyGeminiModel(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return false;
+        var m = model.Trim().ToLowerInvariant();
+        return m.StartsWith("gemini-") || m.StartsWith("models/gemini-");
     }
 
     public async Task<IActionResult> OnPostTestProfileAsync(string profileId, CancellationToken ct = default)

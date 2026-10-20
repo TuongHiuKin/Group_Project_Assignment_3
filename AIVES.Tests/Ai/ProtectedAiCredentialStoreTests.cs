@@ -365,6 +365,78 @@ public sealed class ProtectedAiCredentialStoreTests : IDisposable
         Assert.Equal("groq-profile", reloadedConfig.Routing.Llm.ProfileId);
     }
 
+    [Fact]
+    public void Legacy_V1_With_Gemini_Key_Upgrades_To_Gemini_Profile()
+    {
+        var protector = _dataProtection.CreateProtector("AIVES.AiCredentials.v1");
+        var protectedKey = protector.Protect("AIzaSyTestGeminiKey1234567890");
+
+        var legacyJson = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            protectedApiKey = protectedKey,
+            useRealAi = true,
+            updatedAtUtc = DateTime.UtcNow
+        });
+
+        File.WriteAllText(_storePath, legacyJson);
+
+        var store = CreateStore();
+        var config = store.GetConfiguration();
+
+        Assert.True(config.UseRealAi);
+        var gemini = config.Profiles.FirstOrDefault(p => p.Kind == AIVES.BLL.Models.Ai.AiProviderKinds.Gemini);
+        Assert.NotNull(gemini);
+        Assert.Equal("AIzaSyTestGeminiKey1234567890", gemini.ApiKey);
+        Assert.Equal("gemini-2.5-flash", config.Routing.Stt.Model);
+        Assert.Equal("gemini-2.5-flash-preview-tts", config.Routing.Tts.Model);
+        Assert.Equal("Puck", config.Routing.Tts.Voice);
+        Assert.Equal("gemini-2.5-flash", config.Routing.Llm.Model);
+    }
+
+    [Fact]
+    public async Task V2_OpenAi_Profile_With_Misattributed_Gemini_Key_Is_Cleaned_Up()
+    {
+        var store = CreateStore();
+
+        var config = new AIVES.BLL.Models.Ai.AiConfigurationModel
+        {
+            UseRealAi = true,
+            Profiles =
+            [
+                new AIVES.BLL.Models.Ai.AiProviderProfile
+                {
+                    Id = "openai-default",
+                    Name = "OpenAI",
+                    Kind = AIVES.BLL.Models.Ai.AiProviderKinds.OpenAi,
+                    BaseUrl = "https://api.openai.com/v1",
+                    ApiKey = "AIzaSyMisattributedKey12345" // Accidental Gemini key
+                },
+                new AIVES.BLL.Models.Ai.AiProviderProfile
+                {
+                    Id = "gemini-real",
+                    Name = "Google Gemini Real",
+                    Kind = AIVES.BLL.Models.Ai.AiProviderKinds.Gemini,
+                    BaseUrl = "https://generativelanguage.googleapis.com/v1beta",
+                    ApiKey = "AIzaSyMisattributedKey12345"
+                }
+            ]
+        };
+
+        await store.SaveConfigurationAsync(config);
+
+        // Reload store in fresh instance: should clean up the misattributed key on openai-default
+        var reloadedStore = CreateStore();
+        var reloadedConfig = reloadedStore.GetConfiguration();
+
+        var openai = reloadedConfig.FindProfile("openai-default");
+        var gemini = reloadedConfig.FindProfile("gemini-real");
+
+        Assert.NotNull(openai);
+        Assert.Null(openai.ApiKey); // Cleaned up!
+        Assert.NotNull(gemini);
+        Assert.Equal("AIzaSyMisattributedKey12345", gemini.ApiKey); // Kept!
+    }
+
     private sealed class TestHttpHandler : HttpMessageHandler
     {
         private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _handler;
