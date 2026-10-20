@@ -167,27 +167,6 @@
                         </div>
                     </div>
 
-                    <!-- Category: SETTINGS & LOGOUT -->
-                    <div>
-                        <div class="sidebar-category">SETTINGS</div>
-                        <ul class="sidebar-nav-list">
-                            <li class="sidebar-nav-item">
-                                <a asp-controller="Account" asp-action="Dashboard">
-                                    <i class="bi bi-gear"></i>
-                                    <span>Cài đặt</span>
-                                </a>
-                            </li>
-                            <li class="sidebar-nav-item">
-                                <form asp-controller="Account" asp-action="Logout" method="post" class="w-100 m-0">
-                                    @Html.AntiForgeryToken()
-                                    <button type="submit">
-                                        <i class="bi bi-box-arrow-right"></i>
-                                        <span>Đăng xuất</span>
-                                    </button>
-                                </form>
-                            </li>
-                        </ul>
-                    </div>
                 </aside>
 
                 <!-- 2. MAIN WORKSPACE AREA -->
@@ -215,13 +194,39 @@
                                 <span class="topbar-badge-dot"></span>
                             </button>
 
-                            <!-- Profile avatar -->
-                            <div class="topbar-user-profile">
-                                <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80" alt="Avatar" class="topbar-user-avatar" />
-                                <div class="d-none d-md-block">
-                                    <div class="topbar-user-name">@(User.Identity?.Name ?? "Người dùng")</div>
-                                    <div class="topbar-user-role">@friendlyRole</div>
-                                </div>
+                            <!-- Profile avatar dropdown -->
+                            <div class="dropdown">
+                                <button type="button" class="topbar-user-profile" id="userProfileDropdown" data-bs-toggle="dropdown" aria-expanded="false" title="Menu tài khoản">
+                                    <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=100&q=80" alt="Avatar" class="topbar-user-avatar" />
+                                    <div class="d-none d-md-block text-start">
+                                        <div class="topbar-user-name">@(User.Identity?.Name ?? "Người dùng")</div>
+                                        <div class="topbar-user-role">@friendlyRole</div>
+                                    </div>
+                                    <i class="bi bi-chevron-down topbar-user-chevron ms-1"></i>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end topbar-user-dropdown shadow-sm" aria-labelledby="userProfileDropdown">
+                                    <li class="topbar-dropdown-header px-3 py-2">
+                                        <div class="fw-bold text-dark text-truncate">@(User.Identity?.Name ?? "Người dùng")</div>
+                                        <div class="small text-muted">@friendlyRole</div>
+                                    </li>
+                                    <li><hr class="dropdown-divider my-1" /></li>
+                                    <li>
+                                        <a class="dropdown-item d-flex align-items-center gap-2 py-2" asp-controller="Account" asp-action="Dashboard">
+                                            <i class="bi bi-gear text-secondary"></i>
+                                            <span>Cài đặt</span>
+                                        </a>
+                                    </li>
+                                    <li><hr class="dropdown-divider my-1" /></li>
+                                    <li>
+                                        <form asp-controller="Account" asp-action="Logout" method="post" class="m-0">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="dropdown-item d-flex align-items-center gap-2 py-2 text-danger">
+                                                <i class="bi bi-box-arrow-right"></i>
+                                                <span>Đăng xuất</span>
+                                            </button>
+                                        </form>
+                                    </li>
+                                </ul>
                             </div>
                         </div>
                     </header>
