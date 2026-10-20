@@ -1,0 +1,214 @@
+using System.Text.Json;
+using AIVES.BLL.Interfaces.Ai;
+using AIVES.BLL.Models.Ai;
+using AIVES.BLL.Services.Ai.Gemini;
+using AIVES.BLL.Services.Ai.Mocks;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+
+namespace AIVES.BLL.Services.Ai.Adapters;
+
+/// <summary>
+/// Provider adapter for Google Gemini REST APIs.
+/// </summary>
+public sealed class GeminiProviderAdapter : IAiProviderAdapter
+{
+    public string Kind => AiProviderKinds.Gemini;
+
+    public AiCapability SupportedCapabilities => AiCapability.All;
+
+    public string GetDefaultModel(AiCapability capability) => capability switch
+    {
+        AiCapability.SpeechToText => "gemini-2.5-flash",
+        AiCapability.TextToSpeech => "gemini-2.5-flash-preview-tts",
+        AiCapability.FollowUpLlm => "gemini-2.5-flash",
+        _ => "gemini-2.5-flash"
+    };
+
+    public ISpeechToTextService? CreateSpeechToTextService(IServiceProvider sp, AiProviderProfile profile, string model)
+    {
+        if (!profile.CustomCapabilities.HasFlag(AiCapability.SpeechToText))
+        {
+            return null;
+        }
+
+        var effectiveModel = string.IsNullOrWhiteSpace(model) ? GetDefaultModel(AiCapability.SpeechToText) : model;
+        var httpClient = sp.GetRequiredService<HttpClient>();
+        var logger = sp.GetService<ILogger<GeminiSpeechToTextService>>();
+        var mock = sp.GetService<MockSpeechToTextService>();
+        return new GeminiSpeechToTextService(httpClient, profile, effectiveModel, timeoutSeconds: 15, logger, mock);
+    }
+
+    public ITextToSpeechService? CreateTextToSpeechService(
+        IServiceProvider sp,
+        AiProviderProfile profile,
+        string model,
+        string? voice,
+        string? cacheDirectory)
+    {
+        if (!profile.CustomCapabilities.HasFlag(AiCapability.TextToSpeech))
+        {
+            return null;
+        }
+
+        var effectiveModel = string.IsNullOrWhiteSpace(model) ? GetDefaultModel(AiCapability.TextToSpeech) : model;
+        var effectiveVoice = string.IsNullOrWhiteSpace(voice) ? "Puck" : voice;
+        var httpClient = sp.GetRequiredService<HttpClient>();
+        var logger = sp.GetService<ILogger<GeminiTextToSpeechService>>();
+        var mock = sp.GetService<MockTextToSpeechService>();
+        return new GeminiTextToSpeechService(httpClient, profile, effectiveModel, effectiveVoice, cacheDirectory, timeoutSeconds: 10, logger, mock);
+    }
+
+    public IFollowUpGeneratorService? CreateFollowUpGeneratorService(IServiceProvider sp, AiProviderProfile profile, string model)
+    {
+        if (!profile.CustomCapabilities.HasFlag(AiCapability.FollowUpLlm))
+        {
+            return null;
+        }
+
+        var effectiveModel = string.IsNullOrWhiteSpace(model) ? GetDefaultModel(AiCapability.FollowUpLlm) : model;
+        var httpClient = sp.GetRequiredService<HttpClient>();
+        var validator = sp.GetService<FollowUpPolicyValidator>() ?? new FollowUpPolicyValidator();
+        var logger = sp.GetService<ILogger<GeminiFollowUpGeneratorService>>();
+        var mock = sp.GetService<MockFollowUpGeneratorService>();
+        return new GeminiFollowUpGeneratorService(httpClient, profile, effectiveModel, validator, timeoutSeconds: 15, logger, mock);
+    }
+
+    public async Task<(bool Ok, string Message)> TestConnectionAsync(HttpClient httpClient, AiProviderProfile profile, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(profile.ApiKey))
+        {
+            return (false, "Chưa cấu hình API key cho hồ sơ Gemini.");
+        }
+
+        var baseUrl = string.IsNullOrWhiteSpace(profile.BaseUrl)
+            ? "https://generativelanguage.googleapis.com/v1beta"
+            : profile.BaseUrl.TrimEnd('/');
+
+        var endpoint = $"{baseUrl}/models";
+        using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+        request.Headers.Add("x-goog-api-key", profile.ApiKey);
+
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        linkedCts.CancelAfter(TimeSpan.FromSeconds(10));
+
+        try
+        {
+            var response = await httpClient.SendAsync(request, linkedCts.Token).ConfigureAwait(false);
+            if (response.IsSuccessStatusCode)
+            {
+                return (true, "Kết nối Gemini thành công (HTTP 200 OK).");
+            }
+
+            var status = (int)response.StatusCode;
+            if (status is 401 or 403)
+            {
+                return (false, "API key không hợp lệ hoặc không có quyền truy cập Gemini (HTTP 401/403).");
+            }
+            if (status == 429)
+            {
+                return (false, "Đã vượt hạn mức yêu cầu Gemini (Rate limit / Quota exceeded HTTP 429).");
+            }
+
+            var body = await response.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
+            var sanitizedBody = AiKeySanitizer.Sanitize(body, profile.ApiKey);
+            var msg = ExtractErrorMessage(sanitizedBody) ?? $"HTTP {status} {response.ReasonPhrase}";
+            return (false, $"Lỗi kết nối Gemini (HTTP {status}): {msg}");
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return (false, "Hết thời gian chờ khi kết nối tới Gemini (timeout 10 giây).");
+        }
+        catch (HttpRequestException ex)
+        {
+            var sanitized = AiKeySanitizer.Sanitize(ex.Message, profile.ApiKey);
+            return (false, $"Lỗi mạng khi kết nối tới Gemini: {sanitized}");
+        }
+        catch (Exception ex)
+        {
+            var sanitized = AiKeySanitizer.Sanitize(ex.Message, profile.ApiKey);
+            return (false, $"Lỗi kiểm tra kết nối Gemini: {sanitized}");
+        }
+    }
+
+    public async Task<IReadOnlyList<string>> ListModelsAsync(HttpClient httpClient, AiProviderProfile profile, CancellationToken ct = default)
+    {
+        var fallbackModels = new List<string> { "gemini-2.5-flash", "gemini-2.5-flash-preview-tts", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro" };
+        if (string.IsNullOrWhiteSpace(profile.ApiKey))
+        {
+            return fallbackModels;
+        }
+
+        var baseUrl = string.IsNullOrWhiteSpace(profile.BaseUrl)
+            ? "https://generativelanguage.googleapis.com/v1beta"
+            : profile.BaseUrl.TrimEnd('/');
+
+        var endpoint = $"{baseUrl}/models";
+        using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
+        request.Headers.Add("x-goog-api-key", profile.ApiKey);
+
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        linkedCts.CancelAfter(TimeSpan.FromSeconds(8));
+
+        try
+        {
+            var response = await httpClient.SendAsync(request, linkedCts.Token).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return fallbackModels;
+            }
+
+            var body = await response.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("models", out var modelsElem) && modelsElem.ValueKind == JsonValueKind.Array)
+            {
+                var list = new List<string>();
+                foreach (var item in modelsElem.EnumerateArray())
+                {
+                    if (item.TryGetProperty("name", out var nameElem))
+                    {
+                        var name = nameElem.GetString();
+                        if (!string.IsNullOrWhiteSpace(name))
+                        {
+                            // Strip "models/" prefix if present
+                            if (name.StartsWith("models/", StringComparison.OrdinalIgnoreCase))
+                            {
+                                name = name["models/".Length..];
+                            }
+                            list.Add(name);
+                        }
+                    }
+                }
+
+                if (list.Count > 0)
+                {
+                    return list;
+                }
+            }
+        }
+        catch
+        {
+            // Fall back to known models
+        }
+
+        return fallbackModels;
+    }
+
+    private static string? ExtractErrorMessage(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("error", out var errorElem))
+            {
+                if (errorElem.TryGetProperty("message", out var msgElem))
+                {
+                    return msgElem.GetString();
+                }
+            }
+        }
+        catch { }
+        return null;
+    }
+}

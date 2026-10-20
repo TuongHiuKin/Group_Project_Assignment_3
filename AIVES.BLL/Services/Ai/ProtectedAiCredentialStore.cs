@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AIVES.BLL.Interfaces.Ai;
+using AIVES.BLL.Models.Ai;
 using AIVES.BLL.Options;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Logging;
@@ -15,9 +16,7 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
     private readonly ILogger<ProtectedAiCredentialStore> _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    private string? _currentApiKey;
-    private bool _useRealAi;
-    private DateTime? _updatedAtUtc;
+    private AiConfigurationModel _configuration = CreateDefaultConfiguration();
 
     public ProtectedAiCredentialStore(
         IDataProtectionProvider protectionProvider,
@@ -37,42 +36,41 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
 
     public AiCredentialStatus GetStatus()
     {
-        var hasKey = !string.IsNullOrWhiteSpace(_currentApiKey);
+        var hasKey = _configuration.Profiles.Any(p => !string.IsNullOrWhiteSpace(p.ApiKey));
         string? keyHint = null;
 
-        if (hasKey && _currentApiKey != null)
+        var primaryProfile = _configuration.FindProfile(_configuration.Routing.Llm.ProfileId)
+            ?? _configuration.Profiles.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p.ApiKey));
+
+        if (primaryProfile != null && !string.IsNullOrWhiteSpace(primaryProfile.ApiKey))
         {
-            keyHint = _currentApiKey.Length >= 4
-                ? "…" + _currentApiKey[^4..]
-                : "…" + _currentApiKey;
+            keyHint = primaryProfile.GetKeyHint();
         }
 
-        return new AiCredentialStatus(hasKey, _useRealAi, keyHint, _updatedAtUtc);
+        return new AiCredentialStatus(hasKey, _configuration.UseRealAi, keyHint, _configuration.UpdatedAtUtc);
     }
 
     public string? GetApiKey()
     {
-        return _currentApiKey;
+        var primaryProfile = _configuration.FindProfile(_configuration.Routing.Llm.ProfileId)
+            ?? _configuration.Profiles.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p.ApiKey));
+        return primaryProfile?.ApiKey;
     }
 
-    public async Task SaveAsync(string? newApiKey, bool useRealAi, CancellationToken ct = default)
+    public AiConfigurationModel GetConfiguration()
     {
+        return CloneConfiguration(_configuration);
+    }
+
+    public async Task SaveConfigurationAsync(AiConfigurationModel config, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (!string.IsNullOrWhiteSpace(newApiKey))
-            {
-                var trimmed = newApiKey.Trim();
-                if (trimmed.Length is < 20 or > 300 || trimmed.Any(char.IsWhiteSpace))
-                {
-                    throw new ArgumentException("API key must be between 20 and 300 characters without whitespace.", nameof(newApiKey));
-                }
-
-                _currentApiKey = trimmed;
-            }
-
-            _useRealAi = useRealAi;
-            _updatedAtUtc = DateTime.UtcNow;
+            config.UpdatedAtUtc = DateTime.UtcNow;
+            _configuration = CloneConfiguration(config);
 
             if (!string.IsNullOrWhiteSpace(_storePath))
             {
@@ -82,20 +80,35 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
                     Directory.CreateDirectory(dir);
                 }
 
-                var model = new StoredCredentialModel
+                var storedModel = new StoredConfigurationModel
                 {
-                    ProtectedApiKey = !string.IsNullOrWhiteSpace(_currentApiKey)
-                        ? _protector.Protect(_currentApiKey)
-                        : null,
-                    UseRealAi = _useRealAi,
-                    UpdatedAtUtc = _updatedAtUtc
+                    SchemaVersion = 2,
+                    UseRealAi = _configuration.UseRealAi,
+                    UpdatedAtUtc = _configuration.UpdatedAtUtc,
+                    Profiles = _configuration.Profiles.Select(p => new StoredProfileModel
+                    {
+                        Id = p.Id,
+                        Name = p.Name,
+                        Kind = p.Kind,
+                        BaseUrl = p.BaseUrl,
+                        OrganizationId = p.OrganizationId,
+                        CustomCapabilities = (int)p.CustomCapabilities,
+                        ProtectedApiKey = !string.IsNullOrWhiteSpace(p.ApiKey) ? _protector.Protect(p.ApiKey) : null
+                    }).ToList(),
+                    Routing = new StoredRoutingModel
+                    {
+                        Stt = new StoredTargetModel { ProfileId = _configuration.Routing.Stt.ProfileId, Model = _configuration.Routing.Stt.Model },
+                        Tts = new StoredTtsTargetModel { ProfileId = _configuration.Routing.Tts.ProfileId, Model = _configuration.Routing.Tts.Model, Voice = _configuration.Routing.Tts.Voice },
+                        Llm = new StoredTargetModel { ProfileId = _configuration.Routing.Llm.ProfileId, Model = _configuration.Routing.Llm.Model }
+                    }
                 };
 
-                var json = JsonSerializer.Serialize(model, new JsonSerializerOptions
+                var json = JsonSerializer.Serialize(storedModel, new JsonSerializerOptions
                 {
                     WriteIndented = true,
                     PropertyNamingPolicy = JsonNamingPolicy.CamelCase
                 });
+
                 var tmpPath = _storePath + ".tmp";
                 await File.WriteAllTextAsync(tmpPath, json, ct).ConfigureAwait(false);
                 File.Move(tmpPath, _storePath, overwrite: true);
@@ -107,14 +120,50 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
         }
     }
 
+    public async Task SaveAsync(string? newApiKey, bool useRealAi, CancellationToken ct = default)
+    {
+        var config = GetConfiguration();
+        config.UseRealAi = useRealAi;
+
+        var defaultProfile = config.Profiles.FirstOrDefault(p => string.Equals(p.Kind, AiProviderKinds.OpenAi, StringComparison.OrdinalIgnoreCase))
+            ?? config.Profiles.FirstOrDefault();
+
+        if (defaultProfile == null)
+        {
+            defaultProfile = new AiProviderProfile
+            {
+                Id = "openai-default",
+                Name = "OpenAI",
+                Kind = AiProviderKinds.OpenAi,
+                BaseUrl = "https://api.openai.com/v1"
+            };
+            config.Profiles.Add(defaultProfile);
+        }
+
+        if (!string.IsNullOrWhiteSpace(newApiKey))
+        {
+            var trimmed = newApiKey.Trim();
+            if (trimmed.Length is < 20 or > 300 || trimmed.Any(char.IsWhiteSpace))
+            {
+                throw new ArgumentException("API key must be between 20 and 300 characters without whitespace.", nameof(newApiKey));
+            }
+            defaultProfile.ApiKey = trimmed;
+        }
+
+        await SaveConfigurationAsync(config, ct).ConfigureAwait(false);
+    }
+
     public async Task ClearAsync(CancellationToken ct = default)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            _currentApiKey = null;
-            _useRealAi = false;
-            _updatedAtUtc = DateTime.UtcNow;
+            foreach (var profile in _configuration.Profiles)
+            {
+                profile.ApiKey = null;
+            }
+            _configuration.UseRealAi = false;
+            _configuration.UpdatedAtUtc = DateTime.UtcNow;
 
             if (!string.IsNullOrWhiteSpace(_storePath) && File.Exists(_storePath))
             {
@@ -124,28 +173,23 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to delete stored AI credential file. Attempting to overwrite with empty credentials.");
-                    try
+                    _logger.LogWarning(ex, "Failed to delete stored AI credential file. Overwriting with empty configuration.");
+                    var emptyModel = new StoredConfigurationModel
                     {
-                        var emptyModel = new StoredCredentialModel
-                        {
-                            ProtectedApiKey = null,
-                            UseRealAi = false,
-                            UpdatedAtUtc = _updatedAtUtc
-                        };
-                        var json = JsonSerializer.Serialize(emptyModel, new JsonSerializerOptions
-                        {
-                            WriteIndented = true,
-                            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-                        });
-                        var tmpPath = _storePath + ".tmp";
-                        await File.WriteAllTextAsync(tmpPath, json, ct).ConfigureAwait(false);
-                        File.Move(tmpPath, _storePath, overwrite: true);
-                    }
-                    catch (Exception overwriteEx)
+                        SchemaVersion = 2,
+                        UseRealAi = false,
+                        UpdatedAtUtc = _configuration.UpdatedAtUtc,
+                        Profiles = [],
+                        Routing = new StoredRoutingModel()
+                    };
+                    var json = JsonSerializer.Serialize(emptyModel, new JsonSerializerOptions
                     {
-                        _logger.LogWarning(overwriteEx, "Failed to overwrite AI credential file after delete failure.");
-                    }
+                        WriteIndented = true,
+                        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                    });
+                    var tmpPath = _storePath + ".tmp";
+                    await File.WriteAllTextAsync(tmpPath, json, ct).ConfigureAwait(false);
+                    File.Move(tmpPath, _storePath, overwrite: true);
                 }
             }
         }
@@ -159,45 +203,198 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
     {
         if (string.IsNullOrWhiteSpace(_storePath) || !File.Exists(_storePath))
         {
+            _configuration = CreateDefaultConfiguration();
             return;
         }
 
         try
         {
             var json = File.ReadAllText(_storePath);
-            var model = JsonSerializer.Deserialize<StoredCredentialModel>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            if (model == null)
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            // Check if this is Schema v2 (has "schemaVersion" >= 2 or "profiles")
+            if (root.TryGetProperty("schemaVersion", out var versionElem) && versionElem.GetInt32() >= 2
+                || root.TryGetProperty("profiles", out _))
             {
-                return;
+                var stored = JsonSerializer.Deserialize<StoredConfigurationModel>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                if (stored != null)
+                {
+                    var loadedConfig = new AiConfigurationModel
+                    {
+                        SchemaVersion = stored.SchemaVersion,
+                        UseRealAi = stored.UseRealAi,
+                        UpdatedAtUtc = stored.UpdatedAtUtc,
+                        Routing = new AiCapabilityRouting
+                        {
+                            Stt = new AiCapabilityTarget { ProfileId = stored.Routing.Stt?.ProfileId, Model = stored.Routing.Stt?.Model },
+                            Tts = new AiTtsCapabilityTarget { ProfileId = stored.Routing.Tts?.ProfileId, Model = stored.Routing.Tts?.Model, Voice = stored.Routing.Tts?.Voice },
+                            Llm = new AiCapabilityTarget { ProfileId = stored.Routing.Llm?.ProfileId, Model = stored.Routing.Llm?.Model }
+                        }
+                    };
+
+                    foreach (var p in stored.Profiles)
+                    {
+                        string? unprotectKey = null;
+                        if (!string.IsNullOrWhiteSpace(p.ProtectedApiKey))
+                        {
+                            try
+                            {
+                                unprotectKey = _protector.Unprotect(p.ProtectedApiKey);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Failed to unprotect API key for profile {ProfileId}", p.Id);
+                            }
+                        }
+
+                        loadedConfig.Profiles.Add(new AiProviderProfile
+                        {
+                            Id = p.Id,
+                            Name = p.Name,
+                            Kind = p.Kind,
+                            BaseUrl = p.BaseUrl,
+                            ApiKey = unprotectKey,
+                            OrganizationId = p.OrganizationId,
+                            CustomCapabilities = (AiCapability)p.CustomCapabilities
+                        });
+                    }
+
+                    _configuration = loadedConfig;
+                    return;
+                }
             }
 
-            _useRealAi = model.UseRealAi;
-            _updatedAtUtc = model.UpdatedAtUtc;
-
-            if (!string.IsNullOrWhiteSpace(model.ProtectedApiKey))
+            // Legacy v1 schema: { protectedApiKey, useRealAi, updatedAtUtc }
+            var legacy = JsonSerializer.Deserialize<StoredLegacyCredentialModel>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (legacy != null)
             {
-                try
+                string? legacyKey = null;
+                if (!string.IsNullOrWhiteSpace(legacy.ProtectedApiKey))
                 {
-                    _currentApiKey = _protector.Unprotect(model.ProtectedApiKey);
+                    try
+                    {
+                        legacyKey = _protector.Unprotect(legacy.ProtectedApiKey);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to unprotect legacy AI API key.");
+                    }
                 }
-                catch (Exception ex)
+
+                _configuration = CreateDefaultConfiguration();
+                _configuration.UseRealAi = legacy.UseRealAi;
+                _configuration.UpdatedAtUtc = legacy.UpdatedAtUtc;
+
+                var defaultProfile = _configuration.Profiles.FirstOrDefault();
+                if (defaultProfile != null)
                 {
-                    _logger.LogWarning(ex, "Failed to unprotect stored AI API key. Treating as unconfigured.");
-                    _currentApiKey = null;
-                    _useRealAi = false;
+                    defaultProfile.ApiKey = legacyKey;
                 }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to read or parse stored AI credentials file.");
-            _currentApiKey = null;
-            _useRealAi = false;
-            _updatedAtUtc = null;
+            _logger.LogWarning(ex, "Failed to read or parse stored AI credentials file. Initializing defaults.");
+            _configuration = CreateDefaultConfiguration();
         }
     }
 
-    private sealed class StoredCredentialModel
+    private static AiConfigurationModel CreateDefaultConfiguration()
+    {
+        return new AiConfigurationModel
+        {
+            SchemaVersion = 2,
+            UseRealAi = false,
+            UpdatedAtUtc = null,
+            Profiles =
+            [
+                new AiProviderProfile
+                {
+                    Id = "openai-default",
+                    Name = "OpenAI",
+                    Kind = AiProviderKinds.OpenAi,
+                    BaseUrl = "https://api.openai.com/v1",
+                    ApiKey = null,
+                    CustomCapabilities = AiCapability.All
+                }
+            ],
+            Routing = new AiCapabilityRouting
+            {
+                Stt = new AiCapabilityTarget { ProfileId = "openai-default", Model = "whisper-1" },
+                Tts = new AiTtsCapabilityTarget { ProfileId = "openai-default", Model = "tts-1", Voice = "alloy" },
+                Llm = new AiCapabilityTarget { ProfileId = "openai-default", Model = "gpt-4o-mini" }
+            }
+        };
+    }
+
+    private static AiConfigurationModel CloneConfiguration(AiConfigurationModel source)
+    {
+        return new AiConfigurationModel
+        {
+            SchemaVersion = source.SchemaVersion,
+            UseRealAi = source.UseRealAi,
+            UpdatedAtUtc = source.UpdatedAtUtc,
+            Profiles = source.Profiles.Select(p => new AiProviderProfile
+            {
+                Id = p.Id,
+                Name = p.Name,
+                Kind = p.Kind,
+                BaseUrl = p.BaseUrl,
+                ApiKey = p.ApiKey,
+                OrganizationId = p.OrganizationId,
+                CustomCapabilities = p.CustomCapabilities
+            }).ToList(),
+            Routing = new AiCapabilityRouting
+            {
+                Stt = new AiCapabilityTarget { ProfileId = source.Routing.Stt.ProfileId, Model = source.Routing.Stt.Model },
+                Tts = new AiTtsCapabilityTarget { ProfileId = source.Routing.Tts.ProfileId, Model = source.Routing.Tts.Model, Voice = source.Routing.Tts.Voice },
+                Llm = new AiCapabilityTarget { ProfileId = source.Routing.Llm.ProfileId, Model = source.Routing.Llm.Model }
+            }
+        };
+    }
+
+    private sealed class StoredConfigurationModel
+    {
+        public int SchemaVersion { get; set; } = 2;
+        public bool UseRealAi { get; set; }
+        public DateTime? UpdatedAtUtc { get; set; }
+        public List<StoredProfileModel> Profiles { get; set; } = [];
+        public StoredRoutingModel Routing { get; set; } = new();
+    }
+
+    private sealed class StoredProfileModel
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Kind { get; set; } = string.Empty;
+        public string BaseUrl { get; set; } = string.Empty;
+        public string? ProtectedApiKey { get; set; }
+        public string? OrganizationId { get; set; }
+        public int CustomCapabilities { get; set; } = (int)AiCapability.All;
+    }
+
+    private sealed class StoredRoutingModel
+    {
+        public StoredTargetModel Stt { get; set; } = new();
+        public StoredTtsTargetModel Tts { get; set; } = new();
+        public StoredTargetModel Llm { get; set; } = new();
+    }
+
+    private sealed class StoredTargetModel
+    {
+        public string? ProfileId { get; set; }
+        public string? Model { get; set; }
+    }
+
+    private sealed class StoredTtsTargetModel
+    {
+        public string? ProfileId { get; set; }
+        public string? Model { get; set; }
+        public string? Voice { get; set; }
+    }
+
+    private sealed class StoredLegacyCredentialModel
     {
         public string? ProtectedApiKey { get; set; }
         public bool UseRealAi { get; set; }

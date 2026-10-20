@@ -1,23 +1,18 @@
-using System;
 using System.Diagnostics;
-using System.IO;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using AIVES.BLL.Interfaces.Ai;
 using AIVES.BLL.Options;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace AIVES.BLL.Services.Ai;
 
 /// <summary>
-/// Text-to-Speech service adapter using OpenAI Audio Speech REST API.
-/// Enforces 10-second timeout, disk-caching to wwwroot/audio/cache, and graceful fallback.
+/// Text-to-Speech service adapter using OpenAI or OpenAI-compatible audio/speech REST API.
+/// Generates spoken question audio files, caches them locally, and falls back gracefully.
 /// </summary>
 public class OpenAiTextToSpeechService : ITextToSpeechService
 {
@@ -25,8 +20,8 @@ public class OpenAiTextToSpeechService : ITextToSpeechService
     private readonly HttpClient _httpClient;
     private readonly IOptions<AiServiceOptions> _options;
     private readonly ITextToSpeechService? _fallbackService;
-    private readonly ILogger<OpenAiTextToSpeechService>? _logger;
     private readonly string? _cacheDirectory;
+    private readonly ILogger<OpenAiTextToSpeechService>? _logger;
 
     public OpenAiTextToSpeechService(
         HttpClient httpClient,
@@ -39,7 +34,7 @@ public class OpenAiTextToSpeechService : ITextToSpeechService
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _logger = logger;
         _fallbackService = fallbackService;
-        _cacheDirectory = cacheDirectory;
+        _cacheDirectory = cacheDirectory ?? _options.Value.TtsCacheDirectory;
     }
 
     /// <inheritdoc />
@@ -49,14 +44,16 @@ public class OpenAiTextToSpeechService : ITextToSpeechService
 
         if (string.IsNullOrWhiteSpace(text))
         {
-            _logger?.LogWarning("TTS received empty text input.");
+            _logger?.LogWarning("TTS received null or empty text.");
             return new TextToSpeechResult(false, null, null, "Text to synthesize cannot be empty.");
         }
 
         var config = _options.Value;
+        var isCustomEndpoint = !string.IsNullOrWhiteSpace(config.OpenAI.BaseUrl) &&
+            !config.OpenAI.BaseUrl.Contains("api.openai.com", StringComparison.OrdinalIgnoreCase);
 
-        // Fallback to mock if configured or if no API key is available
-        if (config.UseMock || string.IsNullOrWhiteSpace(config.OpenAI.ApiKey))
+        // Fallback to mock if configured or if no API key is available (unless using custom/local endpoint)
+        if (config.UseMock || (string.IsNullOrWhiteSpace(config.OpenAI.ApiKey) && !isCustomEndpoint))
         {
             if (_fallbackService != null)
             {
@@ -108,7 +105,10 @@ public class OpenAiTextToSpeechService : ITextToSpeechService
             : $"{config.OpenAI.BaseUrl.TrimEnd('/')}/audio/speech";
 
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.OpenAI.ApiKey);
+        if (!string.IsNullOrWhiteSpace(config.OpenAI.ApiKey))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.OpenAI.ApiKey);
+        }
         if (!string.IsNullOrWhiteSpace(config.OpenAI.OrganizationId))
         {
             request.Headers.Add("OpenAI-Organization", config.OpenAI.OrganizationId);
@@ -141,12 +141,21 @@ public class OpenAiTextToSpeechService : ITextToSpeechService
         catch (OperationCanceledException)
         {
             _logger?.LogWarning("TTS synthesis timed out after {Timeout} seconds.", timeoutSeconds);
+            if (_fallbackService != null)
+            {
+                return await _fallbackService.SynthesizeAsync(text, voiceLocale, ct);
+            }
             return new TextToSpeechResult(false, null, null, $"TTS operation timed out after {timeoutSeconds} seconds.");
         }
         catch (HttpRequestException ex)
         {
-            _logger?.LogError(ex, "HTTP exception during TTS synthesis.");
-            return new TextToSpeechResult(false, null, null, $"Network error contacting TTS service: {ex.Message}");
+            var sanitizedErr = AiKeySanitizer.Sanitize(ex.Message, config.OpenAI.ApiKey);
+            _logger?.LogError(ex, "HTTP exception during TTS synthesis: {Error}", sanitizedErr);
+            if (_fallbackService != null)
+            {
+                return await _fallbackService.SynthesizeAsync(text, voiceLocale, ct);
+            }
+            return new TextToSpeechResult(false, null, null, $"Network error contacting TTS service: {sanitizedErr}");
         }
 
         sw.Stop();
@@ -154,9 +163,15 @@ public class OpenAiTextToSpeechService : ITextToSpeechService
         if (!response.IsSuccessStatusCode)
         {
             var errorBody = await response.Content.ReadAsStringAsync(ct);
-            var errorMsg = ExtractErrorMessage(errorBody) ?? $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}";
+            var sanitizedBody = AiKeySanitizer.Sanitize(errorBody, config.OpenAI.ApiKey);
+            var errorMsg = ExtractErrorMessage(sanitizedBody) ?? $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}";
             _logger?.LogWarning("OpenAI TTS failed with status {StatusCode} in {Elapsed}ms: {Error}",
                 (int)response.StatusCode, sw.ElapsedMilliseconds, errorMsg);
+
+            if (_fallbackService != null)
+            {
+                return await _fallbackService.SynthesizeAsync(text, voiceLocale, ct);
+            }
             return new TextToSpeechResult(false, null, null, $"TTS service error: {errorMsg}");
         }
 
@@ -189,8 +204,7 @@ public class OpenAiTextToSpeechService : ITextToSpeechService
 
     private static string ComputeHash(string input)
     {
-        using var sha = SHA256.Create();
-        var bytes = sha.ComputeHash(Encoding.UTF8.GetBytes(input));
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
         return Convert.ToHexString(bytes)[..12].ToLowerInvariant();
     }
 

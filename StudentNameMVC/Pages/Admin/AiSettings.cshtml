@@ -1,20 +1,30 @@
 @page "/Admin/AiSettings"
 @model StudentNameMVC.Pages.Admin.AiSettingsModel
+@using AIVES.BLL.Models.Ai
 @{
-    ViewData["Title"] = "Cấu hình AI & OpenAI API Key";
+    ViewData["Title"] = "Cấu hình AI Đa Nhà Cung Cấp";
 }
 
 <div class="container py-4">
     <div class="row justify-content-center">
-        <div class="col-lg-8">
-            <div class="d-flex align-items-center mb-4">
-                <i class="bi bi-robot text-primary fs-2 me-3"></i>
+        <div class="col-lg-10">
+            <!-- Header -->
+            <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-cpu-fill text-primary fs-1 me-3"></i>
+                    <div>
+                        <h2 class="mb-0 fw-bold">Cấu hình Nhà Cung Cấp AI</h2>
+                        <p class="text-muted mb-0 small">Kiến trúc cắm rút: Hỗ trợ linh hoạt nhiều nhà cung cấp (OpenAI, Google Gemini, OpenAI-compatible)</p>
+                    </div>
+                </div>
                 <div>
-                    <h2 class="mb-0 fw-bold">Cấu hình AI & OpenAI API Key</h2>
-                    <p class="text-muted mb-0 small">Quản lý tích hợp AI cho kỳ thi vấn đáp Viva (Whisper STT, OpenAI TTS, GPT Follow-up)</p>
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#profileModal" onclick="resetProfileForm()">
+                        <i class="bi bi-plus-lg me-1"></i>Thêm nhà cung cấp
+                    </button>
                 </div>
             </div>
 
+            <!-- Alerts -->
             @if (TempData["SuccessMessage"] != null)
             {
                 <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -39,143 +49,556 @@
                 </div>
             }
 
+            @if (!ModelState.IsValid)
+            {
+                <div class="alert alert-danger" role="alert">
+                    <i class="bi bi-exclamation-circle-fill me-2"></i><strong>Lỗi nhập liệu:</strong>
+                    <ul class="mb-0 mt-1 ps-3">
+                        @foreach (var modelState in ViewData.ModelState.Values)
+                        {
+                            @foreach (var error in modelState.Errors)
+                            {
+                                <li>@error.ErrorMessage</li>
+                            }
+                        }
+                    </ul>
+                </div>
+            }
+
+            <!-- Status Card -->
             <div class="card shadow-sm border-0 mb-4">
                 <div class="card-header bg-white py-3">
                     <h5 class="card-title mb-0 fw-bold">
-                        <i class="bi bi-info-circle text-primary me-2"></i>Trạng thái hoạt động
+                        <i class="bi bi-activity text-primary me-2"></i>Trạng thái hoạt động
                     </h5>
                 </div>
                 <div class="card-body">
                     <div class="row g-3">
-                        <div class="col-sm-6">
-                            <label class="text-muted small d-block">Chế độ hiện tại:</label>
-                            @if (Model.Status.HasApiKey && Model.Status.UseRealAi)
+                        <div class="col-md-4">
+                            <label class="text-muted small d-block">Chế độ vận hành:</label>
+                            @if (Model.Configuration.UseRealAi)
                             {
                                 <span class="badge bg-success fs-6 py-2 px-3">
-                                    <i class="bi bi-lightning-charge-fill me-1"></i>OpenAI thật
+                                    <i class="bi bi-lightning-charge-fill me-1"></i>AI Thật (Real Providers)
                                 </span>
                             }
                             else
                             {
                                 <span class="badge bg-secondary fs-6 py-2 px-3">
-                                    <i class="bi bi-cpu me-1"></i>Mô phỏng (mock)
+                                    <i class="bi bi-cpu me-1"></i>Mô phỏng (Mock offline)
                                 </span>
                             }
                         </div>
-                        <div class="col-sm-6">
-                            <label class="text-muted small d-block">Khóa API:</label>
-                            @if (Model.Status.HasApiKey)
-                            {
-                                <span class="text-success fw-semibold">
-                                    <i class="bi bi-key-fill me-1"></i>Đã lưu (@Model.Status.KeyHint)
-                                </span>
-                                @if (Model.Status.UpdatedAtUtc.HasValue)
-                                {
-                                    <div class="text-muted small mt-1">
-                                        Cập nhật lúc: @Model.Status.UpdatedAtUtc.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")
-                                    </div>
+                        <div class="col-md-8">
+                            <label class="text-muted small d-block">Định tuyến năng lực hiện tại:</label>
+                            <div class="d-flex flex-wrap gap-2 mt-1">
+                                @{
+                                    var sttP = Model.Configuration.FindProfile(Model.Configuration.Routing.Stt.ProfileId);
+                                    var ttsP = Model.Configuration.FindProfile(Model.Configuration.Routing.Tts.ProfileId);
+                                    var llmP = Model.Configuration.FindProfile(Model.Configuration.Routing.Llm.ProfileId);
+                                    var sttIsMock = sttP == null || !sttP.CustomCapabilities.HasFlag(AiCapability.SpeechToText);
+                                    var ttsIsMock = ttsP == null || !ttsP.CustomCapabilities.HasFlag(AiCapability.TextToSpeech);
+                                    var llmIsMock = llmP == null || !llmP.CustomCapabilities.HasFlag(AiCapability.FollowUpLlm);
                                 }
-                            }
-                            else
-                            {
-                                <span class="text-muted">
-                                    <i class="bi bi-dash-circle me-1"></i>Chưa có key
+                                <span class="badge @(sttIsMock ? "bg-warning text-dark border" : "bg-light text-dark border")">
+                                    <i class="bi bi-mic me-1 text-primary"></i>STT: <strong>@(sttP?.Name ?? "Mock")</strong> (@(Model.Configuration.Routing.Stt.Model ?? "default"))
                                 </span>
-                            }
+                                <span class="badge @(ttsIsMock ? "bg-warning text-dark border" : "bg-light text-dark border")">
+                                    <i class="bi bi-volume-up me-1 text-success"></i>TTS: <strong>@(ttsP?.Name ?? "Mock")</strong> (@(Model.Configuration.Routing.Tts.Model ?? "default"))
+                                </span>
+                                <span class="badge @(llmIsMock ? "bg-warning text-dark border" : "bg-light text-dark border")">
+                                    <i class="bi bi-chat-dots me-1 text-info"></i>LLM: <strong>@(llmP?.Name ?? "Mock")</strong> (@(Model.Configuration.Routing.Llm.Model ?? "default"))
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
+            @if (Model.Configuration.UseRealAi && (sttIsMock || ttsIsMock || llmIsMock))
+            {
+                <div class="alert alert-warning d-flex align-items-start shadow-sm mb-4" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill fs-4 me-3 text-warning flex-shrink-0 mt-1"></i>
+                    <div>
+                        <h6 class="alert-heading fw-bold mb-1">Cảnh báo năng lực hoạt động bằng Mock offline</h6>
+                        <p class="mb-1 small">Hệ thống đang bật <strong>AI Thật (Real Providers)</strong>, nhưng một số năng lực chưa được gán hồ sơ hợp lệ hoặc hồ sơ được gán không hỗ trợ tính năng, nên sẽ tự động chạy ở chế độ <strong>Mô phỏng (Mock offline)</strong>:</p>
+                        <ul class="mb-0 small ps-3">
+                            @if (sttIsMock)
+                            {
+                                <li><strong>Speech-to-Text (STT):</strong> Đang dùng Mock (@(sttP == null ? "chưa gán nhà cung cấp" : $"hồ sơ '{sttP.Name}' không bật STT")).</li>
+                            }
+                            @if (ttsIsMock)
+                            {
+                                <li><strong>Text-to-Speech (TTS):</strong> Đang dùng Mock (@(ttsP == null ? "chưa gán nhà cung cấp" : $"hồ sơ '{ttsP.Name}' không bật TTS")).</li>
+                            }
+                            @if (llmIsMock)
+                            {
+                                <li><strong>LLM Follow-up:</strong> Đang dùng Mock (@(llmP == null ? "chưa gán nhà cung cấp" : $"hồ sơ '{llmP.Name}' không bật LLM")).</li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            }
+
+            <!-- Capability Routing Card -->
             <div class="card shadow-sm border-0 mb-4">
                 <div class="card-header bg-white py-3">
                     <h5 class="card-title mb-0 fw-bold">
-                        <i class="bi bi-sliders text-primary me-2"></i>Cài đặt API Key
+                        <i class="bi bi-diagram-3 text-primary me-2"></i>Định tuyến năng lực (Capability Routing)
                     </h5>
                 </div>
                 <div class="card-body">
-                    <form method="post" asp-page-handler="Save">
-                        <div asp-validation-summary="ModelOnly" class="alert alert-danger" role="alert"></div>
-
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">OpenAI API Key:</label>
-                            <input type="password"
-                                   name="ApiKey"
-                                   id="ApiKey"
-                                   class="form-control"
-                                   placeholder="@(Model.Status.HasApiKey ? "Để trống nếu muốn giữ nguyên key đã lưu" : "sk-proj-...")"
-                                   autocomplete="off"
-                                   value="" />
-                            <span asp-validation-for="ApiKey" class="text-danger small"></span>
-                            <div class="form-text text-muted">
-                                @if (Model.Status.HasApiKey)
-                                {
-                                    <span>Để trống ô này nếu bạn chỉ muốn bật/tắt công tắc bên dưới mà không đổi key.</span>
-                                }
-                                else
-                                {
-                                    <span>Nhập OpenAI API key (bắt đầu bằng <code>sk-</code> hoặc khóa dự án).</span>
-                                }
-                            </div>
-                        </div>
-
-                        <div class="form-check form-switch mb-4">
-                            <input class="form-check-input"
+                    <form method="post" asp-page-handler="SaveRouting">
+                        <div class="form-check form-switch mb-4 p-3 bg-light rounded border">
+                            <input class="form-check-input ms-0 me-3"
                                    type="checkbox"
                                    role="switch"
-                                   id="UseRealAi"
-                                   name="UseRealAi"
+                                   id="RoutingInput_UseRealAi"
+                                   name="RoutingInput.UseRealAi"
                                    value="true"
-                                   @(Model.UseRealAi ? "checked" : "") />
-                            <label class="form-check-label fw-semibold" for="UseRealAi">
-                                Dùng AI thật (Whisper STT, OpenAI TTS, GPT Follow-up)
+                                   @(Model.RoutingInput.UseRealAi ? "checked" : "") />
+                            <label class="form-check-label fw-bold" for="RoutingInput_UseRealAi">
+                                Kích hoạt AI Thật (Sử dụng API thực tế theo bảng định tuyến bên dưới)
                             </label>
-                            <div class="form-text text-muted">
-                                Khi tắt, hệ thống sẽ sử dụng các dịch vụ mô phỏng (mock) để không tốn chi phí gọi API.
+                            <div class="text-muted small mt-1 ms-5">
+                                Khi tắt, toàn bộ 3 năng lực sẽ tự động sử dụng dịch vụ mô phỏng (Mock) để phục vụ phát triển hoặc kiểm thử không tốn chi phí API.
                             </div>
                         </div>
 
-                        <div class="d-flex flex-wrap gap-2">
+                        <!-- STT Routing -->
+                        <div class="row align-items-center mb-3 pb-3 border-bottom">
+                            <div class="col-md-3">
+                                <label class="fw-bold mb-0">
+                                    <i class="bi bi-mic text-primary me-1"></i>Nhận diện giọng nói (STT):
+                                </label>
+                                <div class="text-muted small">Chuyển âm thanh trả lời thành văn bản</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Nhà cung cấp:</label>
+                                <select class="form-select" name="RoutingInput.SttProfileId" id="sttProfileSelect">
+                                    <option value="">-- Dùng Mock (Mô phỏng) --</option>
+                                    @foreach (var p in Model.Configuration.Profiles.Where(p => p.CustomCapabilities.HasFlag(AiCapability.SpeechToText)))
+                                    {
+                                        <option value="@p.Id" selected="@(p.Id == Model.RoutingInput.SttProfileId)">
+                                            @p.Name (@p.Kind)
+                                        </option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Tên Model:</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" name="RoutingInput.SttModel" id="sttModelInput"
+                                           value="@Model.RoutingInput.SttModel" placeholder="whisper-1 hoặc gemini-2.5-flash" list="sttModelDatalist" />
+                                    <button class="btn btn-outline-secondary" type="button" onclick="fetchModels('sttProfileSelect', 'sttModelDatalist')">
+                                        <i class="bi bi-arrow-repeat"></i>
+                                    </button>
+                                </div>
+                                <datalist id="sttModelDatalist">
+                                    <option value="whisper-1" />
+                                    <option value="gemini-2.5-flash" />
+                                </datalist>
+                            </div>
+                        </div>
+
+                        <!-- TTS Routing -->
+                        <div class="row align-items-center mb-3 pb-3 border-bottom">
+                            <div class="col-md-3">
+                                <label class="fw-bold mb-0">
+                                    <i class="bi bi-volume-up text-success me-1"></i>Đọc câu hỏi (TTS):
+                                </label>
+                                <div class="text-muted small">Tổng hợp giọng đọc phát cho sinh viên</div>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1">Nhà cung cấp:</label>
+                                <select class="form-select" name="RoutingInput.TtsProfileId" id="ttsProfileSelect">
+                                    <option value="">-- Dùng Mock (Mô phỏng) --</option>
+                                    @foreach (var p in Model.Configuration.Profiles.Where(p => p.CustomCapabilities.HasFlag(AiCapability.TextToSpeech)))
+                                    {
+                                        <option value="@p.Id" selected="@(p.Id == Model.RoutingInput.TtsProfileId)">
+                                            @p.Name (@p.Kind)
+                                        </option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1">Tên Model:</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" name="RoutingInput.TtsModel" id="ttsModelInput"
+                                           value="@Model.RoutingInput.TtsModel" placeholder="tts-1 hoặc gemini-2.5-flash-preview-tts" list="ttsModelDatalist" />
+                                    <button class="btn btn-outline-secondary" type="button" onclick="fetchModels('ttsProfileSelect', 'ttsModelDatalist')">
+                                        <i class="bi bi-arrow-repeat"></i>
+                                    </button>
+                                </div>
+                                <datalist id="ttsModelDatalist">
+                                    <option value="tts-1" />
+                                    <option value="tts-1-hd" />
+                                    <option value="gemini-2.5-flash-preview-tts" />
+                                </datalist>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted mb-1">Giọng đọc (Voice):</label>
+                                <input type="text" class="form-control" name="RoutingInput.TtsVoice"
+                                       value="@Model.RoutingInput.TtsVoice" placeholder="alloy / Puck / Kore" list="voiceDatalist" />
+                                <datalist id="voiceDatalist">
+                                    <option value="alloy" />
+                                    <option value="echo" />
+                                    <option value="nova" />
+                                    <option value="shimmer" />
+                                    <option value="Puck" />
+                                    <option value="Charon" />
+                                    <option value="Aoede" />
+                                    <option value="Fenrir" />
+                                    <option value="Kore" />
+                                </datalist>
+                            </div>
+                        </div>
+
+                        <!-- LLM Routing -->
+                        <div class="row align-items-center mb-4">
+                            <div class="col-md-3">
+                                <label class="fw-bold mb-0">
+                                    <i class="bi bi-chat-dots text-info me-1"></i>Câu hỏi phụ (LLM):
+                                </label>
+                                <div class="text-muted small">Sinh câu hỏi đào sâu theo câu trả lời</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Nhà cung cấp:</label>
+                                <select class="form-select" name="RoutingInput.LlmProfileId" id="llmProfileSelect">
+                                    <option value="">-- Dùng Mock (Mô phỏng) --</option>
+                                    @foreach (var p in Model.Configuration.Profiles.Where(p => p.CustomCapabilities.HasFlag(AiCapability.FollowUpLlm)))
+                                    {
+                                        <option value="@p.Id" selected="@(p.Id == Model.RoutingInput.LlmProfileId)">
+                                            @p.Name (@p.Kind)
+                                        </option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Tên Model:</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" name="RoutingInput.LlmModel" id="llmModelInput"
+                                           value="@Model.RoutingInput.LlmModel" placeholder="gpt-4o-mini hoặc gemini-2.5-flash" list="llmModelDatalist" />
+                                    <button class="btn btn-outline-secondary" type="button" onclick="fetchModels('llmProfileSelect', 'llmModelDatalist')">
+                                        <i class="bi bi-arrow-repeat"></i>
+                                    </button>
+                                </div>
+                                <datalist id="llmModelDatalist">
+                                    <option value="gpt-4o-mini" />
+                                    <option value="gpt-4o" />
+                                    <option value="gemini-2.5-flash" />
+                                    <option value="gemini-2.0-flash" />
+                                    <option value="llama-3.3-70b-versatile" />
+                                    <option value="deepseek-chat" />
+                                </datalist>
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-end">
                             <button type="submit" class="btn btn-primary px-4">
-                                <i class="bi bi-save me-1"></i>Lưu cấu hình
+                                <i class="bi bi-save me-1"></i>Lưu thiết lập định tuyến
                             </button>
                         </div>
                     </form>
                 </div>
             </div>
 
+            <!-- Provider Profiles List Card -->
             <div class="card shadow-sm border-0 mb-4">
-                <div class="card-header bg-white py-3">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                     <h5 class="card-title mb-0 fw-bold">
-                        <i class="bi bi-tools text-primary me-2"></i>Thao tác bổ sung
+                        <i class="bi bi-server text-primary me-2"></i>Danh sách nhà cung cấp (@Model.Configuration.Profiles.Count)
                     </h5>
+                    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#profileModal" onclick="resetProfileForm()">
+                        <i class="bi bi-plus-circle me-1"></i>Thêm mới
+                    </button>
                 </div>
-                <div class="card-body">
-                    <div class="d-flex flex-wrap gap-2 align-items-center">
-                        <form method="post" asp-page-handler="Test" class="d-inline">
-                            <button type="submit" class="btn btn-outline-info">
-                                <i class="bi bi-cloud-arrow-up me-1"></i>Kiểm tra kết nối
-                            </button>
-                        </form>
-
-                        @if (Model.Status.HasApiKey)
-                        {
-                            <form method="post" asp-page-handler="Clear" class="d-inline"
-                                  onsubmit="return confirm('Bạn có chắc chắn muốn xoá OpenAI API key khỏi máy chủ? Hệ thống sẽ quay về chế độ mô phỏng.');">
-                                <button type="submit" class="btn btn-outline-danger">
-                                    <i class="bi bi-trash3 me-1"></i>Xoá key
-                                </button>
-                            </form>
-                        }
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Tên nhà cung cấp</th>
+                                    <th>Loại (Kind)</th>
+                                    <th>Base URL</th>
+                                    <th>Khóa API</th>
+                                    <th>Năng lực</th>
+                                    <th class="text-end pe-3">Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (Model.Configuration.Profiles.Count == 0)
+                                {
+                                    <tr>
+                                        <td colspan="6" class="text-center py-4 text-muted">
+                                            Chưa cấu hình nhà cung cấp nào. Nhấn "Thêm nhà cung cấp" để bắt đầu.
+                                        </td>
+                                    </tr>
+                                }
+                                @foreach (var p in Model.Configuration.Profiles)
+                                {
+                                    <tr>
+                                        <td>
+                                            <span class="fw-bold">@p.Name</span>
+                                            <div class="text-muted small">ID: <code>@p.Id</code></div>
+                                        </td>
+                                        <td>
+                                            @if (p.Kind == AiProviderKinds.Gemini)
+                                            {
+                                                <span class="badge bg-danger">Google Gemini</span>
+                                            }
+                                            else if (p.Kind == AiProviderKinds.OpenAiCompatible)
+                                            {
+                                                <span class="badge bg-dark">OpenAI-Compatible</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-success">OpenAI</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <span class="font-monospace small text-truncate d-inline-block" style="max-width: 200px;" title="@p.BaseUrl">
+                                                @p.BaseUrl
+                                            </span>
+                                        </td>
+                                        <td>
+                                            @if (!string.IsNullOrWhiteSpace(p.ApiKey))
+                                            {
+                                                <span class="badge bg-light text-success border">
+                                                    <i class="bi bi-key-fill me-1"></i>@p.GetKeyHint()
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-light text-secondary border">Không có key</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <div class="d-flex gap-1 flex-wrap">
+                                                @if (p.CustomCapabilities.HasFlag(AiCapability.SpeechToText))
+                                                {
+                                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle" title="Nhận diện giọng nói">STT</span>
+                                                }
+                                                @if (p.CustomCapabilities.HasFlag(AiCapability.TextToSpeech))
+                                                {
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle" title="Đọc câu hỏi">TTS</span>
+                                                }
+                                                @if (p.CustomCapabilities.HasFlag(AiCapability.FollowUpLlm))
+                                                {
+                                                    <span class="badge bg-info-subtle text-info border border-info-subtle" title="Sinh câu hỏi phụ">LLM</span>
+                                                }
+                                            </div>
+                                        </td>
+                                        <td class="text-end pe-3">
+                                            <div class="btn-group btn-group-sm">
+                                                <form method="post" asp-page-handler="TestProfile" class="d-inline">
+                                                    <input type="hidden" name="profileId" value="@p.Id" />
+                                                    <button type="submit" class="btn btn-outline-info" title="Kiểm tra kết nối">
+                                                        <i class="bi bi-cloud-arrow-up"></i>
+                                                    </button>
+                                                </form>
+                                                <button type="button" class="btn btn-outline-secondary" title="Sửa"
+                                                        onclick='editProfile(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(new {
+                                                            id = p.Id,
+                                                            name = p.Name,
+                                                            kind = p.Kind,
+                                                            baseUrl = p.BaseUrl,
+                                                            organizationId = p.OrganizationId,
+                                                            enableStt = p.CustomCapabilities.HasFlag(AiCapability.SpeechToText),
+                                                            enableTts = p.CustomCapabilities.HasFlag(AiCapability.TextToSpeech),
+                                                            enableLlm = p.CustomCapabilities.HasFlag(AiCapability.FollowUpLlm)
+                                                        })))'>
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                                <form method="post" asp-page-handler="DeleteProfile" class="d-inline"
+                                                      onsubmit="return confirm('Bạn có chắc muốn xoá nhà cung cấp \'@p.Name\'?');">
+                                                    <input type="hidden" name="profileId" value="@p.Id" />
+                                                    <button type="submit" class="btn btn-outline-danger" title="Xoá">
+                                                        <i class="bi bi-trash"></i>
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
 
+            <!-- Security Footer Note -->
             <div class="alert alert-secondary border-0 small" role="note">
                 <i class="bi bi-shield-lock-fill text-secondary me-2"></i>
-                <strong>Lưu ý bảo mật:</strong> Key được mã hoá bằng ASP.NET Data Protection và chỉ lưu trên máy chạy server (<code>App_Data/ai-credentials.json</code>).
-                Không bao giờ commit key lên git hoặc chia sẻ ra bên ngoài. Đặt giới hạn chi tiêu trên trang quản trị OpenAI trước khi demo.
+                <strong>Lưu ý bảo mật:</strong> Mọi API key đều được mã hóa bằng ASP.NET Core Data Protection và lưu cục bộ tại <code>App_Data/ai-credentials.json</code>.
+                Key chỉ được truyền qua header xác thực (<code>x-goog-api-key</code> hoặc <code>Bearer</code>), tuyệt đối không ghi vào URL, logs, hay commit lên GitHub.
             </div>
         </div>
     </div>
 </div>
+
+<!-- Modal: Add / Edit Provider Profile -->
+<div class="modal fade" id="profileModal" tabindex="-1" aria-labelledby="profileModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form method="post" asp-page-handler="SaveProfile">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="profileModalLabel">Thêm nhà cung cấp AI</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="modalProfileId" name="ProfileInput.Id" value="" />
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tên hiển thị:</label>
+                        <input type="text" class="form-control" id="modalProfileName" name="ProfileInput.Name"
+                               placeholder="Ví dụ: Google Gemini 2.5 Flash, Groq Local, OpenAI Chính hãng" required />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Loại nhà cung cấp (Kind):</label>
+                        <select class="form-select" id="modalProfileKind" name="ProfileInput.Kind" onchange="onKindChange()">
+                            <option value="@AiProviderKinds.OpenAi">OpenAI (Chính hãng: Whisper, TTS, GPT)</option>
+                            <option value="@AiProviderKinds.Gemini">Google Gemini (Gemini 2.5 Flash REST API)</option>
+                            <option value="@AiProviderKinds.OpenAiCompatible">OpenAI-Compatible (Groq, Together, DeepSeek, Ollama, LM Studio)</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Base URL:</label>
+                        <input type="text" class="form-control font-monospace small" id="modalProfileBaseUrl" name="ProfileInput.BaseUrl"
+                               placeholder="https://api.openai.com/v1" required />
+                        <div class="form-text text-muted">
+                            URL gốc của API (không bao gồm <code>/models</code> hay <code>/chat/completions</code>).
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Khóa API (API Key):</label>
+                        <input type="password" class="form-control" id="modalProfileApiKey" name="ProfileInput.ApiKey"
+                               placeholder="Để trống nếu giữ nguyên key đã lưu (hoặc dùng local không cần key)" autocomplete="off" />
+                        <div class="form-text text-muted">
+                            Để trống khi sửa nếu không muốn thay đổi key hiện tại. Localhost/LAN có thể để trống.
+                        </div>
+                    </div>
+
+                    <div class="mb-3" id="orgIdGroup">
+                        <label class="form-label fw-semibold">Organization ID (Tùy chọn cho OpenAI):</label>
+                        <input type="text" class="form-control font-monospace small" id="modalProfileOrgId" name="ProfileInput.OrganizationId"
+                               placeholder="org-..." />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold d-block">Năng lực hỗ trợ:</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="modalEnableStt" name="ProfileInput.EnableStt" value="true" checked />
+                                <label class="form-check-label" for="modalEnableStt">STT</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="modalEnableTts" name="ProfileInput.EnableTts" value="true" checked />
+                                <label class="form-check-label" for="modalEnableTts">TTS</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="modalEnableLlm" name="ProfileInput.EnableLlm" value="true" checked />
+                                <label class="form-check-label" for="modalEnableLlm">LLM</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-primary">Lưu hồ sơ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function resetProfileForm() {
+            document.getElementById('profileModalLabel').innerText = 'Thêm nhà cung cấp AI';
+            document.getElementById('modalProfileId').value = '';
+            document.getElementById('modalProfileName').value = '';
+            document.getElementById('modalProfileKind').value = '@AiProviderKinds.OpenAi';
+            document.getElementById('modalProfileBaseUrl').value = 'https://api.openai.com/v1';
+            document.getElementById('modalProfileApiKey').value = '';
+            document.getElementById('modalProfileOrgId').value = '';
+            document.getElementById('modalEnableStt').checked = true;
+            document.getElementById('modalEnableTts').checked = true;
+            document.getElementById('modalEnableLlm').checked = true;
+            onKindChange();
+        }
+
+        function editProfile(p) {
+            document.getElementById('profileModalLabel').innerText = 'Chỉnh sửa nhà cung cấp AI';
+            document.getElementById('modalProfileId').value = p.id;
+            document.getElementById('modalProfileName').value = p.name;
+            document.getElementById('modalProfileKind').value = p.kind;
+            document.getElementById('modalProfileBaseUrl').value = p.baseUrl;
+            document.getElementById('modalProfileApiKey').value = '';
+            document.getElementById('modalProfileOrgId').value = p.organizationId || '';
+            document.getElementById('modalEnableStt').checked = p.enableStt;
+            document.getElementById('modalEnableTts').checked = p.enableTts;
+            document.getElementById('modalEnableLlm').checked = p.enableLlm;
+            onKindChange();
+            const modal = new bootstrap.Modal(document.getElementById('profileModal'));
+            modal.show();
+        }
+
+        function onKindChange() {
+            const kind = document.getElementById('modalProfileKind').value;
+            const baseUrlInput = document.getElementById('modalProfileBaseUrl');
+            const orgGroup = document.getElementById('orgIdGroup');
+
+            if (kind === '@AiProviderKinds.Gemini') {
+                orgGroup.style.display = 'none';
+                if (!baseUrlInput.value || baseUrlInput.value.includes('api.openai.com')) {
+                    baseUrlInput.value = 'https://generativelanguage.googleapis.com/v1beta';
+                }
+            } else if (kind === '@AiProviderKinds.OpenAi') {
+                orgGroup.style.display = 'block';
+                if (!baseUrlInput.value || baseUrlInput.value.includes('generativelanguage.googleapis.com')) {
+                    baseUrlInput.value = 'https://api.openai.com/v1';
+                }
+            } else {
+                orgGroup.style.display = 'none';
+                if (!baseUrlInput.value || baseUrlInput.value.includes('api.openai.com') || baseUrlInput.value.includes('generativelanguage.googleapis.com')) {
+                    baseUrlInput.value = 'http://localhost:11434/v1';
+                }
+            }
+        }
+
+        async function fetchModels(profileSelectId, datalistId) {
+            const select = document.getElementById(profileSelectId);
+            const profileId = select ? select.value : '';
+            if (!profileId) {
+                alert('Vui lòng chọn một nhà cung cấp trước khi lấy danh sách model.');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/Admin/AiSettings?handler=ListModels&profileId=${encodeURIComponent(profileId)}`);
+                const data = await response.json();
+                if (data.success && Array.isArray(data.models) && data.models.length > 0) {
+                    const datalist = document.getElementById(datalistId);
+                    if (datalist) {
+                        datalist.innerHTML = '';
+                        data.models.forEach(m => {
+                            const opt = document.createElement('option');
+                            opt.value = m;
+                            datalist.appendChild(opt);
+                        });
+                        alert(`Đã nạp ${data.models.length} model gợi ý vào danh sách.`);
+                    }
+                } else {
+                    alert('Không thể lấy danh sách model từ nhà cung cấp này. Bạn vẫn có thể nhập tên model thủ công.');
+                }
+            } catch (e) {
+                console.warn('Lỗi khi lấy danh sách model:', e);
+                alert('Lỗi mạng khi lấy danh sách model.');
+            }
+        }
+    </script>
+}

@@ -277,6 +277,94 @@ public sealed class ProtectedAiCredentialStoreTests : IDisposable
         Assert.Equal(dummyMp3Bytes, savedBytes);
     }
 
+    [Fact]
+    public async Task Legacy_Single_Key_Format_Automatically_Upgrades_To_MultiProfile_Format()
+    {
+        const string legacyKey = "sk-legacy-test-key-1234567890";
+        var protector = _dataProtection.CreateProtector("AIVES.AiCredentials.v1");
+        var protectedKey = protector.Protect(legacyKey);
+
+        var legacyJson = "{\"protectedApiKey\": \"" + protectedKey + "\", \"useRealAi\": true, \"updatedAtUtc\": \"2026-10-15T12:00:00Z\"}";
+
+        await File.WriteAllTextAsync(_storePath, legacyJson);
+
+        var store = CreateStore();
+        var config = store.GetConfiguration();
+
+        Assert.True(config.UseRealAi);
+        Assert.Single(config.Profiles);
+        Assert.Equal(legacyKey, config.Profiles[0].ApiKey);
+        Assert.Equal(AIVES.BLL.Models.Ai.AiProviderKinds.OpenAi, config.Profiles[0].Kind);
+
+        // Routing automatically initialized to the upgraded profile
+        Assert.Equal(config.Profiles[0].Id, config.Routing.Stt.ProfileId);
+        Assert.Equal(config.Profiles[0].Id, config.Routing.Tts.ProfileId);
+        Assert.Equal(config.Profiles[0].Id, config.Routing.Llm.ProfileId);
+    }
+
+    [Fact]
+    public async Task Multi_Profile_CRUD_And_Persistence()
+    {
+        var store = CreateStore();
+
+        var config = new AIVES.BLL.Models.Ai.AiConfigurationModel
+        {
+            UseRealAi = true,
+            Profiles =
+            [
+                new AIVES.BLL.Models.Ai.AiProviderProfile
+                {
+                    Id = "gemini-profile",
+                    Name = "Google Gemini",
+                    Kind = AIVES.BLL.Models.Ai.AiProviderKinds.Gemini,
+                    BaseUrl = "https://generativelanguage.googleapis.com/v1beta",
+                    ApiKey = "AIzaSyGeminiKey1234567890"
+                },
+                new AIVES.BLL.Models.Ai.AiProviderProfile
+                {
+                    Id = "groq-profile",
+                    Name = "Groq Llama",
+                    Kind = AIVES.BLL.Models.Ai.AiProviderKinds.OpenAiCompatible,
+                    BaseUrl = "https://api.groq.com/openai/v1",
+                    ApiKey = "gsk_testGroqKey1234567890",
+                    CustomCapabilities = AIVES.BLL.Models.Ai.AiCapability.FollowUpLlm
+                }
+            ],
+            Routing = new AIVES.BLL.Models.Ai.AiCapabilityRouting
+            {
+                Stt = new AIVES.BLL.Models.Ai.AiCapabilityTarget { ProfileId = "gemini-profile", Model = "gemini-2.5-flash" },
+                Tts = new AIVES.BLL.Models.Ai.AiTtsCapabilityTarget { ProfileId = "gemini-profile", Model = "gemini-2.5-flash-preview-tts", Voice = "Puck" },
+                Llm = new AIVES.BLL.Models.Ai.AiCapabilityTarget { ProfileId = "groq-profile", Model = "llama-3.3-70b" }
+            }
+        };
+
+        await store.SaveConfigurationAsync(config);
+
+        // Verify disk file does not contain raw keys
+        var diskContent = await File.ReadAllTextAsync(_storePath);
+        Assert.DoesNotContain("AIzaSyGeminiKey1234567890", diskContent);
+        Assert.DoesNotContain("gsk_testGroqKey1234567890", diskContent);
+
+        // Reload from disk in a fresh store instance
+        var reloadedStore = CreateStore();
+        var reloadedConfig = reloadedStore.GetConfiguration();
+
+        Assert.True(reloadedConfig.UseRealAi);
+        Assert.Equal(2, reloadedConfig.Profiles.Count);
+
+        var gemini = reloadedConfig.FindProfile("gemini-profile");
+        Assert.NotNull(gemini);
+        Assert.Equal("AIzaSyGeminiKey1234567890", gemini.ApiKey);
+
+        var groq = reloadedConfig.FindProfile("groq-profile");
+        Assert.NotNull(groq);
+        Assert.Equal("gsk_testGroqKey1234567890", groq.ApiKey);
+        Assert.Equal(AIVES.BLL.Models.Ai.AiCapability.FollowUpLlm, groq.CustomCapabilities);
+
+        Assert.Equal("gemini-profile", reloadedConfig.Routing.Stt.ProfileId);
+        Assert.Equal("groq-profile", reloadedConfig.Routing.Llm.ProfileId);
+    }
+
     private sealed class TestHttpHandler : HttpMessageHandler
     {
         private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _handler;

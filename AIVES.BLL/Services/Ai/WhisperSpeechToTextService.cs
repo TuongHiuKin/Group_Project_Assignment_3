@@ -1,21 +1,16 @@
-using System;
 using System.Diagnostics;
-using System.IO;
-using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using AIVES.BLL.Interfaces.Ai;
 using AIVES.BLL.Options;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace AIVES.BLL.Services.Ai;
 
 /// <summary>
-/// Speech-to-Text service adapter using OpenAI Whisper REST API.
-/// Enforces 15-second timeout, cancellation propagation, multipart form upload, and graceful fallback.
+/// Speech-to-Text service adapter using OpenAI Whisper or OpenAI-compatible audio/transcriptions REST API.
+/// Enforces timeout, cancellation propagation, multipart form upload, and graceful fallback.
 /// </summary>
 public class WhisperSpeechToTextService : ISpeechToTextService
 {
@@ -55,9 +50,11 @@ public class WhisperSpeechToTextService : ISpeechToTextService
         }
 
         var config = _options.Value;
+        var isCustomEndpoint = !string.IsNullOrWhiteSpace(config.OpenAI.BaseUrl) &&
+            !config.OpenAI.BaseUrl.Contains("api.openai.com", StringComparison.OrdinalIgnoreCase);
 
-        // Fallback to mock if configured or if no API key is available
-        if (config.UseMock || string.IsNullOrWhiteSpace(config.OpenAI.ApiKey))
+        // Fallback to mock if configured or if no API key is available (unless using custom/local endpoint)
+        if (config.UseMock || (string.IsNullOrWhiteSpace(config.OpenAI.ApiKey) && !isCustomEndpoint))
         {
             if (_fallbackService != null)
             {
@@ -82,7 +79,10 @@ public class WhisperSpeechToTextService : ISpeechToTextService
             : $"{config.OpenAI.BaseUrl.TrimEnd('/')}/audio/transcriptions";
 
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.OpenAI.ApiKey);
+        if (!string.IsNullOrWhiteSpace(config.OpenAI.ApiKey))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.OpenAI.ApiKey);
+        }
         if (!string.IsNullOrWhiteSpace(config.OpenAI.OrganizationId))
         {
             request.Headers.Add("OpenAI-Organization", config.OpenAI.OrganizationId);
@@ -121,12 +121,21 @@ public class WhisperSpeechToTextService : ISpeechToTextService
         catch (OperationCanceledException)
         {
             _logger?.LogWarning("STT transcription timed out after {Timeout} seconds.", timeoutSeconds);
+            if (_fallbackService != null)
+            {
+                return await _fallbackService.TranscribeAsync(audioStream, contentType, ct);
+            }
             return new SpeechToTextResult(false, string.Empty, 0m, $"STT operation timed out after {timeoutSeconds} seconds.");
         }
         catch (HttpRequestException ex)
         {
-            _logger?.LogError(ex, "HTTP exception during STT transcription.");
-            return new SpeechToTextResult(false, string.Empty, 0m, $"Network error contacting STT service: {ex.Message}");
+            var sanitizedErr = AiKeySanitizer.Sanitize(ex.Message, config.OpenAI.ApiKey);
+            _logger?.LogError(ex, "HTTP exception during STT transcription: {Error}", sanitizedErr);
+            if (_fallbackService != null)
+            {
+                return await _fallbackService.TranscribeAsync(audioStream, contentType, ct);
+            }
+            return new SpeechToTextResult(false, string.Empty, 0m, $"Network error contacting STT service: {sanitizedErr}");
         }
 
         sw.Stop();
@@ -135,9 +144,15 @@ public class WhisperSpeechToTextService : ISpeechToTextService
 
         if (!response.IsSuccessStatusCode)
         {
-            var errorMsg = ExtractErrorMessage(responseBody) ?? $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}";
+            var sanitizedBody = AiKeySanitizer.Sanitize(responseBody, config.OpenAI.ApiKey);
+            var errorMsg = ExtractErrorMessage(sanitizedBody) ?? $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}";
             _logger?.LogWarning("OpenAI STT failed with status {StatusCode} in {Elapsed}ms: {Error}",
                 (int)response.StatusCode, sw.ElapsedMilliseconds, errorMsg);
+
+            if (_fallbackService != null)
+            {
+                return await _fallbackService.TranscribeAsync(audioStream, contentType, ct);
+            }
             return new SpeechToTextResult(false, string.Empty, 0m, $"STT service error: {errorMsg}");
         }
 
@@ -153,7 +168,7 @@ public class WhisperSpeechToTextService : ISpeechToTextService
 
             if (!root.TryGetProperty("text", out var textProp))
             {
-                _logger?.LogWarning("Whisper response missing 'text' property: {Json}", json);
+                _logger?.LogWarning("Whisper response missing 'text' property.");
                 return new SpeechToTextResult(false, string.Empty, 0m, "Malformed response from STT service.");
             }
 
@@ -178,28 +193,42 @@ public class WhisperSpeechToTextService : ISpeechToTextService
 
     private static decimal CalculateConfidence(JsonElement root)
     {
-        // If verbose_json segments exist, estimate confidence from no_speech_prob or default
-        if (root.TryGetProperty("segments", out var segments) && segments.ValueKind == JsonValueKind.Array && segments.GetArrayLength() > 0)
+        if (root.TryGetProperty("segments", out var segments) && segments.GetArrayLength() > 0)
         {
-            decimal totalConfidence = 0m;
+            decimal totalProb = 0m;
             int count = 0;
 
             foreach (var segment in segments.EnumerateArray())
             {
-                if (segment.TryGetProperty("no_speech_prob", out var noSpeechProp) && noSpeechProp.TryGetDecimal(out var noSpeechProb))
+                if (segment.TryGetProperty("no_speech_prob", out var noSpeechProp) &&
+                    noSpeechProp.TryGetDecimal(out var noSpeechProb))
                 {
-                    totalConfidence += Math.Clamp(1m - noSpeechProb, 0.1m, 1.0m);
+                    decimal segmentConfidence = Math.Clamp(1.0m - noSpeechProb, 0.0m, 1.0m);
+                    totalProb += segmentConfidence;
                     count++;
                 }
             }
 
             if (count > 0)
             {
-                return Math.Round(totalConfidence / count, 2);
+                return Math.Round(totalProb / count, 2);
             }
         }
 
         return 0.95m;
+    }
+
+    private static string ResolveFileExtension(string mediaType)
+    {
+        return mediaType.ToLowerInvariant() switch
+        {
+            "audio/webm" => "webm",
+            "audio/wav" or "audio/x-wav" => "wav",
+            "audio/mpeg" or "audio/mp3" => "mp3",
+            "audio/ogg" => "ogg",
+            "audio/m4a" or "audio/mp4" => "m4a",
+            _ => "webm"
+        };
     }
 
     private static string? ExtractErrorMessage(string json)
@@ -217,18 +246,9 @@ public class WhisperSpeechToTextService : ISpeechToTextService
         }
         catch
         {
-            // Ignore JSON parsing failure on error string
+            // Ignore parse errors on raw error content
         }
 
         return null;
-    }
-
-    private static string ResolveFileExtension(string contentType)
-    {
-        if (contentType.Contains("wav", StringComparison.OrdinalIgnoreCase)) return "wav";
-        if (contentType.Contains("mp3", StringComparison.OrdinalIgnoreCase)) return "mp3";
-        if (contentType.Contains("m4a", StringComparison.OrdinalIgnoreCase)) return "m4a";
-        if (contentType.Contains("ogg", StringComparison.OrdinalIgnoreCase)) return "ogg";
-        return "webm";
     }
 }
