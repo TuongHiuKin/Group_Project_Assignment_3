@@ -15,6 +15,12 @@ public class AiServiceOptions
     public bool UseMock { get; set; } = true;
 
     /// <summary>
+    /// When true, real AI adapters may fall back to deterministic mock services if a cloud API call fails.
+    /// Default is false in production/real AI mode so errors are surfaced clearly instead of returning fake transcripts.
+    /// </summary>
+    public bool AllowMockFallback { get; set; } = false;
+
+    /// <summary>
     /// STT operation timeout in seconds (default: 15s).
     /// </summary>
     public int SpeechToTextTimeoutSeconds { get; set; } = 15;

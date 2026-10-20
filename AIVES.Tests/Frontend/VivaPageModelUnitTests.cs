@@ -210,6 +210,40 @@ public sealed class VivaPageModelUnitTests
         Assert.Equal("SV_TEST_01", stub.CapturedStudentId);
     }
 
+    private sealed class UnconfiguredAiStore : AIVES.BLL.Interfaces.Ai.IAiCredentialStore
+    {
+        public AIVES.BLL.Interfaces.Ai.AiCredentialStatus GetStatus() => new(false, false, null, null);
+        public string? GetApiKey() => null;
+        public Task SaveAsync(string? newApiKey, bool useRealAi, CancellationToken ct = default) => Task.CompletedTask;
+        public Task ClearAsync(CancellationToken ct = default) => Task.CompletedTask;
+        public AIVES.BLL.Models.Ai.AiConfigurationModel GetConfiguration() => new() { UseRealAi = false, Profiles = [] };
+        public Task SaveConfigurationAsync(AIVES.BLL.Models.Ai.AiConfigurationModel updated, CancellationToken ct = default) => Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task IndexModel_OnPostCreateAsync_WhenAiIsNotConfigured_BlocksSessionCreationWithVietnameseWarning()
+    {
+        var stub = new StubOrchestrator();
+        var services = new ServiceCollection();
+        services.AddSingleton<IVivaSessionOrchestrator>(stub);
+        services.AddSingleton<AIVES.BLL.Interfaces.Ai.IAiCredentialStore>(new UnconfiguredAiStore());
+        services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new AIVES.BLL.Options.AiServiceOptions { UseMock = false, AllowMockFallback = false }));
+        var sp = services.BuildServiceProvider();
+
+        var model = new IndexModel(NullLogger<IndexModel>.Instance, sp)
+        {
+            PageContext = CreatePageContext(userId: "SV_TEST_01"),
+            ExamIdInput = "EXAM01"
+        };
+
+        Assert.False(model.IsAiConfigured);
+        var result = await model.OnPostCreateAsync();
+
+        Assert.IsType<PageResult>(result);
+        Assert.Contains("Chưa cấu hình AI", model.ErrorMessage);
+        Assert.Null(stub.CapturedExamId);
+    }
+
     [Fact]
     public async Task ExamModel_OnGetAsync_WithNullOrEmptySessionId_RedirectsToIndex()
     {

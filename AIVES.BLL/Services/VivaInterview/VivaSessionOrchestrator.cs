@@ -255,10 +255,13 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
                 }
             }
             _logger.LogError("STT processing failed for Session: {SessionId}. Error: {Error}", submission.SessionId, sttResult.ErrorMessage);
+            var friendlyError = string.IsNullOrWhiteSpace(sttResult.ErrorMessage)
+                ? "Không thể nhận diện giọng nói. Vui lòng kiểm tra cấu hình AI hoặc thử ghi âm lại."
+                : $"Lỗi nhận diện giọng nói AI: {sttResult.ErrorMessage}";
             await _publisher.PublishErrorAsync(new VivaErrorDto(
                 SessionId: submission.SessionId,
                 ErrorCode: "STT_PROCESSING_FAILED",
-                ErrorMessage: sttResult.ErrorMessage ?? "Speech-to-text transcription failed.",
+                ErrorMessage: friendlyError,
                 CanRetry: canRetry
             ), ct);
 

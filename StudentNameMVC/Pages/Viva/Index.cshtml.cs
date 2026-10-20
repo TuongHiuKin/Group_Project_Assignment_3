@@ -1,13 +1,18 @@
 using System;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
+using AIVES.BLL.Interfaces.Ai;
 using AIVES.BLL.Interfaces.VivaInterview;
+using AIVES.BLL.Options;
+using AIVES.BLL.Services.Ai;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace StudentNameMVC.Pages.Viva;
 
@@ -15,6 +20,8 @@ namespace StudentNameMVC.Pages.Viva;
 public class IndexModel : PageModel
 {
     private readonly IVivaSessionOrchestrator? _orchestrator;
+    private readonly IAiCredentialStore? _credentialStore;
+    private readonly IOptions<AiServiceOptions>? _aiOptions;
     private readonly ILogger<IndexModel> _logger;
 
     public IndexModel(ILogger<IndexModel> logger) : this(logger, null)
@@ -26,6 +33,8 @@ public class IndexModel : PageModel
     {
         _logger = logger;
         _orchestrator = serviceProvider?.GetService<IVivaSessionOrchestrator>();
+        _credentialStore = serviceProvider?.GetService<IAiCredentialStore>();
+        _aiOptions = serviceProvider?.GetService<IOptions<AiServiceOptions>>();
     }
 
     [BindProperty]
@@ -37,6 +46,28 @@ public class IndexModel : PageModel
     public string? ErrorMessage { get; set; }
 
     public bool IsOrchestratorAvailable => _orchestrator != null;
+
+    public bool IsAiConfigured
+    {
+        get
+        {
+            if (_credentialStore == null)
+            {
+                return true;
+            }
+            if (_aiOptions?.Value.AllowMockFallback == true || _aiOptions?.Value.UseMock == true)
+            {
+                var cfg = _credentialStore.GetConfiguration();
+                if (!cfg.UseRealAi && _aiOptions?.Value.AllowMockFallback == true)
+                {
+                    return true;
+                }
+            }
+            var config = _credentialStore.GetConfiguration();
+            return config.UseRealAi && config.Profiles.Any(p =>
+                !string.IsNullOrWhiteSpace(p.ApiKey) || NetworkEndpointHelper.IsLocalOrLan(p.BaseUrl));
+        }
+    }
 
     public void OnGet()
     {
@@ -64,6 +95,12 @@ public class IndexModel : PageModel
         if (_orchestrator == null)
         {
             ErrorMessage = "Chức năng thi vấn đáp chưa được bật.";
+            return Page();
+        }
+
+        if (!IsAiConfigured)
+        {
+            ErrorMessage = "Chưa cấu hình AI, vui lòng nhờ Admin vào Cấu hình AI.";
             return Page();
         }
 

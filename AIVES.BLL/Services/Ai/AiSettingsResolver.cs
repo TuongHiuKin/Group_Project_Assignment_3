@@ -13,6 +13,7 @@ public static class AiSettingsResolver
         var copy = new AiServiceOptions
         {
             UseMock = configured.UseMock,
+            AllowMockFallback = configured.AllowMockFallback,
             SpeechToTextTimeoutSeconds = configured.SpeechToTextTimeoutSeconds,
             TextToSpeechTimeoutSeconds = configured.TextToSpeechTimeoutSeconds,
             FollowUpTimeoutSeconds = configured.FollowUpTimeoutSeconds,

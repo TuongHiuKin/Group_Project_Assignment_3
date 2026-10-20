@@ -1,10 +1,12 @@
 using System.Text.Json;
 using AIVES.BLL.Interfaces.Ai;
 using AIVES.BLL.Models.Ai;
+using AIVES.BLL.Options;
 using AIVES.BLL.Services.Ai.Gemini;
 using AIVES.BLL.Services.Ai.Mocks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace AIVES.BLL.Services.Ai.Adapters;
 
@@ -35,7 +37,8 @@ public sealed class GeminiProviderAdapter : IAiProviderAdapter
         var effectiveModel = string.IsNullOrWhiteSpace(model) ? GetDefaultModel(AiCapability.SpeechToText) : model;
         var httpClient = sp.GetRequiredService<HttpClient>();
         var logger = sp.GetService<ILogger<GeminiSpeechToTextService>>();
-        var mock = sp.GetService<MockSpeechToTextService>();
+        var allowFallback = sp.GetService<IOptions<AiServiceOptions>>()?.Value.AllowMockFallback ?? false;
+        var mock = allowFallback ? sp.GetService<MockSpeechToTextService>() : null;
         return new GeminiSpeechToTextService(httpClient, profile, effectiveModel, timeoutSeconds: 15, logger, mock);
     }
 
@@ -55,7 +58,8 @@ public sealed class GeminiProviderAdapter : IAiProviderAdapter
         var effectiveVoice = string.IsNullOrWhiteSpace(voice) ? "Puck" : voice;
         var httpClient = sp.GetRequiredService<HttpClient>();
         var logger = sp.GetService<ILogger<GeminiTextToSpeechService>>();
-        var mock = sp.GetService<MockTextToSpeechService>();
+        var allowFallback = sp.GetService<IOptions<AiServiceOptions>>()?.Value.AllowMockFallback ?? false;
+        var mock = allowFallback ? sp.GetService<MockTextToSpeechService>() : null;
         return new GeminiTextToSpeechService(httpClient, profile, effectiveModel, effectiveVoice, cacheDirectory, timeoutSeconds: 10, logger, mock);
     }
 
@@ -70,7 +74,8 @@ public sealed class GeminiProviderAdapter : IAiProviderAdapter
         var httpClient = sp.GetRequiredService<HttpClient>();
         var validator = sp.GetService<FollowUpPolicyValidator>() ?? new FollowUpPolicyValidator();
         var logger = sp.GetService<ILogger<GeminiFollowUpGeneratorService>>();
-        var mock = sp.GetService<MockFollowUpGeneratorService>();
+        var allowFallback = sp.GetService<IOptions<AiServiceOptions>>()?.Value.AllowMockFallback ?? false;
+        var mock = allowFallback ? sp.GetService<MockFollowUpGeneratorService>() : null;
         return new GeminiFollowUpGeneratorService(httpClient, profile, effectiveModel, validator, timeoutSeconds: 15, logger, mock);
     }
 

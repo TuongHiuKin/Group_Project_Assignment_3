@@ -113,7 +113,14 @@ if (vivaEnabled)
     var registry = app.Services.GetRequiredService<AIVES.BLL.Interfaces.Ai.IAiProviderRegistry>();
     var config = store.GetConfiguration();
     var summary = AIVES.BLL.Services.Ai.AiSettingsResolver.GetStartupSummary(config, registry);
-    app.Logger.LogInformation("AI mode at startup: {Mode}", summary);
+    if (string.Equals(summary, "Mock", StringComparison.OrdinalIgnoreCase))
+    {
+        app.Logger.LogWarning("AI mode at startup: {Mode}. Real AI is not configured or disabled; please configure AI providers at /Admin/AiSettings.", summary);
+    }
+    else
+    {
+        app.Logger.LogInformation("AI mode at startup: {Mode}", summary);
+    }
 }
 
 if (!app.Environment.IsDevelopment())
