@@ -48,6 +48,16 @@ internal sealed class RealtimeData : IVivaSessionRepository, IVivaQuestionReposi
         if (session is not null) session.Turns = Turns.Values.Where(t => t.SessionId == id).ToList();
         return Task.FromResult(session);
     }
+    Task<List<VivaSession>> IVivaSessionRepository.GetSessionsWithDetailsAsync(string? examId, string? studentId, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        var list = Sessions.Values.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(examId)) list = list.Where(s => s.ExamId == examId);
+        if (!string.IsNullOrWhiteSpace(studentId)) list = list.Where(s => s.StudentId == studentId);
+        var result = list.OrderBy(s => s.StartedAtUtc).ToList();
+        foreach (var s in result) s.Turns = Turns.Values.Where(t => t.SessionId == s.SessionId).ToList();
+        return Task.FromResult(result);
+    }
     public Task<Guid> CreateSessionAsync(VivaSession session, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
@@ -76,6 +86,11 @@ internal sealed class RealtimeData : IVivaSessionRepository, IVivaQuestionReposi
     {
         ct.ThrowIfCancellationRequested();
         return Task.FromResult(examId == Question.ExamId ? new List<VivaQuestion> { Question } : new());
+    }
+    public Task<List<string>> GetDistinctExamIdsAsync(CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(new List<string> { Question.ExamId });
     }
     Task<VivaQuestion?> IVivaQuestionRepository.GetByIdAsync(string id, CancellationToken ct)
     {

@@ -72,8 +72,8 @@ builder.Services.AddScoped<INewsArticleService, NewsArticleService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<ActiveAccountCookieEvents>();
 
-// Group 6 - Viva Exam Reporting Services
-builder.Services.AddSingleton<AIVES.BLL.Interfaces.ExamReporting.IExamReportRepository, AIVES.BLL.Repositories.ExamReporting.MockExamReportRepository>();
+// Group 6 - Viva Exam Reporting Services (Scoped, backed by real SQL Server repositories)
+builder.Services.AddScoped<AIVES.BLL.Interfaces.ExamReporting.IExamReportRepository, AIVES.BLL.Repositories.ExamReporting.ExamReportRepository>();
 builder.Services.AddScoped<AIVES.BLL.Interfaces.ExamReporting.IStudentReportService, AIVES.BLL.Services.ExamReporting.StudentReportService>();
 builder.Services.AddScoped<AIVES.BLL.Interfaces.ExamReporting.IClassReportService, AIVES.BLL.Services.ExamReporting.ClassReportService>();
 

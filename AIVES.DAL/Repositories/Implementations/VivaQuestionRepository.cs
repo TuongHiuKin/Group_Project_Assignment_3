@@ -15,4 +15,11 @@ public sealed class VivaQuestionRepository(AIVESDbContext context) : IVivaQuesti
             .Where(x => x.ExamId == examId)
             .OrderBy(x => x.QuestionId)
             .ToListAsync(ct);
+
+    public Task<List<string>> GetDistinctExamIdsAsync(CancellationToken ct = default) =>
+        context.VivaQuestions.AsNoTracking()
+            .Select(x => x.ExamId)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToListAsync(ct);
 }

@@ -17,6 +17,25 @@ public sealed class VivaSessionRepository(AIVESDbContext context) : IVivaSession
             .Include(x => x.Turns)
             .SingleOrDefaultAsync(x => x.SessionId == sessionId, ct);
 
+    public async Task<List<VivaSession>> GetSessionsWithDetailsAsync(string? examId = null, string? studentId = null, CancellationToken ct = default)
+    {
+        var query = context.VivaSessions.AsNoTracking()
+            .Include(x => x.Turns)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(examId))
+        {
+            query = query.Where(x => x.ExamId == examId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(studentId))
+        {
+            query = query.Where(x => x.StudentId == studentId);
+        }
+
+        return await query.OrderBy(x => x.StartedAtUtc).ToListAsync(ct);
+    }
+
     public async Task<Guid> CreateSessionAsync(VivaSession session, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(session);
