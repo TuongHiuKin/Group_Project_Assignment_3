@@ -1,4 +1,5 @@
 @using AIVES.BLL.Security
+@addTagHelper *, Microsoft.AspNetCore.Mvc.TagHelpers
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -77,10 +78,9 @@
                             <span class="ms-1 text-info fw-semibold">(@friendlyRole)</span>
                         </span>
 
-                        <a asp-controller="Account" asp-action="Dashboard" class="btn btn-outline-light btn-sm rounded-pill px-3"
-                           onclick="return confirm('Bạn có chắc chắn muốn rời phòng thi không?');">
+                        <button type="button" class="btn btn-outline-light btn-sm rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#leaveRoomModal" id="btnLeaveRoom">
                             <i class="bi bi-box-arrow-left me-1"></i> Rời phòng
-                        </a>
+                        </button>
                     }
                 </div>
             </div>
@@ -90,6 +90,34 @@
     <main role="main" class="flex-grow-1 container-fluid px-3 px-md-4 py-3">
         @RenderBody()
     </main>
+
+    <!-- Modal Xác nhận rời phòng thi -->
+    <div class="modal fade" id="leaveRoomModal" tabindex="-1" aria-labelledby="leaveRoomModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content rounded-4 border-0 shadow-lg">
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold text-dark d-flex align-items-center gap-2" id="leaveRoomModalLabel">
+                        <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+                        Xác nhận rời phòng thi
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
+                </div>
+                <div class="modal-body py-3 text-secondary">
+                    <p class="mb-2">Bạn có chắc chắn muốn rời khỏi phòng thi vấn đáp?</p>
+                    <div class="alert alert-info py-2 px-3 small rounded-3 mb-0">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Tiến trình thi của bạn đã được hệ thống lưu trữ an toàn. Bạn có thể quay lại phòng thi bất kỳ lúc nào bằng mã phiên thi hiện tại.
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Ở lại phòng</button>
+                    <a href="/Account/Dashboard" class="btn btn-danger rounded-pill px-4" id="btnConfirmLeaveRoom">
+                        <i class="bi bi-box-arrow-left me-1"></i> Rời phòng
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <footer class="bg-white border-top py-2 text-center text-muted small mt-auto">
         <div class="container-fluid px-4 d-flex justify-content-between align-items-center flex-wrap">
@@ -101,6 +129,20 @@
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+    <script>
+        document.getElementById('btnConfirmLeaveRoom')?.addEventListener('click', async function (e) {
+            e.preventDefault();
+            const targetUrl = this.getAttribute('href') || '/Account/Dashboard';
+            if (window.vivaExamClient && typeof window.vivaExamClient.leaveSession === 'function') {
+                try {
+                    await window.vivaExamClient.leaveSession();
+                } catch (err) {
+                    console.warn('Error during leaveSession:', err);
+                }
+            }
+            window.location.href = targetUrl;
+        });
+    </script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

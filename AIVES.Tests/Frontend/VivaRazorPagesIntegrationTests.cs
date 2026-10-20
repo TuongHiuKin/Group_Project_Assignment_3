@@ -120,6 +120,7 @@ public sealed class VivaRazorPagesIntegrationTests : IClassFixture<VivaRazorPage
         Assert.Contains("Phòng thi Vấn đáp AI", html);
         Assert.Contains("Kiểm tra Micro", html);
         Assert.Contains("Tham gia phòng thi theo mã phiên", html);
+        Assert.Contains("Về Dashboard", html);
     }
 
     [Fact]
@@ -163,6 +164,23 @@ public sealed class VivaRazorPagesIntegrationTests : IClassFixture<VivaRazorPage
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.Contains("AccessDenied", response.Headers.Location?.ToString());
+    }
+
+    [Fact]
+    public async Task Get_VivaExam_RendersLeaveRoomModalWithTwoButtons()
+    {
+        var sessionId = _factory.Data.AddSession("SV01", VivaSessionState.Ready);
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-User", "SV01");
+
+        var response = await client.GetAsync($"/Viva/Exam/{sessionId}");
+
+        response.EnsureSuccessStatusCode();
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.Contains("id=\"leaveRoomModal\"", html);
+        Assert.Contains("Ở lại phòng", html);
+        Assert.Contains("id=\"btnConfirmLeaveRoom\"", html);
+        Assert.Contains("href=\"/Account/Dashboard\"", html);
     }
 
     [Fact]
