@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using AIVES.BLL.Interfaces;
 using AIVES.BLL.Security;
 using Microsoft.AspNetCore.Authentication;
@@ -127,12 +128,12 @@ public class AccountController : Controller
             principal,
             properties);
 
-        if (Url.IsLocalUrl(model.ReturnUrl))
+        if (Url.IsLocalUrl(model.ReturnUrl) && CanAccessReturnUrl(principal, model.ReturnUrl))
         {
             return LocalRedirect(model.ReturnUrl);
         }
 
-        return RedirectToDefaultRolePage();
+        return RedirectToDefaultRolePage(principal);
     }
 
     [Authorize]
@@ -177,19 +178,89 @@ public class AccountController : Controller
     [HttpGet]
     public IActionResult AccessDenied() => View();
 
-    private IActionResult RedirectToDefaultRolePage()
+    private IActionResult RedirectToDefaultRolePage(ClaimsPrincipal? user = null)
     {
-        if (User.IsInRole(ApplicationRoles.Admin))
+        user ??= User;
+
+        if (user.IsInRole(ApplicationRoles.Admin))
         {
             return RedirectToAction(nameof(AdminDashboard));
         }
 
-        if (User.IsInRole(ApplicationRoles.Lecturer))
+        if (user.IsInRole(ApplicationRoles.Lecturer))
         {
             return RedirectToAction(nameof(LecturerDashboard));
         }
 
         return RedirectToAction(nameof(StudentDashboard));
+    }
+
+    private static bool CanAccessReturnUrl(ClaimsPrincipal user, string? returnUrl)
+    {
+        if (string.IsNullOrWhiteSpace(returnUrl) || !returnUrl.StartsWith('/'))
+        {
+            return false;
+        }
+
+        if (returnUrl.StartsWith("//") || returnUrl.StartsWith("/\\"))
+        {
+            return false;
+        }
+
+        var path = returnUrl.Split('?')[0].Split('#')[0].TrimEnd('/');
+        if (string.IsNullOrEmpty(path))
+        {
+            path = "/";
+        }
+
+        if (path.Equals("/Account/Login", StringComparison.OrdinalIgnoreCase) ||
+            path.Equals("/Account/Logout", StringComparison.OrdinalIgnoreCase) ||
+            path.Equals("/Account/AccessDenied", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var isAdmin = user.IsInRole(ApplicationRoles.Admin);
+        var isLecturer = user.IsInRole(ApplicationRoles.Lecturer);
+        var isStaff = user.IsInRole(ApplicationRoles.Staff);
+
+        // Admin-only paths
+        if (path.StartsWith("/Admin", StringComparison.OrdinalIgnoreCase) ||
+            path.Equals("/Account/Index", StringComparison.OrdinalIgnoreCase) ||
+            path.Equals("/Account/AdminDashboard", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/Account/Create", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/Account/Edit", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/Account/Delete", StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith("/Account/Details", StringComparison.OrdinalIgnoreCase))
+        {
+            return isAdmin;
+        }
+
+        // Lecturer-only dashboard
+        if (path.Equals("/Account/LecturerDashboard", StringComparison.OrdinalIgnoreCase))
+        {
+            return isLecturer;
+        }
+
+        // Class reports accessible to Admin and Lecturer
+        if (path.StartsWith("/ClassReports", StringComparison.OrdinalIgnoreCase))
+        {
+            return isAdmin || isLecturer;
+        }
+
+        // Student-only dashboard
+        if (path.Equals("/Account/StudentDashboard", StringComparison.OrdinalIgnoreCase))
+        {
+            return isStaff;
+        }
+
+        // Student reports accessible to Admin and Staff
+        if (path.StartsWith("/StudentReports", StringComparison.OrdinalIgnoreCase))
+        {
+            return isAdmin || isStaff;
+        }
+
+        return true;
     }
 
     #endregion
