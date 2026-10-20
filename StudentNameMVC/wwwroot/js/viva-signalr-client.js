@@ -209,6 +209,42 @@ class VivaExamClient {
         }
     }
 
+    async leaveSession() {
+        console.log('[SignalR] Leaving session:', this.sessionId);
+        // 1. Cancel / cleanup active recording and release microphone
+        if (this.recorder) {
+            try {
+                this.recorder.cancelRecording();
+            } catch (e) {
+                console.warn('Error cancelling recorder on leave:', e);
+            }
+        }
+
+        // 2. Stop audio playback if active
+        if (this.audioPlayer) {
+            try {
+                this.audioPlayer.pause();
+                this.audioPlayer.src = '';
+            } catch (e) { }
+        }
+
+        // 3. Clear timers
+        if (this.timerInterval) {
+            clearInterval(this.timerInterval);
+            this.timerInterval = null;
+        }
+
+        // 4. Notify SignalR hub
+        if (this.connection && this.connection.state === signalR.HubConnectionState.Connected) {
+            try {
+                await this.connection.invoke('LeaveSession', this.sessionId);
+                await this.connection.stop();
+            } catch (e) {
+                console.warn('Error invoking LeaveSession:', e);
+            }
+        }
+    }
+
     renderSnapshot(snapshot) {
         if (!snapshot) return;
 
