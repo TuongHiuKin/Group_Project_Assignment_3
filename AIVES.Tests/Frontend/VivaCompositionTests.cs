@@ -70,4 +70,19 @@ public sealed class VivaCompositionTests : IClassFixture<VivaCompositionTests.Co
         Assert.NotNull(response.Content.Headers.ContentType);
         Assert.Equal("audio/mpeg", response.Content.Headers.ContentType.MediaType);
     }
+
+    [Fact]
+    public async Task Get_RootUrl_RoutesToLoginWithoutAmbiguousMatchException()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+
+        var response = await client.GetAsync("/");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var content = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Đăng nhập", content);
+    }
 }

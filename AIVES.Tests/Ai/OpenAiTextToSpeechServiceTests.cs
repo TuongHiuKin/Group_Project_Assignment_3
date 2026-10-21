@@ -275,7 +275,7 @@ public class OpenAiTextToSpeechServiceTests
     {
         var handler = new DelegatingHandlerStub(async (req, ct) =>
         {
-            await Task.Delay(1500, ct);
+            await Task.Delay(Timeout.Infinite, ct);
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new ByteArrayContent(new byte[] { 1, 2, 3 })

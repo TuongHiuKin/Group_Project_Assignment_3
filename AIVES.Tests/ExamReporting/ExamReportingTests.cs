@@ -10,7 +10,6 @@ using AIVES.DAL.Repositories.Interfaces;
 using AIVES.DAL.Repositories.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using StudentNameMVC.Controllers;
 using Xunit;
 
 namespace AIVES.Tests.ExamReporting;
@@ -274,9 +273,9 @@ public class ExamReportingTests
     }
 
     [Fact]
-    public async Task StudentReportsController_StudentCannotViewOtherStudentReport_ReturnsForbid()
+    public async Task StudentReportsPage_StudentCannotViewOtherStudentReport_ReturnsForbid()
     {
-        var controller = new StudentReportsController(_studentService);
+        var page = new StudentNameMVC.Pages.StudentReports.IndexModel(_studentService);
         var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
         {
             new Claim(ClaimTypes.NameIdentifier, "SV01"),
@@ -284,21 +283,21 @@ public class ExamReportingTests
             new Claim(ClaimTypes.Role, ApplicationRoles.Staff)
         }, "TestAuth"));
 
-        controller.ControllerContext = new ControllerContext
+        page.PageContext = new Microsoft.AspNetCore.Mvc.RazorPages.PageContext
         {
             HttpContext = new DefaultHttpContext { User = principal }
         };
 
         // Sinh viên SV01 cố tình truyền studentId="SV02" để xem bài của bạn
-        var result = await controller.Index(studentId: "SV02", examId: "EXAM01");
+        var result = await page.OnGetAsync(studentId: "SV02", examId: "EXAM01");
 
         Assert.IsType<ForbidResult>(result);
     }
 
     [Fact]
-    public async Task StudentReportsController_StudentCanViewOwnReport_ReturnsViewResult()
+    public async Task StudentReportsPage_StudentCanViewOwnReport_ReturnsPageResult()
     {
-        var controller = new StudentReportsController(_studentService);
+        var page = new StudentNameMVC.Pages.StudentReports.IndexModel(_studentService);
         var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
         {
             new Claim(ClaimTypes.NameIdentifier, "SV01"),
@@ -306,23 +305,23 @@ public class ExamReportingTests
             new Claim(ClaimTypes.Role, ApplicationRoles.Staff)
         }, "TestAuth"));
 
-        controller.ControllerContext = new ControllerContext
+        page.PageContext = new Microsoft.AspNetCore.Mvc.RazorPages.PageContext
         {
             HttpContext = new DefaultHttpContext { User = principal }
         };
 
         // Sinh viên xem bài thi của chính mình (hoặc truyền null)
-        var result = await controller.Index(studentId: null, examId: "EXAM01");
+        var result = await page.OnGetAsync(studentId: null, examId: "EXAM01");
 
-        var viewResult = Assert.IsType<ViewResult>(result);
-        var model = Assert.IsType<StudentReportDto>(viewResult.Model);
-        Assert.Equal("SV01", model.StudentId);
+        Assert.IsType<Microsoft.AspNetCore.Mvc.RazorPages.PageResult>(result);
+        Assert.NotNull(page.Report);
+        Assert.Equal("SV01", page.Report.StudentId);
     }
 
     [Fact]
-    public async Task StudentReportsController_AdminCanViewAnyStudentReport_ReturnsViewResult()
+    public async Task StudentReportsPage_AdminCanViewAnyStudentReport_ReturnsPageResult()
     {
-        var controller = new StudentReportsController(_studentService);
+        var page = new StudentNameMVC.Pages.StudentReports.IndexModel(_studentService);
         var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
         {
             new Claim(ClaimTypes.NameIdentifier, "admin"),
@@ -330,28 +329,28 @@ public class ExamReportingTests
             new Claim(ClaimTypes.Role, ApplicationRoles.Admin)
         }, "TestAuth"));
 
-        controller.ControllerContext = new ControllerContext
+        page.PageContext = new Microsoft.AspNetCore.Mvc.RazorPages.PageContext
         {
             HttpContext = new DefaultHttpContext { User = principal }
         };
 
         // Admin có thể xem bài của bất kỳ sinh viên nào (SV02)
-        var result = await controller.Index(studentId: "SV02", examId: "EXAM01");
+        var result = await page.OnGetAsync(studentId: "SV02", examId: "EXAM01");
 
-        var viewResult = Assert.IsType<ViewResult>(result);
-        var model = Assert.IsType<StudentReportDto>(viewResult.Model);
-        Assert.Equal("SV02", model.StudentId);
+        Assert.IsType<Microsoft.AspNetCore.Mvc.RazorPages.PageResult>(result);
+        Assert.NotNull(page.Report);
+        Assert.Equal("SV02", page.Report.StudentId);
     }
 
     [Fact]
-    public void ReportingControllers_DoNotDependOnExamReportRepository()
+    public void ReportingPageModels_DoNotDependOnExamReportRepository()
     {
-        // Kiểm tra kiến trúc: Controller không được nhận IExamReportRepository trong constructor
-        var studentCtors = typeof(StudentReportsController).GetConstructors();
+        // Kiểm tra kiến trúc: PageModel không được nhận IExamReportRepository trong constructor
+        var studentCtors = typeof(StudentNameMVC.Pages.StudentReports.IndexModel).GetConstructors();
         Assert.All(studentCtors, c =>
             Assert.DoesNotContain(c.GetParameters(), p => p.ParameterType == typeof(IExamReportRepository)));
 
-        var classCtors = typeof(ClassReportsController).GetConstructors();
+        var classCtors = typeof(StudentNameMVC.Pages.ClassReports.IndexModel).GetConstructors();
         Assert.All(classCtors, c =>
             Assert.DoesNotContain(c.GetParameters(), p => p.ParameterType == typeof(IExamReportRepository)));
     }

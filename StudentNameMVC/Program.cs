@@ -14,7 +14,6 @@ using StudentNameMVC;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllersWithViews();
 builder.Services.AddRazorPages(options =>
 {
     options.Conventions.AddPageRoute("/Account/Login", "");
@@ -147,9 +146,6 @@ app.UseAuthorization();
 if (vivaEnabled) app.MapVivaRealtime();
 app.MapRazorPages();
 
-app.MapControllerRoute(
-    name: "default",
-    pattern: "{controller=Account}/{action=Login}/{id?}");
 
 app.Run();
 

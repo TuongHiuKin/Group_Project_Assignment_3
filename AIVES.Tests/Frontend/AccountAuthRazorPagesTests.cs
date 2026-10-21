@@ -8,6 +8,7 @@ using AIVES.BLL.Models.ExamReporting;
 using AIVES.BLL.Security;
 using AIVES.DAL.Entities;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -312,6 +313,81 @@ public sealed class AccountAuthRazorPagesTests
         }
     }
 
+    [Fact]
+    public void Claims_factory_creates_required_identity_claims()
+    {
+        var principal = AuthenticationClaimsFactory.CreatePrincipal(new AuthenticatedUser(
+            "17",
+            "Staff Member",
+            "staff@example.test",
+            ApplicationRoles.Staff));
+
+        Assert.True(principal.Identity!.IsAuthenticated);
+        Assert.Equal("17", principal.FindFirstValue(ClaimTypes.NameIdentifier));
+        Assert.Equal("Staff Member", principal.Identity.Name);
+        Assert.Equal("staff@example.test", principal.FindFirstValue(ClaimTypes.Email));
+        Assert.True(principal.IsInRole(ApplicationRoles.Staff));
+    }
+
+    [Fact]
+    public async Task Cookie_validation_rejects_an_inactive_database_account()
+    {
+        var authService = new StubAuthService { IsActive = false };
+        var authenticationService = new RecordingAuthenticationService();
+        var services = new ServiceCollection()
+            .AddSingleton<IAuthenticationService>(authenticationService)
+            .BuildServiceProvider();
+        var httpContext = new DefaultHttpContext { RequestServices = services };
+        var principal = AuthenticationClaimsFactory.CreatePrincipal(new AuthenticatedUser(
+            "17",
+            "Staff Member",
+            "staff@example.test",
+            ApplicationRoles.Staff));
+        var scheme = new AuthenticationScheme(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            null,
+            typeof(CookieAuthenticationHandler));
+        var ticket = new AuthenticationTicket(principal, scheme.Name);
+        var context = new CookieValidatePrincipalContext(
+            httpContext,
+            scheme,
+            new CookieAuthenticationOptions(),
+            ticket);
+
+        await new ActiveAccountCookieEvents(authService).ValidatePrincipal(context);
+
+        Assert.Null(context.Principal);
+        Assert.True(authenticationService.SignedOut);
+        Assert.Equal(17, authService.LastAccountId);
+    }
+
+    [Fact]
+    public async Task Cookie_validation_keeps_configuration_admin_without_database_lookup()
+    {
+        var authService = new StubAuthService { IsActive = false };
+        var httpContext = new DefaultHttpContext();
+        var principal = AuthenticationClaimsFactory.CreatePrincipal(new AuthenticatedUser(
+            ApplicationRoles.AdminSubjectId,
+            "Administrator",
+            "admin@example.test",
+            ApplicationRoles.Admin));
+        var scheme = new AuthenticationScheme(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            null,
+            typeof(CookieAuthenticationHandler));
+        var context = new CookieValidatePrincipalContext(
+            httpContext,
+            scheme,
+            new CookieAuthenticationOptions(),
+            new AuthenticationTicket(principal, scheme.Name));
+
+        await new ActiveAccountCookieEvents(authService).ValidatePrincipal(context);
+
+        Assert.Same(principal, context.Principal);
+        Assert.Null(authService.LastAccountId);
+    }
+
+
     private static LoginModel CreateLoginModel(IAuthService authService, out RecordingAuthenticationService authRecorder)
     {
         authRecorder = new RecordingAuthenticationService();
@@ -339,6 +415,8 @@ public sealed class AccountAuthRazorPagesTests
 
     private sealed class StubAuthService : IAuthService
     {
+        public bool IsActive { get; set; } = true;
+        public int? LastAccountId { get; private set; }
         public AuthenticationResult AuthenticateResultToReturn { get; set; } = AuthenticationResult.Failure;
 
         public Task<AuthenticationResult> AuthenticateAsync(string email, string password, CancellationToken cancellationToken = default) =>
@@ -350,8 +428,11 @@ public sealed class AccountAuthRazorPagesTests
         public Task<bool> ResetPasswordAsync(string email, string token, string newPassword, CancellationToken cancellationToken = default) =>
             Task.FromResult(false);
 
-        public Task<bool> IsAccountActiveAsync(int accountId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
+        public Task<bool> IsAccountActiveAsync(int accountId, CancellationToken cancellationToken = default)
+        {
+            LastAccountId = accountId;
+            return Task.FromResult(IsActive);
+        }
     }
 
     private sealed class RecordingAuthenticationService : IAuthenticationService
