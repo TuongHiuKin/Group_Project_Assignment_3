@@ -13,6 +13,40 @@
     var currentAct = ViewContext.RouteData.Values["action"]?.ToString();
     var currentPage = ViewContext.RouteData.Values["page"]?.ToString();
     var isAuth = User.Identity?.IsAuthenticated == true;
+
+    bool isAdminDashboardActive =
+        (string.Equals(currentCtrl, "Account", StringComparison.OrdinalIgnoreCase) &&
+         (string.Equals(currentAct, "AdminDashboard", StringComparison.OrdinalIgnoreCase) ||
+          string.Equals(currentAct, "Dashboard", StringComparison.OrdinalIgnoreCase))) ||
+        string.Equals(currentPage, "/Account/AdminDashboard", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(currentPage, "/Account/Dashboard", StringComparison.OrdinalIgnoreCase);
+
+    bool isAccountIndexActive =
+        (string.Equals(currentCtrl, "Account", StringComparison.OrdinalIgnoreCase) &&
+         string.Equals(currentAct, "Index", StringComparison.OrdinalIgnoreCase)) ||
+        string.Equals(currentPage, "/Account/Index", StringComparison.OrdinalIgnoreCase);
+
+    bool isLecturerDashboardActive =
+        (string.Equals(currentCtrl, "Account", StringComparison.OrdinalIgnoreCase) &&
+         (string.Equals(currentAct, "LecturerDashboard", StringComparison.OrdinalIgnoreCase) ||
+          string.Equals(currentAct, "Dashboard", StringComparison.OrdinalIgnoreCase))) ||
+        string.Equals(currentPage, "/Account/LecturerDashboard", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(currentPage, "/Account/Dashboard", StringComparison.OrdinalIgnoreCase);
+
+    bool isStudentDashboardActive =
+        (string.Equals(currentCtrl, "Account", StringComparison.OrdinalIgnoreCase) &&
+         (string.Equals(currentAct, "StudentDashboard", StringComparison.OrdinalIgnoreCase) ||
+          string.Equals(currentAct, "Dashboard", StringComparison.OrdinalIgnoreCase))) ||
+        string.Equals(currentPage, "/Account/StudentDashboard", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(currentPage, "/Account/Dashboard", StringComparison.OrdinalIgnoreCase);
+
+    bool isClassReportsActive =
+        string.Equals(currentCtrl, "ClassReports", StringComparison.OrdinalIgnoreCase) ||
+        (currentPage != null && currentPage.StartsWith("/ClassReports", StringComparison.OrdinalIgnoreCase));
+
+    bool isStudentReportsActive =
+        string.Equals(currentCtrl, "StudentReports", StringComparison.OrdinalIgnoreCase) ||
+        (currentPage != null && currentPage.StartsWith("/StudentReports", StringComparison.OrdinalIgnoreCase));
 }
 <!DOCTYPE html>
 <html lang="vi">
@@ -38,7 +72,7 @@
                 <aside class="app-sidebar" id="appSidebar">
                     <div>
                         <!-- Logo & Brand Header -->
-                        <a asp-controller="Account" asp-action="Dashboard" class="brand-header">
+                        <a href="/Account/Dashboard" class="brand-header">
                             <div class="brand-icon-box">
                                 <i class="bi bi-stars"></i>
                             </div>
@@ -50,20 +84,20 @@
                         {
                             <div class="sidebar-category">QUẢN TRỊ VIÊN</div>
                             <ul class="sidebar-nav-list">
-                                <li class="sidebar-nav-item @(string.Equals(currentCtrl, "Account", StringComparison.OrdinalIgnoreCase) && (string.Equals(currentAct, "AdminDashboard", StringComparison.OrdinalIgnoreCase) || string.Equals(currentAct, "Dashboard", StringComparison.OrdinalIgnoreCase)) ? "active" : "")">
-                                    <a asp-controller="Account" asp-action="AdminDashboard">
+                                <li class="sidebar-nav-item @(isAdminDashboardActive ? "active" : "")">
+                                    <a href="/Account/AdminDashboard">
                                         <i class="bi bi-grid-fill"></i>
                                         <span>Dashboard Admin</span>
                                     </a>
                                 </li>
-                                <li class="sidebar-nav-item @(string.Equals(currentCtrl, "Account", StringComparison.OrdinalIgnoreCase) && string.Equals(currentAct, "Index", StringComparison.OrdinalIgnoreCase) ? "active" : "")">
-                                    <a asp-controller="Account" asp-action="Index">
+                                <li class="sidebar-nav-item @(isAccountIndexActive ? "active" : "")">
+                                    <a href="/Account/Index">
                                         <i class="bi bi-people-fill"></i>
                                         <span>Quản lý Tài khoản</span>
                                     </a>
                                 </li>
-                                <li class="sidebar-nav-item @(string.Equals(currentCtrl, "ClassReports", StringComparison.OrdinalIgnoreCase) ? "active" : "")">
-                                    <a asp-controller="ClassReports" asp-action="Index">
+                                <li class="sidebar-nav-item @(isClassReportsActive ? "active" : "")">
+                                    <a href="/ClassReports">
                                         <i class="bi bi-bar-chart-steps"></i>
                                         <span>Báo cáo Học vụ</span>
                                     </a>
@@ -86,14 +120,14 @@
                         {
                             <div class="sidebar-category">GIẢNG VIÊN</div>
                             <ul class="sidebar-nav-list">
-                                <li class="sidebar-nav-item @(string.Equals(currentCtrl, "Account", StringComparison.OrdinalIgnoreCase) && (string.Equals(currentAct, "LecturerDashboard", StringComparison.OrdinalIgnoreCase) || string.Equals(currentAct, "Dashboard", StringComparison.OrdinalIgnoreCase)) ? "active" : "")">
-                                    <a asp-controller="Account" asp-action="LecturerDashboard">
+                                <li class="sidebar-nav-item @(isLecturerDashboardActive ? "active" : "")">
+                                    <a href="/Account/LecturerDashboard">
                                         <i class="bi bi-grid-fill"></i>
                                         <span>Dashboard Giảng viên</span>
                                     </a>
                                 </li>
-                                <li class="sidebar-nav-item @(string.Equals(currentCtrl, "ClassReports", StringComparison.OrdinalIgnoreCase) ? "active" : "")">
-                                    <a asp-controller="ClassReports" asp-action="Index">
+                                <li class="sidebar-nav-item @(isClassReportsActive ? "active" : "")">
+                                    <a href="/ClassReports">
                                         <i class="bi bi-bar-chart-steps"></i>
                                         <span>Thống kê Lớp học</span>
                                     </a>
@@ -110,8 +144,8 @@
                         {
                             <div class="sidebar-category">SINH VIÊN</div>
                             <ul class="sidebar-nav-list">
-                                <li class="sidebar-nav-item @(string.Equals(currentCtrl, "Account", StringComparison.OrdinalIgnoreCase) && (string.Equals(currentAct, "StudentDashboard", StringComparison.OrdinalIgnoreCase) || string.Equals(currentAct, "Dashboard", StringComparison.OrdinalIgnoreCase)) ? "active" : "")">
-                                    <a asp-controller="Account" asp-action="StudentDashboard">
+                                <li class="sidebar-nav-item @(isStudentDashboardActive ? "active" : "")">
+                                    <a href="/Account/StudentDashboard">
                                         <i class="bi bi-grid-fill"></i>
                                         <span>Dashboard Sinh viên</span>
                                     </a>
@@ -122,8 +156,8 @@
                                         <span>Phòng thi Viva</span>
                                     </a>
                                 </li>
-                                <li class="sidebar-nav-item @(string.Equals(currentCtrl, "StudentReports", StringComparison.OrdinalIgnoreCase) ? "active" : "")">
-                                    <a asp-controller="StudentReports" asp-action="Index">
+                                <li class="sidebar-nav-item @(isStudentReportsActive ? "active" : "")">
+                                    <a href="/StudentReports">
                                         <i class="bi bi-journal-check"></i>
                                         <span>Báo cáo cá nhân</span>
                                     </a>
@@ -211,14 +245,14 @@
                                     </li>
                                     <li><hr class="dropdown-divider my-1" /></li>
                                     <li>
-                                        <a class="dropdown-item d-flex align-items-center gap-2 py-2" asp-controller="Account" asp-action="Dashboard">
+                                        <a class="dropdown-item d-flex align-items-center gap-2 py-2" href="/Account/Dashboard">
                                             <i class="bi bi-gear text-secondary"></i>
                                             <span>Cài đặt</span>
                                         </a>
                                     </li>
                                     <li><hr class="dropdown-divider my-1" /></li>
                                     <li>
-                                        <form asp-controller="Account" asp-action="Logout" method="post" class="m-0">
+                                        <form action="/Account/Logout" method="post" class="m-0">
                                             @Html.AntiForgeryToken()
                                             <button type="submit" class="dropdown-item d-flex align-items-center gap-2 py-2 text-danger">
                                                 <i class="bi bi-box-arrow-right"></i>

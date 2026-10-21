@@ -1,4 +1,5 @@
 using System.Net;
+using System.Reflection;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using AIVES.BLL.Interfaces.Ai;
@@ -7,13 +8,18 @@ using AIVES.BLL.Security;
 using AIVES.DAL.Repositories.Interfaces;
 using AIVES.Tests.Realtime;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using StudentNameMVC.Pages;
 using Xunit;
 
 namespace AIVES.Tests.Frontend;
@@ -207,5 +213,54 @@ public sealed class VivaRazorPagesIntegrationTests : IClassFixture<VivaRazorPage
 
         // Sidebar SETTINGS removed
         Assert.DoesNotContain("sidebar-category\">SETTINGS</div>", html);
+    }
+
+    [Fact]
+    public async Task Get_ErrorPage_WithoutAuth_ReturnsSuccessAndRendersSharedLayout()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var response = await client.GetAsync("/Error");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var html = await response.Content.ReadAsStringAsync();
+        Assert.Contains("An error occurred while processing your request.", html);
+        Assert.Contains("Request ID:", html);
+        Assert.Contains("AIVES Viva Exam", html);
+    }
+
+    [Fact]
+    public void ErrorModel_HasRequiredSecurityAndCacheAttributes_AndSetsRequestId()
+    {
+        Assert.NotNull(typeof(ErrorModel).GetCustomAttribute<AllowAnonymousAttribute>());
+        Assert.NotNull(typeof(ErrorModel).GetCustomAttribute<IgnoreAntiforgeryTokenAttribute>());
+        var cacheAttr = typeof(ErrorModel).GetCustomAttribute<ResponseCacheAttribute>();
+        Assert.NotNull(cacheAttr);
+        Assert.Equal(0, cacheAttr.Duration);
+        Assert.Equal(ResponseCacheLocation.None, cacheAttr.Location);
+        Assert.True(cacheAttr.NoStore);
+
+        var model = new ErrorModel
+        {
+            PageContext = new PageContext
+            {
+                HttpContext = new DefaultHttpContext { TraceIdentifier = "trace-step0-test" }
+            }
+        };
+
+        model.OnGet();
+
+        Assert.Equal("trace-step0-test", model.RequestId);
+        Assert.True(model.ShowRequestId);
+    }
+
+    [Fact]
+    public async Task Get_RootRoute_RendersLoginWithoutAmbiguousMatch()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+
+        var response = await client.GetAsync("/");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 }
