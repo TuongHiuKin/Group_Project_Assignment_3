@@ -43,6 +43,22 @@
         </div>
     }
 
+    @if (!Model.IsAiConfigured)
+    {
+        <div class="alert alert-warning border-0 rounded-4 shadow-sm d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4" role="alert">
+            <div>
+                <i class="bi bi-exclamation-octagon-fill me-2 text-warning"></i>
+                <strong>Chưa cấu hình AI:</strong> Chưa cấu hình AI, vui lòng nhờ Admin vào Cấu hình AI để thiết lập API key hoặc kết nối máy chủ AI trước khi tạo phiên thi.
+            </div>
+            @if (User.IsInRole("Admin"))
+            {
+                <a href="/Admin/AiSettings" class="btn btn-sm btn-warning rounded-pill fw-bold px-3">
+                    <i class="bi bi-sliders me-1"></i> Mở Cấu hình AI
+                </a>
+            }
+        </div>
+    }
+
     <div class="row g-4">
         <!-- LEFT COLUMN: Workflow Guide & Device Testing -->
         <div class="col-lg-7">
@@ -171,7 +187,7 @@
                         <form method="post" asp-page-handler="Create">
                             @Html.AntiForgeryToken()
                             <input type="hidden" name="ExamIdInput" value="EXAM01" />
-                            <button type="submit" class="btn btn-primary w-100 py-3 rounded-pill fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2">
+                            <button type="submit" class="btn btn-primary w-100 py-3 rounded-pill fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2" @(!Model.IsAiConfigured ? "disabled" : null)>
                                 <i class="bi bi-lightning-charge-fill"></i> Vào thi ngay đề EXAM01
                             </button>
                         </form>
@@ -201,7 +217,7 @@
                                     <input asp-for="ExamIdInput" class="form-control" style="border-radius: 0 14px 14px 0; padding: 12px;" placeholder="Ví dụ: EXAM01, EXAM02..." required />
                                 </div>
                             </div>
-                            <button type="submit" class="btn btn-outline-primary w-100 py-2 rounded-pill fw-bold">
+                            <button type="submit" class="btn btn-outline-primary w-100 py-2 rounded-pill fw-bold" @(!Model.IsAiConfigured ? "disabled" : null)>
                                 <i class="bi bi-plus-lg me-1"></i> Tạo phiên thi mới
                             </button>
                         </form>

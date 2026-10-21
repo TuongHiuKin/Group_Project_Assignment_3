@@ -326,8 +326,6 @@ class VivaExamClient {
     }
 
     playTts(text, audioEl, audioUrl, onEndCallback) {
-        const isMockAudio = !audioUrl || audioUrl.includes('mock-question.mp3');
-
         // Playback via browser Web Speech API (Vietnamese voice)
         const speakBrowserTts = () => {
             if (!('speechSynthesis' in window) || !text) {
@@ -361,16 +359,8 @@ class VivaExamClient {
             window.speechSynthesis.speak(utterance);
         };
 
-        if (isMockAudio) {
-            // In mock mode: touch audioEl so HTTP 200 is verified without 404, but speak text aloud
-            if (audioEl && audioUrl) {
-                audioEl.src = audioUrl;
-                audioEl.currentTime = 0;
-                audioEl.play().catch(() => {});
-            }
-            speakBrowserTts();
-        } else if (audioEl && audioUrl) {
-            // Real cloud TTS: play synthesized audio file directly
+        if (audioEl && audioUrl) {
+            // Play synthesized audio file directly
             audioEl.src = audioUrl;
             audioEl.currentTime = 0;
             audioEl.play()

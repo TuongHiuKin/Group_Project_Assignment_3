@@ -59,7 +59,7 @@ public sealed class GeminiSpeechToTextService : ISpeechToTextService
                 _logger?.LogInformation("Using fallback STT service (Gemini API key is not configured).");
                 return await _fallbackService.TranscribeAsync(audioStream, contentType, ct).ConfigureAwait(false);
             }
-            return new SpeechToTextResult(false, string.Empty, 0m, "Gemini API key is not configured.");
+            return new SpeechToTextResult(false, string.Empty, 0m, "Chưa cấu hình API key cho Gemini (API key is not configured).");
         }
 
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -141,7 +141,7 @@ public sealed class GeminiSpeechToTextService : ISpeechToTextService
                 using var fallbackStream = new MemoryStream(audioBytes);
                 return await _fallbackService.TranscribeAsync(fallbackStream, contentType, ct).ConfigureAwait(false);
             }
-            return new SpeechToTextResult(false, string.Empty, 0m, $"Gemini STT operation timed out after {_timeoutSeconds} seconds.");
+            return new SpeechToTextResult(false, string.Empty, 0m, $"Quá thời gian chờ nhận diện giọng nói Gemini sau {_timeoutSeconds} giây (timed out).");
         }
         catch (Exception ex)
         {
@@ -153,7 +153,7 @@ public sealed class GeminiSpeechToTextService : ISpeechToTextService
                 using var fallbackStream = new MemoryStream(audioBytes);
                 return await _fallbackService.TranscribeAsync(fallbackStream, contentType, ct).ConfigureAwait(false);
             }
-            return new SpeechToTextResult(false, string.Empty, 0m, $"Network error contacting Gemini STT: {sanitizedErr}");
+            return new SpeechToTextResult(false, string.Empty, 0m, $"Lỗi kết nối mạng tới Gemini STT: {sanitizedErr}");
         }
 
         sw.Stop();
@@ -173,7 +173,7 @@ public sealed class GeminiSpeechToTextService : ISpeechToTextService
                 return await _fallbackService.TranscribeAsync(fallbackStream, contentType, ct).ConfigureAwait(false);
             }
 
-            return new SpeechToTextResult(false, string.Empty, 0m, $"Gemini STT error: {errorMsg}");
+            return new SpeechToTextResult(false, string.Empty, 0m, $"Lỗi nhận diện giọng nói Gemini (HTTP {(int)response.StatusCode}): {errorMsg}");
         }
 
         try

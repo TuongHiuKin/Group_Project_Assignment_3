@@ -6,6 +6,7 @@ using AIVES.BLL.Options;
 using AIVES.BLL.Services.Ai.Mocks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace AIVES.BLL.Services.Ai.Adapters;
 
@@ -48,7 +49,8 @@ public sealed class OpenAiProviderAdapter : IAiProviderAdapter
 
         var httpClient = sp.GetRequiredService<HttpClient>();
         var logger = sp.GetService<ILogger<WhisperSpeechToTextService>>();
-        var mock = sp.GetService<MockSpeechToTextService>();
+        var allowFallback = sp.GetService<IOptions<AiServiceOptions>>()?.Value.AllowMockFallback ?? false;
+        var mock = allowFallback ? sp.GetService<MockSpeechToTextService>() : null;
         return new WhisperSpeechToTextService(httpClient, customOptions, logger, mock);
     }
 
@@ -81,7 +83,8 @@ public sealed class OpenAiProviderAdapter : IAiProviderAdapter
 
         var httpClient = sp.GetRequiredService<HttpClient>();
         var logger = sp.GetService<ILogger<OpenAiTextToSpeechService>>();
-        var mock = sp.GetService<MockTextToSpeechService>();
+        var allowFallback = sp.GetService<IOptions<AiServiceOptions>>()?.Value.AllowMockFallback ?? false;
+        var mock = allowFallback ? sp.GetService<MockTextToSpeechService>() : null;
         return new OpenAiTextToSpeechService(httpClient, customOptions, logger, mock, cacheDirectory);
     }
 
@@ -107,7 +110,8 @@ public sealed class OpenAiProviderAdapter : IAiProviderAdapter
 
         var httpClient = sp.GetRequiredService<HttpClient>();
         var logger = sp.GetService<ILogger<OpenAiFollowUpGeneratorService>>();
-        var mock = sp.GetService<MockFollowUpGeneratorService>();
+        var allowFallback = sp.GetService<IOptions<AiServiceOptions>>()?.Value.AllowMockFallback ?? false;
+        var mock = allowFallback ? sp.GetService<MockFollowUpGeneratorService>() : null;
         return new OpenAiFollowUpGeneratorService(httpClient, customOptions, logger, mock);
     }
 
