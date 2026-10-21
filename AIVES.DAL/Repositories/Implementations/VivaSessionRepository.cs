@@ -36,6 +36,14 @@ public sealed class VivaSessionRepository(AIVESDbContext context) : IVivaSession
         return await query.OrderBy(x => x.StartedAtUtc).ToListAsync(ct);
     }
 
+    public Task<List<string>> GetDistinctExamIdsAsync(CancellationToken ct = default) =>
+        context.VivaSessions.AsNoTracking()
+            .Select(x => x.ExamId)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct()
+            .OrderBy(x => x)
+            .ToListAsync(ct);
+
     public async Task<Guid> CreateSessionAsync(VivaSession session, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(session);

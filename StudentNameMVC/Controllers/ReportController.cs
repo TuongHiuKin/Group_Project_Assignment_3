@@ -15,10 +15,10 @@ public class ReportController : Controller
         _reportService = reportService ?? throw new ArgumentNullException(nameof(reportService));
     }
 
+    [NonAction]
     [HttpGet]
     public async Task<IActionResult> Index(DateTime? startDate, DateTime? endDate, CancellationToken ct)
     {
-        // 1. Mặc định nếu chưa chọn ngày: lấy từ đầu tháng hiện tại đến hôm nay theo giờ Việt Nam
         var nowVn = DateTime.UtcNow.AddHours(7);
         if (!startDate.HasValue && !endDate.HasValue)
         {
@@ -32,14 +32,12 @@ public class ReportController : Controller
             EndDate = endDate
         };
 
-        // 2. Validate ngày bắt buộc đủ cặp
         if (!startDate.HasValue || !endDate.HasValue)
         {
             ModelState.AddModelError(string.Empty, "Vui lòng chọn đầy đủ cả Từ ngày và Đến ngày.");
             return View(viewModel);
         }
 
-        // 3. Validate thứ tự ngày (BR-15)
         if (startDate.Value.Date > endDate.Value.Date)
         {
             ModelState.AddModelError(string.Empty, "Từ ngày không được lớn hơn Đến ngày.");
@@ -69,6 +67,7 @@ public class ReportController : Controller
         return View(viewModel);
     }
 
+    [NonAction]
     [HttpGet]
     public IActionResult AdminReport(DateTime? startDate, DateTime? endDate, CancellationToken ct)
     {

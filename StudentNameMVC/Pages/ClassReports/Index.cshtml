@@ -1,15 +1,18 @@
-@model AIVES.BLL.Models.ExamReporting.ClassStatisticsDto
+@page "/ClassReports"
+@model StudentNameMVC.Pages.ClassReports.IndexModel
 @{
     ViewData["Title"] = "Thống kê Lớp Thi Vấn Đáp (Giảng viên)";
-    var availableExams = ViewBag.AvailableExams as List<AIVES.BLL.Models.ExamReporting.ExamSettingsSnapshot> ?? new();
-    var availableClasses = ViewBag.AvailableClasses as List<string> ?? new();
-    string selectedTeacherId = ViewBag.SelectedTeacherId as string ?? "GV01";
-    string selectedClassId = ViewBag.SelectedClassId as string ?? "SE1701";
-    string selectedExamId = ViewBag.SelectedExamId as string ?? "EXAM01";
-    int? selectedAttemptOrdinal = ViewBag.SelectedAttemptOrdinal as int?;
+    var availableExams = Model.AvailableExams;
+    var availableClasses = Model.AvailableClasses;
+    string selectedTeacherId = Model.SelectedTeacherId;
+    string selectedClassId = Model.SelectedClassId;
+    string selectedExamId = Model.SelectedExamId;
+    int? selectedAttemptOrdinal = Model.SelectedAttemptOrdinal;
 
-    int passedCount = Model?.GradeExportRows.Count(r => r.ResultStatus == "ĐẠT") ?? 0;
-    int failedCount = (Model?.GradeExportRows.Count ?? 0) - passedCount;
+    int passedCount = Model.Statistics?.GradeExportRows.Count(r => r.ResultStatus == "ĐẠT") ?? 0;
+    int failedCount = Model.Statistics?.GradeExportRows.Count(r => r.ResultStatus == "CHƯA ĐẠT") ?? 0;
+    int pendingCount = (Model.Statistics?.GradeExportRows.Count ?? 0) - passedCount - failedCount;
+    bool hasAnyGraded = passedCount + failedCount > 0;
 }
 
 <div class="viva-exam-shell">
@@ -28,11 +31,10 @@
             </div>
 
             <div class="d-flex align-items-center gap-2 flex-wrap">
-                <!-- Export Grade Sheet Button (Nhóm 6) -->
-                <a asp-action="ExportGradeSheet" 
-                   asp-route-teacherId="@selectedTeacherId" 
-                   asp-route-classId="@selectedClassId" 
-                   asp-route-examId="@selectedExamId" 
+                <a asp-page="/ClassReports/ExportGradeSheet"
+                   asp-route-teacherId="@selectedTeacherId"
+                   asp-route-classId="@selectedClassId"
+                   asp-route-examId="@selectedExamId"
                    class="btn btn-success rounded-pill px-4 fw-bold shadow-sm d-flex align-items-center gap-2">
                     <i class="bi bi-file-earmark-excel-fill"></i> Xuất Bảng Điểm (.CSV)
                 </a>
@@ -51,11 +53,11 @@
 
     <!-- 2. Modern Filter Card -->
     <div class="viva-panel-card p-4">
-        <form method="get" asp-action="Index" class="row g-3 align-items-end">
+        <form method="get" asp-page="/ClassReports/Index" class="row g-3 align-items-end">
             <input type="hidden" name="teacherId" value="@selectedTeacherId" />
 
             <div class="col-md-3">
-                <label class="form-label fw-bold small text-secondary mb-1">Lớp học phần:</label>
+                <label class="form-label fw-bold small text-secondary mb-1">Mã đề / Nhóm thi:</label>
                 <select name="classId" class="form-select" style="border-radius: 12px; padding: 10px 14px; background: #f8fafc; border: 1px solid #edf2f7;">
                     @foreach (var cls in availableClasses)
                     {
@@ -91,8 +93,9 @@
         </form>
     </div>
 
-    @if (Model != null)
+    @if (Model.Statistics != null)
     {
+        var stats = Model.Statistics;
         <!-- 3. Four Metric Cards -->
         <div class="report-metric-grid">
             <div class="report-metric-card">
@@ -103,8 +106,8 @@
                     </div>
                 </div>
                 <div>
-                    <div class="report-metric-value text-primary">@Model.TotalStudentsCount</div>
-                    <div class="report-metric-sub">Đã thi trong lớp @Model.ClassId</div>
+                    <div class="report-metric-value text-primary">@stats.TotalStudentsCount</div>
+                    <div class="report-metric-sub">Đã thi trong đề @stats.ClassId</div>
                 </div>
             </div>
 
@@ -116,8 +119,16 @@
                     </div>
                 </div>
                 <div>
-                    <div class="report-metric-value text-success">@Model.AverageClassScore.ToString("0.00") / 10</div>
-                    <div class="report-metric-sub">Tính trên điểm TB của từng SV</div>
+                    @if (hasAnyGraded)
+                    {
+                        <div class="report-metric-value text-success">@stats.AverageClassScore.ToString("0.00") / 10</div>
+                        <div class="report-metric-sub">Tính trên điểm TB của từng SV đã chấm</div>
+                    }
+                    else
+                    {
+                        <div class="report-metric-value text-secondary fs-4">Chưa chấm</div>
+                        <div class="report-metric-sub">Các lượt thi đang ở trạng thái chờ chấm</div>
+                    }
                 </div>
             </div>
 
@@ -130,9 +141,9 @@
                 </div>
                 <div>
                     <div class="report-metric-value text-danger fs-4">
-                        @if (Model.HardestQuestions.Any())
+                        @if (stats.HardestQuestions.Any())
                         {
-                            @string.Join(", ", Model.HardestQuestions.Select(q => q.QuestionId))
+                            @string.Join(", ", stats.HardestQuestions.Select(q => q.QuestionId))
                         }
                         else
                         {
@@ -140,7 +151,7 @@
                         }
                     </div>
                     <div class="report-metric-sub">
-                        @(Model.HardestQuestions.Any() ? $"Tỷ lệ không đạt: {Model.HardestQuestions.First().FailRate}%" : "Chưa đủ dữ liệu")
+                        @(stats.HardestQuestions.Any() ? $"Tỷ lệ không đạt: {stats.HardestQuestions.First().FailRate}%" : "Chưa chấm / chưa đủ dữ liệu")
                     </div>
                 </div>
             </div>
@@ -153,14 +164,14 @@
                     </div>
                 </div>
                 <div>
-                    <div class="report-metric-value text-dark fs-5">@Model.DataScopeLabel</div>
-                    <div class="report-metric-sub text-truncate">@Model.ExamTitle</div>
+                    <div class="report-metric-value text-dark fs-5">@stats.DataScopeLabel</div>
+                    <div class="report-metric-sub text-truncate">@stats.ExamTitle</div>
                 </div>
             </div>
         </div>
 
         <!-- 4. Hardest Question Alert Callout (DEC-09) -->
-        @if (Model.HardestQuestions.Any())
+        @if (stats.HardestQuestions.Any())
         {
             <div class="p-4 rounded-4 mb-4" style="background: #fff1f2; border: 1px solid #fecdd3;">
                 <div class="d-flex align-items-center mb-2">
@@ -168,14 +179,14 @@
                     <h5 class="fw-bold text-danger mb-0">Phân tích Câu hỏi Khó nhất (Tỷ lệ không đạt cao nhất):</h5>
                 </div>
                 <p class="mb-2 text-dark">
-                    Hệ thống xác định có <strong>@Model.HardestQuestions.Count câu hỏi</strong> có tỷ lệ sinh viên trả lời không đạt cao nhất là 
-                    <strong class="text-danger">@Model.HardestQuestions.First().FailRate%</strong> (đồng hạng theo DEC-09):
+                    Hệ thống xác định có <strong>@stats.HardestQuestions.Count câu hỏi</strong> có tỷ lệ sinh viên trả lời không đạt cao nhất là
+                    <strong class="text-danger">@stats.HardestQuestions.First().FailRate%</strong> (đồng hạng theo DEC-09):
                 </p>
                 <ul class="mb-0 text-dark">
-                    @foreach (var hq in Model.HardestQuestions)
+                    @foreach (var hq in stats.HardestQuestions)
                     {
                         <li class="mb-1">
-                            <strong>[@hq.QuestionId - Thang Bloom: @hq.CognitiveLevel]</strong> @hq.QuestionTitle 
+                            <strong>[@hq.QuestionId - Thang Bloom: @hq.CognitiveLevel]</strong> @hq.QuestionTitle
                             — <em class="text-danger">Số lượt không đạt: @hq.FailedCount / @hq.TotalAssessed (Tỷ lệ đạt: @hq.PassRate%)</em>
                         </li>
                     }
@@ -185,7 +196,6 @@
 
         <!-- 5. Charts & Analytics Section (Two Visual Charts Side-by-Side) -->
         <div class="row g-4 mb-4">
-            <!-- Score Distribution Histogram (DEC-06) -->
             <div class="col-lg-7">
                 <div class="viva-panel-card h-100">
                     <div class="viva-panel-header">
@@ -197,36 +207,57 @@
                         </div>
                     </div>
                     <div class="viva-panel-body p-4">
-                        <canvas id="scoreDistributionChart" height="230"></canvas>
+                        @if (stats.ScoreDistribution.Any())
+                        {
+                            <canvas id="scoreDistributionChart" height="230"></canvas>
+                        }
+                        else
+                        {
+                            <div class="text-center text-muted py-5">
+                                <i class="bi bi-hourglass-split fs-2 d-block mb-2"></i>
+                                Chưa chấm điểm — biểu đồ phân bố điểm sẽ hiển thị sau khi có kết quả chấm.
+                            </div>
+                        }
                     </div>
                 </div>
             </div>
 
-            <!-- Pass/Fail Donut Chart Widget -->
             <div class="col-lg-5">
                 <div class="viva-panel-card h-100">
                     <div class="viva-panel-header">
                         <div>
                             <h5 class="fw-bold mb-0 text-dark">
-                                <i class="bi bi-pie-chart-fill text-success me-2"></i>Tỷ Lệ Đạt Chuẩn Toàn Lớp
+                                <i class="bi bi-pie-chart-fill text-success me-2"></i>Tỷ Lệ Kết Quả Toàn Lớp
                             </h5>
-                            <small class="text-muted">Phân loại sinh viên Đạt vs Chưa đạt</small>
+                            <small class="text-muted">Phân loại trạng thái kết quả của sinh viên</small>
                         </div>
                     </div>
                     <div class="viva-panel-body p-4 d-flex flex-column align-items-center justify-content-center">
-                        <div style="width: 200px; height: 200px; position: relative;">
-                            <canvas id="passFailDonutChart"></canvas>
-                        </div>
-                        <div class="d-flex justify-content-center gap-4 mt-3">
-                            <div class="d-flex align-items-center gap-2">
-                                <span style="width: 12px; height: 12px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
-                                <span class="small fw-bold text-dark">Đạt: @passedCount SV</span>
+                        @if (hasAnyGraded)
+                        {
+                            <div style="width: 200px; height: 200px; position: relative;">
+                                <canvas id="passFailDonutChart"></canvas>
                             </div>
-                            <div class="d-flex align-items-center gap-2">
-                                <span style="width: 12px; height: 12px; border-radius: 50%; background: #ef4444; display: inline-block;"></span>
-                                <span class="small fw-bold text-dark">Chưa đạt: @failedCount SV</span>
+                            <div class="d-flex justify-content-center gap-4 mt-3">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span style="width: 12px; height: 12px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
+                                    <span class="small fw-bold text-dark">Đạt: @passedCount SV</span>
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span style="width: 12px; height: 12px; border-radius: 50%; background: #ef4444; display: inline-block;"></span>
+                                    <span class="small fw-bold text-dark">Chưa đạt: @failedCount SV</span>
+                                </div>
                             </div>
-                        </div>
+                        }
+                        else
+                        {
+                            <div class="text-center text-muted py-4">
+                                <span class="badge tag-pink fs-6 px-3 py-2 rounded-pill mb-2">
+                                    <i class="bi bi-hourglass-split me-1"></i>Chưa chấm: @pendingCount SV
+                                </span>
+                                <p class="small mb-0 mt-2">Chưa có lượt thi nào được chấm điểm nên chưa phân loại Đạt / Chưa đạt.</p>
+                            </div>
+                        }
                     </div>
                 </div>
             </div>
@@ -256,37 +287,46 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach (var q in Model.QuestionStats)
+                            @if (!stats.QuestionStats.Any())
                             {
                                 <tr>
-                                    <td class="fw-bold">#@q.Rank</td>
-                                    <td class="fw-bold text-primary">@q.QuestionId</td>
-                                    <td><span class="badge tag-cyan">@q.CognitiveLevel</span></td>
-                                    <td style="min-width: 180px;">
-                                        <div class="d-flex align-items-center gap-2">
-                                            <div class="progress flex-grow-1" style="height: 8px; border-radius: 9999px; background: #e2e8f0;">
-                                                <div class="progress-fill @(q.PassRate >= 60 ? "bg-success" : "bg-warning")" 
-                                                     style="width: @q.PassRate%; height: 100%; border-radius: 9999px;"></div>
-                                            </div>
-                                            <span class="fw-bold small">@q.PassRate%</span>
-                                        </div>
-                                    </td>
-                                    <td><strong>@q.PassedCount</strong> / @q.TotalAssessed</td>
-                                    <td>
-                                        @if (q.IsHardest)
-                                        {
-                                            <span class="badge tag-pink">Khó nhất</span>
-                                        }
-                                        else if (q.PassRate >= 60)
-                                        {
-                                            <span class="badge tag-cyan">Tốt</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-light text-secondary border">Trung bình</span>
-                                        }
-                                    </td>
+                                    <td colspan="6" class="text-center py-4 text-muted">Chưa chấm — chưa có dữ liệu xếp hạng câu hỏi.</td>
                                 </tr>
+                            }
+                            else
+                            {
+                                @foreach (var q in stats.QuestionStats)
+                                {
+                                    <tr>
+                                        <td class="fw-bold">#@q.Rank</td>
+                                        <td class="fw-bold text-primary">@q.QuestionId</td>
+                                        <td><span class="badge tag-cyan">@q.CognitiveLevel</span></td>
+                                        <td style="min-width: 180px;">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <div class="progress flex-grow-1" style="height: 8px; border-radius: 9999px; background: #e2e8f0;">
+                                                    <div class="progress-fill @(q.PassRate >= 60 ? "bg-success" : "bg-warning")"
+                                                         style="width: @q.PassRate%; height: 100%; border-radius: 9999px;"></div>
+                                                </div>
+                                                <span class="fw-bold small">@q.PassRate%</span>
+                                            </div>
+                                        </td>
+                                        <td><strong>@q.PassedCount</strong> / @q.TotalAssessed</td>
+                                        <td>
+                                            @if (q.IsHardest)
+                                            {
+                                                <span class="badge tag-pink">Khó nhất</span>
+                                            }
+                                            else if (q.PassRate >= 60)
+                                            {
+                                                <span class="badge tag-cyan">Tốt</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-light text-secondary border">Trung bình</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
                             }
                         </tbody>
                     </table>
@@ -299,22 +339,21 @@
             <div class="viva-panel-header">
                 <div>
                     <h5 class="fw-bold mb-0 text-dark">
-                        <i class="bi bi-file-earmark-spreadsheet-fill text-success me-2"></i>Bảng Điểm Tổng Hợp Lớp Học Phần (@Model.ClassId)
+                        <i class="bi bi-file-earmark-spreadsheet-fill text-success me-2"></i>Bảng Điểm Tổng Hợp (@stats.ClassId)
                     </h5>
-                    <small class="text-muted">Danh sách điểm thi vấn đáp của từng sinh viên</small>
+                    <small class="text-muted">Danh sách kết quả thi vấn đáp của từng sinh viên</small>
                 </div>
                 <div class="d-flex align-items-center gap-3">
-                    <!-- Client-side Search Input -->
                     <div class="position-relative">
                         <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted small"></i>
-                        <input type="text" id="studentFilterInput" class="form-control form-control-sm ps-5 rounded-pill" 
-                               style="background: #f8fafc; border: 1px solid #edf2f7; width: 220px;" 
+                        <input type="text" id="studentFilterInput" class="form-control form-control-sm ps-5 rounded-pill"
+                               style="background: #f8fafc; border: 1px solid #edf2f7; width: 220px;"
                                placeholder="Tìm tên hoặc MSSV..." />
                     </div>
-                    <a asp-action="ExportGradeSheet" 
-                       asp-route-teacherId="@selectedTeacherId" 
-                       asp-route-classId="@selectedClassId" 
-                       asp-route-examId="@selectedExamId" 
+                    <a asp-page="/ClassReports/ExportGradeSheet"
+                       asp-route-teacherId="@selectedTeacherId"
+                       asp-route-classId="@selectedClassId"
+                       asp-route-examId="@selectedExamId"
                        class="btn btn-sm btn-outline-success rounded-pill px-3 fw-bold">
                         <i class="bi bi-download me-1"></i> Tải .CSV Excel
                     </a>
@@ -328,7 +367,7 @@
                                 <th>STT</th>
                                 <th>Mã SV</th>
                                 <th>Họ và tên</th>
-                                <th>Lớp</th>
+                                <th>Mã đề / Lớp</th>
                                 <th>Lượt thi 1</th>
                                 <th>Lượt thi 2</th>
                                 <th>Điểm TB</th>
@@ -339,7 +378,7 @@
                         </thead>
                         <tbody>
                             @{ int stt = 1; }
-                            @foreach (var row in Model.GradeExportRows)
+                            @foreach (var row in stats.GradeExportRows)
                             {
                                 <tr class="student-row">
                                     <td>@(stt++)</td>
@@ -350,17 +389,26 @@
                                     <td><span class="badge tag-purple">@row.Attempt2Score</span></td>
                                     <td><span class="fw-bold text-success fs-6">@row.AverageScore</span></td>
                                     <td>
-                                        <span class="badge @(row.ResultStatus == "ĐẠT" ? "bg-success text-white" : "bg-danger text-white") rounded-pill px-3">
-                                            @row.ResultStatus
-                                        </span>
+                                        @if (row.ResultStatus == "ĐẠT")
+                                        {
+                                            <span class="badge bg-success text-white rounded-pill px-3">ĐẠT</span>
+                                        }
+                                        else if (row.ResultStatus == "CHƯA ĐẠT")
+                                        {
+                                            <span class="badge bg-danger text-white rounded-pill px-3">CHƯA ĐẠT</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge tag-pink rounded-pill px-3">Chưa chấm</span>
+                                        }
                                     </td>
                                     <td class="text-muted small">@row.Note</td>
                                     <td class="text-center">
-                                        <a asp-action="StudentDetail" 
-                                           asp-route-studentId="@row.StudentId" 
-                                           asp-route-classId="@selectedClassId" 
-                                           asp-route-examId="@selectedExamId" 
-                                           asp-route-attemptOrdinal="@selectedAttemptOrdinal" 
+                                        <a asp-page="/ClassReports/StudentDetail"
+                                           asp-route-studentId="@row.StudentId"
+                                           asp-route-classId="@selectedClassId"
+                                           asp-route-examId="@selectedExamId"
+                                           asp-route-attemptOrdinal="@selectedAttemptOrdinal"
                                            class="table-action-btn" title="Xem chi tiết bài thi của sinh viên này">
                                             <i class="bi bi-arrow-up-right"></i>
                                         </a>
@@ -400,28 +448,37 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach (var q in Model.QuestionStats)
+                            @if (!stats.QuestionStats.Any())
                             {
-                                <tr style="@(q.IsHardest ? "background-color: #fff1f2;" : "")">
-                                    <td class="fw-bold text-primary">@q.QuestionId</td>
-                                    <td class="fw-semibold text-dark">@q.QuestionTitle</td>
-                                    <td><span class="badge tag-cyan">@q.CognitiveLevel</span></td>
-                                    <td><span class="badge bg-light text-dark border">@q.TotalAssessed</span></td>
-                                    <td class="text-success fw-bold">@q.PassedCount</td>
-                                    <td class="text-danger fw-bold">@q.FailedCount</td>
-                                    <td><span class="badge tag-cyan">@q.PassRate%</span></td>
-                                    <td><span class="badge tag-pink">@q.FailRate%</span></td>
-                                    <td>
-                                        @if (q.IsHardest)
-                                        {
-                                            <span class="badge bg-danger text-white rounded-pill px-3"><i class="bi bi-fire me-1"></i>Khó nhất</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="text-muted small">Bình thường</span>
-                                        }
-                                    </td>
+                                <tr>
+                                    <td colspan="9" class="text-center py-4 text-muted">Chưa chấm — chưa có thống kê đạt/không đạt theo câu hỏi.</td>
                                 </tr>
+                            }
+                            else
+                            {
+                                @foreach (var q in stats.QuestionStats)
+                                {
+                                    <tr style="@(q.IsHardest ? "background-color: #fff1f2;" : "")">
+                                        <td class="fw-bold text-primary">@q.QuestionId</td>
+                                        <td class="fw-semibold text-dark">@q.QuestionTitle</td>
+                                        <td><span class="badge tag-cyan">@q.CognitiveLevel</span></td>
+                                        <td><span class="badge bg-light text-dark border">@q.TotalAssessed</span></td>
+                                        <td class="text-success fw-bold">@q.PassedCount</td>
+                                        <td class="text-danger fw-bold">@q.FailedCount</td>
+                                        <td><span class="badge tag-cyan">@q.PassRate%</span></td>
+                                        <td><span class="badge tag-pink">@q.FailRate%</span></td>
+                                        <td>
+                                            @if (q.IsHardest)
+                                            {
+                                                <span class="badge bg-danger text-white rounded-pill px-3"><i class="bi bi-fire me-1"></i>Khó nhất</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted small">Bình thường</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
                             }
                         </tbody>
                     </table>
@@ -435,7 +492,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            // 1. Client-side student filtering
             const filterInput = document.getElementById('studentFilterInput');
             if (filterInput) {
                 filterInput.addEventListener('input', function () {
@@ -453,13 +509,12 @@
                 });
             }
 
-            @if (Model != null)
+            @if (Model.Statistics != null)
             {
-                // 2. Score Distribution Histogram
-                if (Model.ScoreDistribution.Any())
+                if (Model.Statistics.ScoreDistribution.Any())
                 {
-                    var labelsJson = System.Text.Json.JsonSerializer.Serialize(Model.ScoreDistribution.Select(b => b.Score.ToString("0.0") + "đ"));
-                    var dataJson = System.Text.Json.JsonSerializer.Serialize(Model.ScoreDistribution.Select(b => b.StudentCount));
+                    var labelsJson = System.Text.Json.JsonSerializer.Serialize(Model.Statistics.ScoreDistribution.Select(b => b.Score.ToString("0.0") + "đ"));
+                    var dataJson = System.Text.Json.JsonSerializer.Serialize(Model.Statistics.ScoreDistribution.Select(b => b.StudentCount));
 
                     <text>
                     const ctxHistogram = document.getElementById('scoreDistributionChart')?.getContext('2d');
@@ -509,37 +564,39 @@
                     </text>
                 }
 
-                // 3. Pass/Fail Donut Chart
-                <text>
-                const ctxDonut = document.getElementById('passFailDonutChart')?.getContext('2d');
-                if (ctxDonut) {
-                    new Chart(ctxDonut, {
-                        type: 'doughnut',
-                        data: {
-                            labels: ['Đạt chuẩn', 'Chưa đạt'],
-                            datasets: [{
-                                data: [@passedCount, @failedCount],
-                                backgroundColor: ['#10b981', '#ef4444'],
-                                hoverBackgroundColor: ['#059669', '#dc2626'],
-                                borderWidth: 0
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            cutout: '72%',
-                            plugins: {
-                                legend: { display: false },
-                                tooltip: {
-                                    backgroundColor: '#111827',
-                                    padding: 10,
-                                    cornerRadius: 8
+                if (hasAnyGraded)
+                {
+                    <text>
+                    const ctxDonut = document.getElementById('passFailDonutChart')?.getContext('2d');
+                    if (ctxDonut) {
+                        new Chart(ctxDonut, {
+                            type: 'doughnut',
+                            data: {
+                                labels: ['Đạt chuẩn', 'Chưa đạt'],
+                                datasets: [{
+                                    data: [@passedCount, @failedCount],
+                                    backgroundColor: ['#10b981', '#ef4444'],
+                                    hoverBackgroundColor: ['#059669', '#dc2626'],
+                                    borderWidth: 0
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                cutout: '72%',
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: {
+                                        backgroundColor: '#111827',
+                                        padding: 10,
+                                        cornerRadius: 8
+                                    }
                                 }
                             }
-                        }
-                    });
+                        });
+                    }
+                    </text>
                 }
-                </text>
             }
         });
     </script>

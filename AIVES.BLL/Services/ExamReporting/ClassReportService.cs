@@ -79,14 +79,17 @@ public class ClassReportService : IClassReportService
             var att2 = group.FirstOrDefault(a => a.AttemptOrdinal == 2);
 
             string att1Str = att1 != null
-                ? (att1.GradingState == GradingState.Graded ? $"{att1.NormalizedScore:0.0}" : "Đang chấm")
+                ? (att1.ExamState == ExamState.Abandoned ? "Bỏ dở" : (att1.GradingState == GradingState.Graded ? $"{att1.NormalizedScore:0.0}" : "Chưa chấm"))
                 : "Chưa thi";
 
             string att2Str = att2 != null
-                ? (att2.ExamState == ExamState.Abandoned ? "Bỏ dở" : (att2.GradingState == GradingState.Graded ? $"{att2.NormalizedScore:0.0}" : "Đang chấm"))
+                ? (att2.ExamState == ExamState.Abandoned ? "Bỏ dở" : (att2.GradingState == GradingState.Graded ? $"{att2.NormalizedScore:0.0}" : "Chưa chấm"))
                 : "Chưa thi";
 
             bool isPassed = avgScore.HasValue && avgScore.Value >= settings.PassThresholdScore;
+            string resultStatus = avgScore.HasValue
+                ? (isPassed ? "ĐẠT" : "CHƯA ĐẠT")
+                : "Chưa chấm";
 
             gradeExportRows.Add(new ClassGradeExportRowDto
             {
@@ -95,8 +98,8 @@ public class ClassReportService : IClassReportService
                 ClassId = classId,
                 Attempt1Score = att1Str,
                 Attempt2Score = att2Str,
-                AverageScore = avgScore.HasValue ? $"{avgScore.Value:0.0}" : "Chưa có",
-                ResultStatus = isPassed ? "ĐẠT" : "CHƯA ĐẠT",
+                AverageScore = avgScore.HasValue ? $"{avgScore.Value:0.0}" : "Chưa chấm",
+                ResultStatus = resultStatus,
                 Note = studentGradedAttempts.Count < group.Count() ? "Có lượt thi chờ chấm / bỏ dở" : "Đã hoàn thành"
             });
         }

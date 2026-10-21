@@ -16,6 +16,7 @@ public class StudentReportsController : Controller
         _studentReportService = studentReportService ?? throw new ArgumentNullException(nameof(studentReportService));
     }
 
+    [NonAction]
     [HttpGet]
     public async Task<IActionResult> Index(
         string? studentId = null,
@@ -26,7 +27,6 @@ public class StudentReportsController : Controller
 
         var resolvedStudentId = ResolveStudentId(studentId);
 
-        // DEC-11 & Security: Chặn sinh viên (Staff) tự ý đổi studentId trên URL để xem bài của người khác (chống IDOR)
         if (!User.IsInRole(ApplicationRoles.Admin) && !string.IsNullOrWhiteSpace(studentId) &&
             !string.Equals(studentId, resolvedStudentId, StringComparison.OrdinalIgnoreCase))
         {
@@ -50,13 +50,11 @@ public class StudentReportsController : Controller
 
     private string ResolveStudentId(string? requestedStudentId = null)
     {
-        // Admin có thể xem thay mặt sinh viên bất kỳ
         if (User.IsInRole(ApplicationRoles.Admin) && !string.IsNullOrWhiteSpace(requestedStudentId))
         {
             return requestedStudentId;
         }
 
-        // Lấy định danh từ Claims của tài khoản sinh viên đang đăng nhập
         var email = User.FindFirst(ClaimTypes.Email)?.Value;
         if (!string.IsNullOrWhiteSpace(email))
         {
