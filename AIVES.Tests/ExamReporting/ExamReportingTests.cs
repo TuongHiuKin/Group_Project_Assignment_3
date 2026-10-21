@@ -1,9 +1,13 @@
 using System.Security.Claims;
 using AIVES.BLL.Interfaces.ExamReporting;
 using AIVES.BLL.Models.ExamReporting;
+using AIVES.BLL.Models.VivaInterview;
 using AIVES.BLL.Repositories.ExamReporting;
 using AIVES.BLL.Security;
 using AIVES.BLL.Services.ExamReporting;
+using AIVES.DAL.Entities;
+using AIVES.DAL.Repositories.Interfaces;
+using AIVES.DAL.Repositories.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using StudentNameMVC.Controllers;
@@ -19,7 +23,7 @@ public class ExamReportingTests
 
     public ExamReportingTests()
     {
-        _repository = new MockExamReportRepository();
+        _repository = new TestSeededExamReportRepository();
         _studentService = new StudentReportService(_repository);
         _classService = new ClassReportService(_repository);
     }
@@ -350,6 +354,300 @@ public class ExamReportingTests
         var classCtors = typeof(ClassReportsController).GetConstructors();
         Assert.All(classCtors, c =>
             Assert.DoesNotContain(c.GetParameters(), p => p.ParameterType == typeof(IExamReportRepository)));
+    }
+
+    [Fact]
+    public async Task ExamReportRepository_Maps_VivaSessions_And_Turns_From_Real_Repositories_With_Pending_Grading()
+    {
+        var sessionId = Guid.NewGuid();
+        var session = new VivaSession
+        {
+            SessionId = sessionId,
+            ExamId = "EXAM01",
+            StudentId = "10",
+            State = (byte)VivaSessionState.Completed,
+            StartedAtUtc = DateTime.UtcNow.AddMinutes(-10),
+            CompletedAtUtc = DateTime.UtcNow.AddMinutes(-2),
+            Turns = new List<VivaSessionTurn>
+            {
+                new()
+                {
+                    TurnId = Guid.NewGuid(),
+                    SessionId = sessionId,
+                    QuestionId = "Q1",
+                    TurnOrdinal = 1,
+                    TranscriptText = "Em xin trình bày về Dependency Injection.",
+                    ConfidenceScore = 0.90m,
+                    FollowUpQuestionText = "Tại sao DbContext dùng Scoped?"
+                },
+                new()
+                {
+                    TurnId = Guid.NewGuid(),
+                    SessionId = sessionId,
+                    QuestionId = "Q1",
+                    TurnOrdinal = 2,
+                    TranscriptText = "Để mỗi HTTP request có 1 DbContext riêng biệt.",
+                    ConfidenceScore = 0.92m
+                }
+            }
+        };
+
+        var sessionRepo = new StubSessionRepo([session]);
+        var questionRepo = new StubQuestionRepo([
+            new VivaQuestion { QuestionId = "Q1", ExamId = "EXAM01", Title = "DI Lifetime", Content = "Giải thích vòng đời DI." }
+        ]);
+        var accountRepo = new StubAccountRepo([
+            new SystemAccount { AccountId = 10, AccountName = "Phạm Minh Khoa", AccountEmail = "khoa@fpt.edu.vn", AccountRole = 1 }
+        ]);
+
+        var realRepo = new ExamReportRepository(sessionRepo, questionRepo, accountRepo);
+        var studentService = new StudentReportService(realRepo);
+
+        var report = await studentService.GetStudentReportAsync("10", "EXAM01");
+
+        Assert.NotNull(report);
+        Assert.Equal("10", report.StudentId);
+        Assert.Equal("Phạm Minh Khoa", report.StudentName);
+        Assert.Equal(1, report.CompletedAttemptsCount);
+        Assert.Equal(0, report.GradedAttemptsCount);
+        Assert.Equal(1, report.PendingAttemptsCount);
+        Assert.Null(report.AverageScore); // Chưa chấm (Group 4 chưa triển khai)
+
+        var attempt = Assert.Single(report.Attempts);
+        Assert.Equal(GradingState.Pending, attempt.GradingState);
+        var q = Assert.Single(attempt.QuestionResults);
+        Assert.Equal("Q1", q.QuestionId);
+        Assert.Equal("Em xin trình bày về Dependency Injection.", q.StudentInitialAnswerTranscript);
+        Assert.Equal("Tại sao DbContext dùng Scoped?", q.AiFollowUpQuestion);
+        Assert.Equal("Để mỗi HTTP request có 1 DbContext riêng biệt.", q.StudentFollowUpAnswerTranscript);
+    }
+
+    private sealed class StubSessionRepo(List<VivaSession> sessions) : IVivaSessionRepository
+    {
+        public Task<VivaSession?> GetByIdAsync(Guid sessionId, CancellationToken ct = default) =>
+            Task.FromResult(sessions.FirstOrDefault(s => s.SessionId == sessionId));
+        public Task<VivaSession?> GetWithDetailsAsync(Guid sessionId, CancellationToken ct = default) =>
+            Task.FromResult(sessions.FirstOrDefault(s => s.SessionId == sessionId));
+        public Task<List<VivaSession>> GetSessionsWithDetailsAsync(string? examId = null, string? studentId = null, CancellationToken ct = default)
+        {
+            var q = sessions.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(examId)) q = q.Where(s => s.ExamId == examId);
+            if (!string.IsNullOrWhiteSpace(studentId)) q = q.Where(s => s.StudentId == studentId);
+            return Task.FromResult(q.OrderBy(s => s.StartedAtUtc).ToList());
+        }
+        public Task<Guid> CreateSessionAsync(VivaSession session, CancellationToken ct = default) => Task.FromResult(session.SessionId);
+        public Task UpdateStateAsync(Guid sessionId, byte state, CancellationToken ct = default) => Task.CompletedTask;
+        public Task CompleteSessionAsync(Guid sessionId, DateTime completedAtUtc, CancellationToken ct = default) => Task.CompletedTask;
+    }
+
+    private sealed class StubQuestionRepo(List<VivaQuestion> questions) : IVivaQuestionRepository
+    {
+        public Task<List<VivaQuestion>> GetQuestionsByExamAsync(string examId, CancellationToken ct = default) =>
+            Task.FromResult(questions.Where(q => q.ExamId == examId).ToList());
+        public Task<List<string>> GetDistinctExamIdsAsync(CancellationToken ct = default) =>
+            Task.FromResult(questions.Select(q => q.ExamId).Distinct().ToList());
+        public Task<VivaQuestion?> GetByIdAsync(string questionId, CancellationToken ct = default) =>
+            Task.FromResult(questions.FirstOrDefault(q => q.QuestionId == questionId));
+    }
+
+    private sealed class StubAccountRepo(List<SystemAccount> accounts) : ISystemAccountRepository
+    {
+        public Task<bool> ResetPasswordAsync(int id, string email, string expectedHash, string newHash, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<List<SystemAccount>> SearchAsync(string? keyword = null, byte? role = null, bool includeDeleted = false, CancellationToken ct = default) =>
+            Task.FromResult(accounts);
+        public Task<SystemAccount?> GetByIdAsync(int id, bool includeDeleted = false, CancellationToken ct = default) =>
+            Task.FromResult(accounts.FirstOrDefault(a => a.AccountId == id));
+        public Task<SystemAccount?> GetByEmailAsync(string email, CancellationToken ct = default) =>
+            Task.FromResult(accounts.FirstOrDefault(a => string.Equals(a.AccountEmail, email, StringComparison.OrdinalIgnoreCase)));
+        public Task<bool> EmailExistsAsync(string email, int? exceptId = null, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<bool> IsReferencedAsync(int id, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<int> CreateAsync(AccountCreate input, CancellationToken ct = default) => Task.FromResult(0);
+        public Task<bool> UpdateAsync(AccountUpdate input, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<bool> UpdateProfileAsync(ProfileUpdate input, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<bool> SoftDeleteAsync(int id, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<DeleteResult> HardDeleteAsync(int id, CancellationToken ct = default) => Task.FromResult(DeleteResult.NotFound);
+    }
+
+    private sealed class TestSeededExamReportRepository : IExamReportRepository
+    {
+        private readonly List<AttemptSnapshotDto> _attempts = new();
+        private readonly List<ExamSettingsSnapshot> _exams = new();
+        private readonly Dictionary<string, List<string>> _teacherAssignments = new();
+
+        public TestSeededExamReportRepository()
+        {
+            _exams.Add(new ExamSettingsSnapshot
+            {
+                ExamId = "EXAM01",
+                ExamTitle = "Thi Vấn Đáp - PRN222 .NET Core & Kiến trúc Ba lớp",
+                SubjectCode = "PRN222",
+                SettingsVersion = "1.0",
+                EvaluationMode = ExamEvaluationMode.Score,
+                MaxAllowedAttempts = 3,
+                PassThresholdScore = 6.0m,
+                MinPassPercentage = 60.0m
+            });
+
+            _exams.Add(new ExamSettingsSnapshot
+            {
+                ExamId = "EXAM02",
+                ExamTitle = "Thi Vấn Đáp - SWE302 Thiết kế & Kiến trúc Phần mềm",
+                SubjectCode = "SWE302",
+                SettingsVersion = "1.0",
+                EvaluationMode = ExamEvaluationMode.PassFail,
+                MaxAllowedAttempts = 2,
+                PassThresholdScore = 5.0m,
+                MinPassPercentage = 66.6m,
+                RequiredCriteriaKeys = new List<string> { "ArchitectureBoundary" }
+            });
+
+            _teacherAssignments["GV01"] = new List<string> { "SE1701", "SE1703" };
+            _teacherAssignments["GV02"] = new List<string> { "SE1702" };
+
+            _attempts.Add(new AttemptSnapshotDto
+            {
+                AttemptId = "ATT-001",
+                StudentId = "SV01",
+                StudentName = "Nguyễn Văn A",
+                ClassId = "SE1701",
+                ExamId = "EXAM01",
+                AttemptOrdinal = 1,
+                ExamState = ExamState.Completed,
+                GradingState = GradingState.Graded,
+                CompletedAt = DateTime.UtcNow.AddDays(-2),
+                QuestionResults = new List<QuestionResultDto>
+                {
+                    new() { QuestionId = "Q1", QuestionTitle = "Q1", EarnedScore = 8.0m, MaxScore = 10.0m, AiSuggestedScore = 7.5m, TeacherFinalScore = 8.0m, IsPassed = true, GradingState = GradingState.Graded },
+                    new() { QuestionId = "Q2", QuestionTitle = "Q2", EarnedScore = 4.0m, MaxScore = 10.0m, AiSuggestedScore = 4.0m, TeacherFinalScore = 4.0m, IsPassed = false, GradingState = GradingState.Graded },
+                    new() { QuestionId = "Q3", QuestionTitle = "Q3", EarnedScore = 5.0m, MaxScore = 10.0m, AiSuggestedScore = 5.0m, TeacherFinalScore = 5.0m, IsPassed = false, GradingState = GradingState.Graded }
+                }
+            });
+
+            _attempts.Add(new AttemptSnapshotDto
+            {
+                AttemptId = "ATT-002",
+                StudentId = "SV01",
+                StudentName = "Nguyễn Văn A",
+                ClassId = "SE1701",
+                ExamId = "EXAM01",
+                AttemptOrdinal = 2,
+                ExamState = ExamState.Completed,
+                GradingState = GradingState.Graded,
+                CompletedAt = DateTime.UtcNow.AddDays(-1),
+                QuestionResults = new List<QuestionResultDto>
+                {
+                    new() { QuestionId = "Q1", QuestionTitle = "Q1", EarnedScore = 9.0m, MaxScore = 10.0m, AiSuggestedScore = 9.0m, TeacherFinalScore = 9.0m, IsPassed = true, GradingState = GradingState.Graded },
+                    new() { QuestionId = "Q2", QuestionTitle = "Q2", EarnedScore = 8.0m, MaxScore = 10.0m, AiSuggestedScore = 8.0m, TeacherFinalScore = 8.0m, IsPassed = true, GradingState = GradingState.Graded },
+                    new() { QuestionId = "Q3", QuestionTitle = "Q3", EarnedScore = 7.0m, MaxScore = 10.0m, AiSuggestedScore = 7.0m, TeacherFinalScore = 7.0m, IsPassed = true, GradingState = GradingState.Graded }
+                }
+            });
+
+            _attempts.Add(new AttemptSnapshotDto
+            {
+                AttemptId = "ATT-003",
+                StudentId = "SV02",
+                StudentName = "Trần Thị B",
+                ClassId = "SE1701",
+                ExamId = "EXAM01",
+                AttemptOrdinal = 1,
+                ExamState = ExamState.Completed,
+                GradingState = GradingState.Graded,
+                CompletedAt = DateTime.UtcNow.AddDays(-2),
+                QuestionResults = new List<QuestionResultDto>
+                {
+                    new() { QuestionId = "Q1", QuestionTitle = "Q1", EarnedScore = 4.0m, MaxScore = 10.0m, IsPassed = false, GradingState = GradingState.Graded },
+                    new() { QuestionId = "Q2", QuestionTitle = "Q2", EarnedScore = 2.0m, MaxScore = 10.0m, IsPassed = false, GradingState = GradingState.Graded },
+                    new() { QuestionId = "Q3", QuestionTitle = "Q3", EarnedScore = 3.0m, MaxScore = 10.0m, IsPassed = false, GradingState = GradingState.Graded }
+                }
+            });
+
+            _attempts.Add(new AttemptSnapshotDto
+            {
+                AttemptId = "ATT-004",
+                StudentId = "SV03",
+                StudentName = "Lê Văn C",
+                ClassId = "SE1701",
+                ExamId = "EXAM01",
+                AttemptOrdinal = 1,
+                ExamState = ExamState.Completed,
+                GradingState = GradingState.Graded,
+                CompletedAt = DateTime.UtcNow.AddDays(-2),
+                QuestionResults = new List<QuestionResultDto>
+                {
+                    new() { QuestionId = "Q1", QuestionTitle = "Q1", EarnedScore = 6.0m, MaxScore = 10.0m, IsPassed = true, GradingState = GradingState.Graded },
+                    new() { QuestionId = "Q2", QuestionTitle = "Q2", EarnedScore = 6.0m, MaxScore = 10.0m, IsPassed = true, GradingState = GradingState.Graded },
+                    new() { QuestionId = "Q3", QuestionTitle = "Q3", EarnedScore = 7.0m, MaxScore = 10.0m, IsPassed = true, GradingState = GradingState.Graded }
+                }
+            });
+
+            _attempts.Add(new AttemptSnapshotDto
+            {
+                AttemptId = "ATT-005",
+                StudentId = "SV03",
+                StudentName = "Lê Văn C",
+                ClassId = "SE1701",
+                ExamId = "EXAM01",
+                AttemptOrdinal = 2,
+                ExamState = ExamState.Completed,
+                GradingState = GradingState.Pending,
+                CompletedAt = DateTime.UtcNow.AddHours(-1),
+                QuestionResults = new List<QuestionResultDto>
+                {
+                    new() { QuestionId = "Q1", QuestionTitle = "Q1", EarnedScore = 0m, MaxScore = 10.0m, GradingState = GradingState.Pending }
+                }
+            });
+
+            _attempts.Add(new AttemptSnapshotDto
+            {
+                AttemptId = "ATT-006",
+                StudentId = "SV03",
+                StudentName = "Lê Văn C",
+                ClassId = "SE1701",
+                ExamId = "EXAM01",
+                AttemptOrdinal = 3,
+                ExamState = ExamState.Abandoned,
+                GradingState = GradingState.Failed,
+                CompletedAt = null
+            });
+
+            _attempts.Add(new AttemptSnapshotDto
+            {
+                AttemptId = "ATT-007",
+                StudentId = "SV01",
+                StudentName = "Nguyễn Văn A",
+                ClassId = "SE1701",
+                ExamId = "EXAM02",
+                AttemptOrdinal = 1,
+                ExamState = ExamState.Completed,
+                GradingState = GradingState.Graded,
+                EvaluationMode = ExamEvaluationMode.PassFail,
+                CompletedAt = DateTime.UtcNow.AddDays(-1),
+                QuestionResults = new List<QuestionResultDto>
+                {
+                    new() { QuestionId = "Q1", QuestionTitle = "Q1", EvaluationMode = ExamEvaluationMode.PassFail, IsPassed = true, GradingState = GradingState.Graded, CriteriaOutcomes = new() { { "ArchitectureBoundary", true } } },
+                    new() { QuestionId = "Q2", QuestionTitle = "Q2", EvaluationMode = ExamEvaluationMode.PassFail, IsPassed = true, GradingState = GradingState.Graded, CriteriaOutcomes = new() { { "ArchitectureBoundary", true } } },
+                    new() { QuestionId = "Q3", QuestionTitle = "Q3", EvaluationMode = ExamEvaluationMode.PassFail, IsPassed = false, GradingState = GradingState.Graded }
+                }
+            });
+        }
+
+        public Task<List<AttemptSnapshotDto>> GetStudentAttemptsAsync(string studentId, string examId, CancellationToken ct = default) =>
+            Task.FromResult(_attempts.Where(a => a.StudentId == studentId && a.ExamId == examId).ToList());
+
+        public Task<List<AttemptSnapshotDto>> GetClassAttemptsAsync(string classId, string examId, CancellationToken ct = default) =>
+            Task.FromResult(_attempts.Where(a => a.ClassId == classId && a.ExamId == examId).ToList());
+
+        public Task<bool> IsTeacherAssignedToClassAsync(string teacherId, string classId, CancellationToken ct = default) =>
+            Task.FromResult(_teacherAssignments.TryGetValue(teacherId, out var classes) && classes.Contains(classId));
+
+        public Task<ExamSettingsSnapshot?> GetExamSettingsAsync(string examId, CancellationToken ct = default) =>
+            Task.FromResult(_exams.FirstOrDefault(e => e.ExamId == examId));
+
+        public Task<List<string>> GetAvailableClassesForTeacherAsync(string teacherId, CancellationToken ct = default) =>
+            Task.FromResult(_teacherAssignments.TryGetValue(teacherId, out var classes) ? classes : new List<string>());
+
+        public Task<List<ExamSettingsSnapshot>> GetAvailableExamsAsync(CancellationToken ct = default) =>
+            Task.FromResult(_exams.ToList());
     }
 
     private class FakeExamReportRepository : IExamReportRepository

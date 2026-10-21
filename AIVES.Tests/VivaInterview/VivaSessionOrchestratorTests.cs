@@ -34,6 +34,14 @@ public class VivaSessionOrchestratorTests
             return GetByIdAsync(sessionId, ct);
         }
 
+        public Task<List<VivaSession>> GetSessionsWithDetailsAsync(string? examId = null, string? studentId = null, CancellationToken ct = default)
+        {
+            var query = Sessions.Values.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(examId)) query = query.Where(s => s.ExamId == examId);
+            if (!string.IsNullOrWhiteSpace(studentId)) query = query.Where(s => s.StudentId == studentId);
+            return Task.FromResult(query.OrderBy(s => s.StartedAtUtc).ToList());
+        }
+
         public Task<Guid> CreateSessionAsync(VivaSession session, CancellationToken ct = default)
         {
             Sessions[session.SessionId] = session;
@@ -67,6 +75,12 @@ public class VivaSessionOrchestratorTests
         public Task<List<VivaQuestion>> GetQuestionsByExamAsync(string examId, CancellationToken ct = default)
         {
             var result = Questions.Where(q => q.ExamId == examId).ToList();
+            return Task.FromResult(result);
+        }
+
+        public Task<List<string>> GetDistinctExamIdsAsync(CancellationToken ct = default)
+        {
+            var result = Questions.Select(q => q.ExamId).Distinct().OrderBy(x => x).ToList();
             return Task.FromResult(result);
         }
 
