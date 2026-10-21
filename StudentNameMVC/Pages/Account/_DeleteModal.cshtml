@@ -9,7 +9,7 @@
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="deleteAccountForm" asp-controller="Account" asp-action="Delete" asp-route-id="@Model.AccountId" method="post">
+            <form id="deleteAccountForm" asp-page="/Account/Index" asp-page-handler="Delete" asp-route-id="@Model.AccountId" method="post">
                 @Html.AntiForgeryToken()
                 <div class="modal-body p-4 text-center">
                     <div class="text-danger mb-3">

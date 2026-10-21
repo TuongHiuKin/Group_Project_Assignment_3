@@ -1,5 +1,5 @@
+using AIVES.BLL.Models;
 using AIVES.DAL.Entities;
-using AIVES.DAL.Repositories.Models;
 
 namespace AIVES.BLL.Interfaces;
 
@@ -19,7 +19,7 @@ public interface ISystemAccountService
 
     // --- 3. Admin Account Soft Delete & Hard Delete (TV5 - ACC-05) ---
     Task<bool> SoftDeleteAccountAsync(int id, CancellationToken ct = default);
-    Task<DeleteResult> HardDeleteAccountAsync(int id, CancellationToken ct = default);
+    Task<AccountDeleteResult> HardDeleteAccountAsync(int id, CancellationToken ct = default);
     Task<bool> IsAccountReferencedAsync(int id, CancellationToken ct = default);
 
     // --- 4. Hợp đồng dùng chung cho TV4 (PROFILE-01 - Staff tự cập nhật thông tin) ---

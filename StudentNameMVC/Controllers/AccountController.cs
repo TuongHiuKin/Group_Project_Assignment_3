@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using AIVES.BLL.Interfaces;
+using AIVES.BLL.Models;
 using AIVES.BLL.Security;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -212,8 +213,9 @@ public class AccountController : Controller
 
     #endregion
 
-    #region Admin Account Management (TV5 - M01: ACC-01, ACC-02, ACC-03, ACC-04, ACC-05)
+    #region Admin Account Management (Converted to Razor Pages in Pages/Account/Index; marked [NonAction] until Step 3 removal)
 
+    [NonAction]
     [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpGet]
     public async Task<IActionResult> Index(
@@ -257,6 +259,7 @@ public class AccountController : Controller
         return View(viewModel);
     }
 
+    [NonAction]
     [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpGet]
     public IActionResult CreateModal()
@@ -264,6 +267,7 @@ public class AccountController : Controller
         return PartialView("_CreateModalPartial", new AccountCreateViewModel());
     }
 
+    [NonAction]
     [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -298,6 +302,7 @@ public class AccountController : Controller
         }
     }
 
+    [NonAction]
     [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpGet]
     public async Task<IActionResult> EditModal(
@@ -321,6 +326,7 @@ public class AccountController : Controller
         return PartialView("_EditModalPartial", model);
     }
 
+    [NonAction]
     [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -364,6 +370,7 @@ public class AccountController : Controller
         }
     }
 
+    [NonAction]
     [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpGet]
     public async Task<IActionResult> DeleteModal(
@@ -388,6 +395,7 @@ public class AccountController : Controller
         return PartialView("_DeleteConfirmPartial", model);
     }
 
+    [NonAction]
     [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -408,6 +416,7 @@ public class AccountController : Controller
         return Json(new { success = true, redirectUrl = Url.Action(nameof(Index)) });
     }
 
+    [NonAction]
     [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpGet]
     public async Task<IActionResult> HardDeleteModal(
@@ -435,6 +444,7 @@ public class AccountController : Controller
         return PartialView("_HardDeleteConfirmPartial", model);
     }
 
+    [NonAction]
     [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -446,7 +456,7 @@ public class AccountController : Controller
         if (id <= 0) return BadRequest();
 
         var result = await accountService.HardDeleteAccountAsync(id, ct);
-        if (result == AIVES.DAL.Repositories.Models.DeleteResult.InUse)
+        if (result == AccountDeleteResult.InUse)
         {
             Response.StatusCode = 400;
             return Json(new
@@ -456,7 +466,7 @@ public class AccountController : Controller
             });
         }
 
-        if (result == AIVES.DAL.Repositories.Models.DeleteResult.NotFound)
+        if (result == AccountDeleteResult.NotFound)
         {
             return NotFound();
         }

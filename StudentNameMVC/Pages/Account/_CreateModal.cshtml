@@ -9,7 +9,7 @@
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="createAccountForm" asp-controller="Account" asp-action="Create" method="post">
+            <form id="createAccountForm" asp-page="/Account/Index" asp-page-handler="Create" method="post">
                 @Html.AntiForgeryToken()
                 <div class="modal-body p-4">
                     <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 small" role="alert"></div>
