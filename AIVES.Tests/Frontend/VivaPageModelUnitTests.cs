@@ -9,7 +9,6 @@ using AIVES.Tests.Realtime;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using StudentNameMVC.Pages.Viva;
 using Xunit;
@@ -21,20 +20,6 @@ public sealed class VivaPageModelUnitTests
     private readonly RealtimeData _data = new();
     private readonly RealtimeAi _ai = new();
     private readonly RecordingPublisher _publisher = new();
-
-    private IServiceProvider CreateServiceProvider(IVivaSessionOrchestrator? orchestrator = null, IVivaRealtimeSessionService? realtime = null)
-    {
-        var services = new ServiceCollection();
-        if (orchestrator != null)
-        {
-            services.AddSingleton(orchestrator);
-        }
-        if (realtime != null)
-        {
-            services.AddSingleton(realtime);
-        }
-        return services.BuildServiceProvider();
-    }
 
     private PageContext CreatePageContext(string userId = "SV01", string userName = "Student One", string role = ApplicationRoles.Staff)
     {
@@ -177,9 +162,8 @@ public sealed class VivaPageModelUnitTests
     public async Task IndexModel_OnPostCreateAsync_WhenUserHasNoNameIdentifier_ReturnsChallengeResult()
     {
         var stub = new StubOrchestrator();
-        var sp = CreateServiceProvider(stub);
         var httpContext = new DefaultHttpContext { User = new ClaimsPrincipal(new ClaimsIdentity()) };
-        var model = new IndexModel(NullLogger<IndexModel>.Instance, sp)
+        var model = new IndexModel(NullLogger<IndexModel>.Instance, stub)
         {
             PageContext = new PageContext { HttpContext = httpContext },
             ExamIdInput = "EXAM01"
@@ -194,8 +178,7 @@ public sealed class VivaPageModelUnitTests
     public async Task IndexModel_OnPostCreateAsync_WhenSuccessful_RedirectsToExamWithSessionId()
     {
         var stub = new StubOrchestrator();
-        var sp = CreateServiceProvider(stub);
-        var model = new IndexModel(NullLogger<IndexModel>.Instance, sp)
+        var model = new IndexModel(NullLogger<IndexModel>.Instance, stub)
         {
             PageContext = CreatePageContext(userId: "SV_TEST_01"),
             ExamIdInput = "EXAM99"
@@ -224,13 +207,11 @@ public sealed class VivaPageModelUnitTests
     public async Task IndexModel_OnPostCreateAsync_WhenAiIsNotConfigured_BlocksSessionCreationWithVietnameseWarning()
     {
         var stub = new StubOrchestrator();
-        var services = new ServiceCollection();
-        services.AddSingleton<IVivaSessionOrchestrator>(stub);
-        services.AddSingleton<AIVES.BLL.Interfaces.Ai.IAiCredentialStore>(new UnconfiguredAiStore());
-        services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new AIVES.BLL.Options.AiServiceOptions { UseMock = false, AllowMockFallback = false }));
-        var sp = services.BuildServiceProvider();
+        var credentialStore = new UnconfiguredAiStore();
+        var aiOptions = Microsoft.Extensions.Options.Options.Create(
+            new AIVES.BLL.Options.AiServiceOptions { UseMock = false, AllowMockFallback = false });
 
-        var model = new IndexModel(NullLogger<IndexModel>.Instance, sp)
+        var model = new IndexModel(NullLogger<IndexModel>.Instance, stub, credentialStore, aiOptions)
         {
             PageContext = CreatePageContext(userId: "SV_TEST_01"),
             ExamIdInput = "EXAM01"
@@ -247,8 +228,7 @@ public sealed class VivaPageModelUnitTests
     [Fact]
     public async Task ExamModel_OnGetAsync_WithNullOrEmptySessionId_RedirectsToIndex()
     {
-        var sp = CreateServiceProvider();
-        var model = new ExamModel(NullLogger<ExamModel>.Instance, sp)
+        var model = new ExamModel(NullLogger<ExamModel>.Instance)
         {
             PageContext = CreatePageContext()
         };
@@ -266,8 +246,7 @@ public sealed class VivaPageModelUnitTests
         var orchestrator = new AIVES.BLL.Services.VivaInterview.VivaSessionOrchestrator(
             _data, _data, _data, _ai, _ai, _ai, _publisher, NullLogger<AIVES.BLL.Services.VivaInterview.VivaSessionOrchestrator>.Instance);
 
-        var sp = CreateServiceProvider(orchestrator);
-        var model = new ExamModel(NullLogger<ExamModel>.Instance, sp)
+        var model = new ExamModel(NullLogger<ExamModel>.Instance, orchestrator)
         {
             PageContext = CreatePageContext(userId: "SV_OTHER_STUDENT")
         };
@@ -286,8 +265,7 @@ public sealed class VivaPageModelUnitTests
         var orchestrator = new AIVES.BLL.Services.VivaInterview.VivaSessionOrchestrator(
             _data, _data, _data, _ai, _ai, _ai, _publisher, NullLogger<AIVES.BLL.Services.VivaInterview.VivaSessionOrchestrator>.Instance);
 
-        var sp = CreateServiceProvider(orchestrator);
-        var model = new ExamModel(NullLogger<ExamModel>.Instance, sp)
+        var model = new ExamModel(NullLogger<ExamModel>.Instance, orchestrator)
         {
             PageContext = CreatePageContext(userId: "SV01", userName: "Nguyen Van A")
         };
@@ -315,8 +293,7 @@ public sealed class VivaPageModelUnitTests
         var realtimeService = new AIVES.BLL.Services.VivaInterview.VivaRealtimeSessionService(
             _data, _data, timerManager, TimeProvider.System);
 
-        var sp = CreateServiceProvider(orchestrator, realtimeService);
-        var model = new ExamModel(NullLogger<ExamModel>.Instance, sp)
+        var model = new ExamModel(NullLogger<ExamModel>.Instance, orchestrator, realtimeService)
         {
             PageContext = CreatePageContext(userId: "SV99", userName: "Tran Van Dynamic")
         };
@@ -336,8 +313,7 @@ public sealed class VivaPageModelUnitTests
     [Fact]
     public async Task ExamModel_OnPostStartSessionAsync_WithEmptySessionId_ReturnsBadRequest()
     {
-        var sp = CreateServiceProvider();
-        var model = new ExamModel(NullLogger<ExamModel>.Instance, sp)
+        var model = new ExamModel(NullLogger<ExamModel>.Instance)
         {
             PageContext = CreatePageContext()
         };
@@ -354,8 +330,7 @@ public sealed class VivaPageModelUnitTests
         var orchestrator = new AIVES.BLL.Services.VivaInterview.VivaSessionOrchestrator(
             _data, _data, _data, _ai, _ai, _ai, _publisher, NullLogger<AIVES.BLL.Services.VivaInterview.VivaSessionOrchestrator>.Instance);
 
-        var sp = CreateServiceProvider(orchestrator);
-        var model = new ExamModel(NullLogger<ExamModel>.Instance, sp)
+        var model = new ExamModel(NullLogger<ExamModel>.Instance, orchestrator)
         {
             PageContext = CreatePageContext(userId: "SV01")
         };
@@ -369,8 +344,7 @@ public sealed class VivaPageModelUnitTests
     [Fact]
     public async Task ExamModel_OnPostSubmitAudioAsync_WithEmptyAudio_ReturnsBadRequest()
     {
-        var sp = CreateServiceProvider();
-        var model = new ExamModel(NullLogger<ExamModel>.Instance, sp)
+        var model = new ExamModel(NullLogger<ExamModel>.Instance)
         {
             PageContext = CreatePageContext()
         };
@@ -383,8 +357,7 @@ public sealed class VivaPageModelUnitTests
     [Fact]
     public async Task ExamModel_OnPostSubmitAudioAsync_WithOversizedAudio_ReturnsBadRequest()
     {
-        var sp = CreateServiceProvider();
-        var model = new ExamModel(NullLogger<ExamModel>.Instance, sp)
+        var model = new ExamModel(NullLogger<ExamModel>.Instance)
         {
             PageContext = CreatePageContext()
         };
@@ -404,8 +377,7 @@ public sealed class VivaPageModelUnitTests
         var orchestrator = new AIVES.BLL.Services.VivaInterview.VivaSessionOrchestrator(
             _data, _data, _data, _ai, _ai, _ai, _publisher, NullLogger<AIVES.BLL.Services.VivaInterview.VivaSessionOrchestrator>.Instance);
 
-        var sp = CreateServiceProvider(orchestrator);
-        var model = new ExamModel(NullLogger<ExamModel>.Instance, sp)
+        var model = new ExamModel(NullLogger<ExamModel>.Instance, orchestrator)
         {
             PageContext = CreatePageContext(userId: "SV01")
         };
@@ -427,8 +399,7 @@ public sealed class VivaPageModelUnitTests
     public async Task ExamModel_OnPostSubmitAudioAsync_Success_GeneratesFollowUpForSubmittedTurn()
     {
         var stub = new StubOrchestrator();
-        var sp = CreateServiceProvider(stub);
-        var model = new ExamModel(NullLogger<ExamModel>.Instance, sp)
+        var model = new ExamModel(NullLogger<ExamModel>.Instance, stub)
         {
             PageContext = CreatePageContext(userId: "SV01")
         };
@@ -455,8 +426,7 @@ public sealed class VivaPageModelUnitTests
         {
             ShouldFailFollowUp = true
         };
-        var sp = CreateServiceProvider(stub);
-        var model = new ExamModel(NullLogger<ExamModel>.Instance, sp)
+        var model = new ExamModel(NullLogger<ExamModel>.Instance, stub)
         {
             PageContext = CreatePageContext(userId: "SV01")
         };

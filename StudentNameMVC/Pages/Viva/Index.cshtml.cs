@@ -10,7 +10,6 @@ using AIVES.BLL.Services.Ai;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -24,17 +23,16 @@ public class IndexModel : PageModel
     private readonly IOptions<AiServiceOptions>? _aiOptions;
     private readonly ILogger<IndexModel> _logger;
 
-    public IndexModel(ILogger<IndexModel> logger) : this(logger, null)
-    {
-    }
-
-    [ActivatorUtilitiesConstructor]
-    public IndexModel(ILogger<IndexModel> logger, IServiceProvider? serviceProvider)
+    public IndexModel(
+        ILogger<IndexModel> logger,
+        IVivaSessionOrchestrator? orchestrator = null,
+        IAiCredentialStore? credentialStore = null,
+        IOptions<AiServiceOptions>? aiOptions = null)
     {
         _logger = logger;
-        _orchestrator = serviceProvider?.GetService<IVivaSessionOrchestrator>();
-        _credentialStore = serviceProvider?.GetService<IAiCredentialStore>();
-        _aiOptions = serviceProvider?.GetService<IOptions<AiServiceOptions>>();
+        _orchestrator = orchestrator;
+        _credentialStore = credentialStore;
+        _aiOptions = aiOptions;
     }
 
     [BindProperty]
@@ -55,15 +53,13 @@ public class IndexModel : PageModel
             {
                 return true;
             }
-            if (_aiOptions?.Value.AllowMockFallback == true || _aiOptions?.Value.UseMock == true)
-            {
-                var cfg = _credentialStore.GetConfiguration();
-                if (!cfg.UseRealAi && _aiOptions?.Value.AllowMockFallback == true)
-                {
-                    return true;
-                }
-            }
+
             var config = _credentialStore.GetConfiguration();
+            if (!config.UseRealAi && _aiOptions?.Value.AllowMockFallback == true)
+            {
+                return true;
+            }
+
             return config.UseRealAi && config.Profiles.Any(p =>
                 !string.IsNullOrWhiteSpace(p.ApiKey) || NetworkEndpointHelper.IsLocalOrLan(p.BaseUrl));
         }

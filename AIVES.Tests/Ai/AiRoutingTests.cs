@@ -1,3 +1,4 @@
+using System.Net;
 using AIVES.BLL.Services.Ai.Adapters;
 using AIVES.BLL;
 using AIVES.BLL.Interfaces.Ai;
@@ -212,6 +213,79 @@ public sealed class AiRoutingTests
         Assert.IsType<MockFollowUpGeneratorService>(llm);
     }
 
+    [Fact]
+    public async Task Adapter_WhenAllowMockFallbackIsFalse_DoesNotFallbackToMockAndReturnsVietnameseError()
+    {
+        var config = new AiConfigurationModel
+        {
+            UseRealAi = true,
+            Profiles =
+            [
+                new AiProviderProfile { Id = "p-gem", Name = "Gemini", Kind = AiProviderKinds.Gemini, ApiKey = "AIzaSyTest123" }
+            ],
+            Routing = new AiCapabilityRouting
+            {
+                Stt = new AiCapabilityTarget { ProfileId = "p-gem", Model = "gemini-2.5-flash" }
+            }
+        };
+
+        var failingHttpClient = new HttpClient(new FailingHttpMessageHandler(HttpStatusCode.TooManyRequests, "{\"error\":{\"message\":\"Quota exceeded\"}}"));
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(failingHttpClient);
+        services.AddSingleton<IOptions<AiServiceOptions>>(Microsoft.Extensions.Options.Options.Create(
+            new AiServiceOptions { UseMock = false, AllowMockFallback = false }));
+        services.AddSingleton<IAiCredentialStore>(new MockCredentialStore(config));
+        services.AddAiServices();
+
+        var sp = services.BuildServiceProvider();
+        var stt = sp.GetRequiredService<ISpeechToTextService>();
+
+        using var audioStream = new MemoryStream(new byte[] { 1, 2, 3, 4 });
+        var result = await stt.TranscribeAsync(audioStream, "audio/webm");
+
+        Assert.False(result.IsSuccess);
+        Assert.Empty(result.TranscriptText);
+        Assert.Contains("Lỗi nhận diện giọng nói Gemini", result.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task Adapter_WhenAllowMockFallbackIsTrue_FallsBackToMockOnApiFailure()
+    {
+        var config = new AiConfigurationModel
+        {
+            UseRealAi = true,
+            Profiles =
+            [
+                new AiProviderProfile { Id = "p-gem", Name = "Gemini", Kind = AiProviderKinds.Gemini, ApiKey = "AIzaSyTest123" }
+            ],
+            Routing = new AiCapabilityRouting
+            {
+                Stt = new AiCapabilityTarget { ProfileId = "p-gem", Model = "gemini-2.5-flash" }
+            }
+        };
+
+        var failingHttpClient = new HttpClient(new FailingHttpMessageHandler(HttpStatusCode.TooManyRequests, "{\"error\":{\"message\":\"Quota exceeded\"}}"));
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(failingHttpClient);
+        services.AddSingleton<IOptions<AiServiceOptions>>(Microsoft.Extensions.Options.Options.Create(
+            new AiServiceOptions { UseMock = false, AllowMockFallback = true }));
+        services.AddSingleton<IAiCredentialStore>(new MockCredentialStore(config));
+        services.AddAiServices();
+
+        var sp = services.BuildServiceProvider();
+        var stt = sp.GetRequiredService<ISpeechToTextService>();
+
+        using var audioStream = new MemoryStream(new byte[] { 1, 2, 3, 4 });
+        var result = await stt.TranscribeAsync(audioStream, "audio/webm");
+
+        Assert.True(result.IsSuccess);
+        Assert.NotEmpty(result.TranscriptText);
+    }
+
     [Theory]
     [InlineData("http://localhost:11434", true)]
     [InlineData("http://localhost:11434/v1", true)]
@@ -229,6 +303,17 @@ public sealed class AiRoutingTests
     public void NetworkEndpointHelper_Correctly_Identifies_Local_And_Lan_Addresses(string? url, bool expected)
     {
         Assert.Equal(expected, NetworkEndpointHelper.IsLocalOrLan(url));
+    }
+
+    private sealed class FailingHttpMessageHandler(HttpStatusCode statusCode, string responseBody) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new HttpResponseMessage(statusCode)
+            {
+                Content = new StringContent(responseBody)
+            });
+        }
     }
 
     private sealed class FaultyThrowingAdapter : IAiProviderAdapter
