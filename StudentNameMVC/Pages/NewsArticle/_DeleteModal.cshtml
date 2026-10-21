@@ -3,7 +3,7 @@
 <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content shadow border-0">
-            <form id="deleteNewsForm" asp-controller="NewsArticle" asp-action="Delete" asp-route-id="@Model.NewsArticleId" method="post">
+            <form id="deleteNewsForm" asp-page="/NewsArticle/Index" asp-page-handler="Delete" asp-route-id="@Model.NewsArticleId" method="post">
                 @Html.AntiForgeryToken()
                 <div class="modal-header bg-danger text-white">
                     <h5 class="modal-title" id="deleteModalLabel">
