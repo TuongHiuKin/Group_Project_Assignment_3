@@ -15,7 +15,16 @@ using StudentNameMVC;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
-builder.Services.AddRazorPages();
+builder.Services.AddRazorPages(options =>
+{
+    options.Conventions.AddPageRoute("/Account/Login", "");
+    options.Conventions.AuthorizeFolder("/Admin", AuthorizationPolicies.AdminOnly);
+    options.Conventions.AllowAnonymousToPage("/Error");
+    options.Conventions.AllowAnonymousToPage("/Account/Login");
+    options.Conventions.AllowAnonymousToPage("/Account/ForgotPassword");
+    options.Conventions.AllowAnonymousToPage("/Account/ResetPassword");
+    options.Conventions.AllowAnonymousToPage("/Account/AccessDenied");
+});
 builder.Services
     .AddOptions<AiServiceOptions>()
     .Bind(builder.Configuration.GetSection(AiServiceOptions.SectionName))
@@ -125,7 +134,7 @@ if (vivaEnabled)
 
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Home/Error");
+    app.UseExceptionHandler("/Error");
     app.UseHsts();
 }
 
