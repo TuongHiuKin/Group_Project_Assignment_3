@@ -83,7 +83,7 @@ public class ExamModel : PageModel
                 if (!isAuthorized)
                 {
                     _logger.LogWarning("User {UserId} unauthorized for Viva session {SessionId}", StudentId, SessionId.Value);
-                    return RedirectToAction("AccessDenied", "Account");
+                    return RedirectToPage("/Account/AccessDenied");
                 }
             }
             catch (Exception ex)

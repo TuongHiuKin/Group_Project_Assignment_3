@@ -1,4 +1,5 @@
-@model LoginViewModel
+@page "/Account/Login"
+@model StudentNameMVC.Pages.Account.LoginModel
 @{
     ViewData["Title"] = "Đăng nhập";
 }
@@ -12,7 +13,7 @@
         <p class="text-muted small">Hệ thống Thi Vấn Đáp & Học Tập Thông Minh AI</p>
     </div>
 
-    <form asp-action="Login" method="post" novalidate>
+    <form asp-page="/Account/Login" method="post" novalidate>
         <div asp-validation-summary="ModelOnly" class="alert alert-danger rounded-3 small py-2" role="alert"></div>
         <input asp-for="ReturnUrl" type="hidden" />
 
@@ -37,7 +38,7 @@
                 <input asp-for="RememberMe" class="form-check-input" />
                 <label asp-for="RememberMe" class="form-check-label small text-muted">Ghi nhớ tôi</label>
             </div>
-            <a asp-action="ForgotPassword" class="small fw-semibold text-decoration-none" style="color: var(--primary-purple);">Quên mật khẩu?</a>
+            <a asp-page="/Account/ForgotPassword" class="small fw-semibold text-decoration-none" style="color: var(--primary-purple);">Quên mật khẩu?</a>
         </div>
 
         <button type="submit" class="btn btn-primary w-100 py-3 rounded-pill fw-bold shadow-sm" style="font-size: 15px;">

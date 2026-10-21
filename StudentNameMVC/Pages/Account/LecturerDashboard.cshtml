@@ -1,3 +1,5 @@
+@page "/Account/LecturerDashboard"
+@model StudentNameMVC.Pages.Account.LecturerDashboardModel
 @using AIVES.BLL.Security
 @{
     ViewData["Title"] = "Lecturer Dashboard";
@@ -17,10 +19,10 @@
         <p class="text-muted small mb-0">Theo dõi tiến độ khảo thí, đánh giá năng lực sinh viên và phân tích phổ điểm lớp học</p>
     </div>
     <div class="d-flex align-items-center gap-2">
-        <a asp-controller="ClassReports" asp-action="Index" class="btn btn-outline-secondary rounded-pill px-3 py-1.5 fw-bold">
+        <a href="/ClassReports" class="btn btn-outline-secondary rounded-pill px-3 py-1.5 fw-bold">
             <i class="bi bi-bar-chart-steps me-1"></i> Thống kê Lớp học
         </a>
-        <a asp-controller="ClassReports" asp-action="ExportGradeSheet" asp-route-teacherId="GV01" asp-route-classId="SE1701" asp-route-examId="EXAM01"
+        <a href="/ClassReports/ExportGradeSheet?teacherId=GV01&amp;classId=SE1701&amp;examId=EXAM01"
            class="btn rounded-pill px-3 py-1.5 fw-bold text-white shadow-sm" style="background: #0d9488;">
             <i class="bi bi-file-earmark-excel-fill me-1"></i> Xuất Bảng Điểm CSV
         </a>
@@ -42,11 +44,11 @@
             <span class="hero-tag" style="background: rgba(255, 255, 255, 0.2);">GIẢNG VIÊN KHẢO THÍ · HUMAN-IN-THE-LOOP</span>
             <h1 class="hero-title">Quản lý Khảo thí & Đánh giá Năng lực Sinh viên</h1>
             <div class="d-flex align-items-center gap-3 flex-wrap">
-                <a asp-controller="ClassReports" asp-action="Index" class="hero-btn" style="background: #111827;">
+                <a href="/ClassReports" class="hero-btn" style="background: #111827;">
                     <span>Thống kê Lớp học</span>
                     <span class="hero-btn-arrow"><i class="bi bi-bar-chart-steps"></i></span>
                 </a>
-                <a asp-controller="ClassReports" asp-action="ExportGradeSheet" asp-route-teacherId="GV01" asp-route-classId="SE1701" asp-route-examId="EXAM01"
+                <a href="/ClassReports/ExportGradeSheet?teacherId=GV01&amp;classId=SE1701&amp;examId=EXAM01"
                    class="btn btn-light rounded-pill px-4 py-2.5 fw-bold text-dark shadow-sm">
                     <i class="bi bi-file-earmark-excel-fill text-success me-1"></i> Xuất Bảng Điểm CSV
                 </a>
@@ -102,7 +104,7 @@
                     <span class="course-tag-pill tag-purple">LỚP SE1701 · PRN222</span>
                     <h3 class="course-card-title">Kiến trúc 3 lớp & Dependency Injection trong .NET 8</h3>
                     <div class="mt-auto pt-2">
-                        <a asp-controller="ClassReports" asp-action="Index" asp-route-classId="SE1701" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
+                        <a href="/ClassReports?classId=SE1701" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
                             <i class="bi bi-bar-chart-fill me-1"></i> Xem thống kê lớp
                         </a>
                     </div>
@@ -118,7 +120,7 @@
                     <span class="course-tag-pill tag-cyan">LỚP SE1702 · PRN231</span>
                     <h3 class="course-card-title">Thiết kế RESTful API & SignalR Realtime Gateway</h3>
                     <div class="mt-auto pt-2">
-                        <a asp-controller="ClassReports" asp-action="Index" asp-route-classId="SE1702" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
+                        <a href="/ClassReports?classId=SE1702" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
                             <i class="bi bi-bar-chart-fill me-1"></i> Xem thống kê lớp
                         </a>
                     </div>
@@ -134,7 +136,7 @@
                     <span class="course-tag-pill tag-pink">LỚP SE1703 · PRN211</span>
                     <h3 class="course-card-title">Lập trình hướng đối tượng nâng cao C# & LINQ</h3>
                     <div class="mt-auto pt-2">
-                        <a asp-controller="ClassReports" asp-action="Index" asp-route-classId="SE1703" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
+                        <a href="/ClassReports?classId=SE1703" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
                             <i class="bi bi-bar-chart-fill me-1"></i> Xem thống kê lớp
                         </a>
                     </div>
@@ -145,7 +147,7 @@
         <!-- 4. Danh sách sinh viên vừa nộp bài cần duyệt -->
         <div class="section-header">
             <h2 class="section-title">Sinh viên vừa hoàn thành bài thi vấn đáp</h2>
-            <a asp-controller="ClassReports" asp-action="Index" class="section-link">Xem tất cả lớp</a>
+            <a href="/ClassReports" class="section-link">Xem tất cả lớp</a>
         </div>
 
         <div class="lesson-table-wrap">
@@ -174,7 +176,7 @@
                         <td><strong class="text-success fs-6">8.5 / 10</strong></td>
                         <td><span class="badge bg-success text-white rounded-pill px-3">ĐẠT CHUẨN</span></td>
                         <td style="text-align: right;">
-                            <a asp-controller="ClassReports" asp-action="StudentDetail" asp-route-studentId="SV01" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
+                            <a href="/ClassReports/StudentDetail?studentId=SV01" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
                         </td>
                     </tr>
                     <tr>
@@ -191,7 +193,7 @@
                         <td><strong class="text-success fs-6">9.0 / 10</strong></td>
                         <td><span class="badge bg-success text-white rounded-pill px-3">ĐẠT CHUẨN</span></td>
                         <td style="text-align: right;">
-                            <a asp-controller="ClassReports" asp-action="StudentDetail" asp-route-studentId="SV02" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
+                            <a href="/ClassReports/StudentDetail?studentId=SV02" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
                         </td>
                     </tr>
                     <tr>
@@ -208,7 +210,7 @@
                         <td><strong class="text-danger fs-6">4.5 / 10</strong></td>
                         <td><span class="badge bg-danger text-white rounded-pill px-3">CHƯA ĐẠT</span></td>
                         <td style="text-align: right;">
-                            <a asp-controller="ClassReports" asp-action="StudentDetail" asp-route-studentId="SV03" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
+                            <a href="/ClassReports/StudentDetail?studentId=SV03" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
                         </td>
                     </tr>
                 </tbody>
@@ -263,7 +265,7 @@
                 <div class="text-secondary small">Có 33% sinh viên trả lời thiếu ý về DbContext trong Singleton.</div>
             </div>
 
-            <a asp-controller="ClassReports" asp-action="Index" class="btn-see-all-mentors" style="background: #ccfbf1; color: #0f766e;">
+            <a href="/ClassReports" class="btn-see-all-mentors" style="background: #ccfbf1; color: #0f766e;">
                 Xem toàn bộ phổ điểm lớp
             </a>
         </div>
