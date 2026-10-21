@@ -3,7 +3,7 @@
 <div class="modal fade" id="newsModal" tabindex="-1" aria-labelledby="newsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content shadow border-0">
-            <form id="createNewsForm" asp-controller="NewsArticle" asp-action="Create" method="post">
+            <form id="createNewsForm" asp-page="/NewsArticle/Index" asp-page-handler="Create" method="post">
                 @Html.AntiForgeryToken()
                 <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title" id="newsModalLabel">

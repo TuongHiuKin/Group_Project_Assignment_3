@@ -18,6 +18,7 @@ public class NewsArticleController : Controller
     }
 
     // GET: NewsArticle (Danh sách bài viết & Tìm kiếm theo từ khóa)
+    [NonAction]
     [HttpGet]
     public async Task<IActionResult> Index(string? keyword)
     {
@@ -51,6 +52,7 @@ public class NewsArticleController : Controller
     }
 
     // GET: NewsArticle/CreateModal (Trả về partial view render bên trong modal popup tạo mới)
+    [NonAction]
     [HttpGet]
     public async Task<IActionResult> CreateModal()
     {
@@ -63,6 +65,7 @@ public class NewsArticleController : Controller
     }
 
     // POST: NewsArticle/Create (Xử lý lưu bài viết từ Popup Modal)
+    [NonAction]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(NewsArticleFormViewModel model)
@@ -104,6 +107,7 @@ public class NewsArticleController : Controller
     }
 
     // GET: NewsArticle/EditModal/5 (Trả về partial view modal với dữ liệu cũ của bài viết)
+    [NonAction]
     [HttpGet]
     public async Task<IActionResult> EditModal(int id)
     {
@@ -127,6 +131,7 @@ public class NewsArticleController : Controller
     }
 
     // POST: NewsArticle/Edit/5 (Xử lý cập nhật bài viết từ Popup Modal)
+    [NonAction]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Edit(int id, NewsArticleFormViewModel model)
@@ -176,6 +181,7 @@ public class NewsArticleController : Controller
     }
 
     // GET: NewsArticle/DeleteModal/5 (Trả về partial view modal xác nhận xóa)
+    [NonAction]
     [HttpGet]
     public async Task<IActionResult> DeleteModal(int id)
     {
@@ -194,6 +200,7 @@ public class NewsArticleController : Controller
     }
 
     // POST: NewsArticle/Delete/5 (Chỉ thực hiện xóa sau khi người dùng bấm Confirm trên modal)
+    [NonAction]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(int id)
