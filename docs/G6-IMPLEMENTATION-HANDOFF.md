@@ -196,3 +196,15 @@ build/test an toàn và báo kết quả. Không tự commit/push hoặc mở pa
 ```
 
 Không gửi prompt triển khai khi danh sách file/snapshot còn chưa xác định. Muốn chạy demo UI phải giao riêng Package B và giải quyết auth/identity/data source; Package A pass không phải website đã chạy main flow.
+
+## 8. Giới hạn phạm vi Assignment 2 trên dữ liệu SQL Server thật (`ExamReportRepository`)
+
+Trong Assignment 2 (Group 3 — AI Interview Core kết hợp Group 6 Reporting):
+1. **Không có bảng Lớp học phần / Phân công giảng viên (`TeacherAssignment`):**
+   - Schema SQL Server hiện tại (`SystemAccount`, `VivaQuestion`, `VivaSession`, `VivaSessionTurn`) không có bảng phân công giảng viên theo lớp học phần, và các phiên thi được nhóm theo `ExamId`.
+   - Do đó, `ExamReportRepository.IsTeacherAssignedToClassAsync(teacherId, classId)` luôn trả về `true` cho mọi `teacherId` và `classId` khác rỗng. Phân quyền truy cập màn hình báo cáo lớp được kiểm soát chặt ở biên Razor Pages (`[Authorize(Roles = "Admin,Lecturer")]`).
+2. **Trạng thái chấm điểm (`GradingState.Pending`):**
+   - Group 4 (AI Automated Grading) nằm ngoài phạm vi Assignment 2. Các lượt thi vấn đáp thật trong SQL Server luôn có `GradingState = GradingState.Pending`.
+   - Giao diện báo cáo (`Pages/ClassReports/*`, `Pages/StudentReports/*`, `Pages/Shared/_QuestionDetailCardPartial.cshtml`) hiển thị rõ nhãn **"Chưa chấm"** thay vì điểm `0`, và ẩn nhãn **ĐẠT / CHƯA ĐẠT** đối với các lượt thi hoặc câu hỏi có `GradingState == GradingState.Pending`.
+3. **Truy vấn danh sách đề thi tối ưu:**
+   - `ExamReportRepository.GetAvailableExamsAsync` sử dụng `IVivaSessionRepository.GetDistinctExamIdsAsync` kết hợp `IVivaQuestionRepository.GetDistinctExamIdsAsync` để chỉ truy vấn `DISTINCT ExamId` mà không tải toàn bộ `VivaSession` và `VivaSessionTurn` vào bộ nhớ.

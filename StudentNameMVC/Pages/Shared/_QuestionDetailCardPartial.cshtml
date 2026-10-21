@@ -123,7 +123,7 @@
                     @if (Model.GradingState == AIVES.BLL.Models.ExamReporting.GradingState.Pending)
                     {
                         <span class="badge tag-pink px-3 py-2 fs-6">
-                            <i class="bi bi-hourglass-split me-1"></i>Đang chờ AI chấm điểm
+                            <i class="bi bi-hourglass-split me-1"></i>Chưa chấm (Đang chờ chấm điểm)
                         </span>
                     }
                     else
@@ -150,7 +150,15 @@
                     }
                 </div>
 
-                @if (!isPassFailMode && Model.GradingState != AIVES.BLL.Models.ExamReporting.GradingState.Pending)
+                @if (Model.GradingState == AIVES.BLL.Models.ExamReporting.GradingState.Pending)
+                {
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <span class="badge bg-secondary-subtle text-secondary border rounded-pill px-3 py-2 fs-6 fw-bold">
+                            <i class="bi bi-award me-1"></i>Điểm: Chưa chấm
+                        </span>
+                    </div>
+                }
+                else if (!isPassFailMode)
                 {
                     <div class="d-flex flex-wrap align-items-center gap-2">
                         <span class="badge tag-purple rounded-pill px-3 py-2" title="Điểm do AI đề xuất">

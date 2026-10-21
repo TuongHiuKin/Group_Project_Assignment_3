@@ -16,6 +16,7 @@ public class ClassReportsController : Controller
         _classReportService = classReportService ?? throw new ArgumentNullException(nameof(classReportService));
     }
 
+    [NonAction]
     [HttpGet]
     public async Task<IActionResult> Index(
         string? teacherId = null,
@@ -56,6 +57,7 @@ public class ClassReportsController : Controller
         }
     }
 
+    [NonAction]
     [HttpGet]
     public async Task<IActionResult> StudentDetail(
         string studentId,
@@ -104,6 +106,7 @@ public class ClassReportsController : Controller
         }
     }
 
+    [NonAction]
     [HttpGet]
     public async Task<IActionResult> ExportGradeSheet(
         string? teacherId = null,
@@ -130,13 +133,11 @@ public class ClassReportsController : Controller
 
     private string ResolveTeacherId(string? requestedTeacherId = null)
     {
-        // Admin có thể xem thay mặt giảng viên nếu có requestedTeacherId
         if (User.IsInRole(ApplicationRoles.Admin) && !string.IsNullOrWhiteSpace(requestedTeacherId))
         {
             return requestedTeacherId;
         }
 
-        // Lấy định danh từ Claims của tài khoản đăng nhập (DEC-11)
         var email = User.FindFirst(ClaimTypes.Email)?.Value;
         if (!string.IsNullOrWhiteSpace(email))
         {
@@ -159,13 +160,11 @@ public class ClassReportsController : Controller
             }
         }
 
-        // Nếu là Admin và không khớp claim giảng viên cụ thể
         if (User.IsInRole(ApplicationRoles.Admin) && !string.IsNullOrWhiteSpace(requestedTeacherId))
         {
             return requestedTeacherId;
         }
 
-        // Mặc định cho mock/development
         return "GV01";
     }
 }

@@ -422,18 +422,99 @@ public class ExamReportingTests
         Assert.Equal("Để mỗi HTTP request có 1 DbContext riêng biệt.", q.StudentFollowUpAnswerTranscript);
     }
 
+    [Fact]
+    public async Task ExamReportRepository_GetAvailableExamsAsync_UsesGetDistinctExamIdsWithoutLoadingAllSessions()
+    {
+        var session = new VivaSession
+        {
+            SessionId = Guid.NewGuid(),
+            ExamId = "EXAM01",
+            StudentId = "10",
+            State = (byte)VivaSessionState.Completed,
+            StartedAtUtc = DateTime.UtcNow
+        };
+        var sessionRepo = new StubSessionRepo([session]);
+        var questionRepo = new StubQuestionRepo([
+            new VivaQuestion { QuestionId = "Q1", ExamId = "EXAM01", Title = "DI Lifetime", Content = "Giải thích vòng đời DI." }
+        ]);
+        var accountRepo = new StubAccountRepo([]);
+
+        var realRepo = new ExamReportRepository(sessionRepo, questionRepo, accountRepo);
+
+        var exams = await realRepo.GetAvailableExamsAsync();
+
+        Assert.Single(exams);
+        Assert.Equal("EXAM01", exams[0].ExamId);
+        Assert.Equal(1, sessionRepo.GetDistinctExamIdsCallCount);
+        Assert.Equal(0, sessionRepo.GetSessionsWithDetailsCallCount);
+    }
+
+    [Fact]
+    public async Task ClassReportService_WhenAllAttemptsArePending_SetsChuaChamInsteadOfChuaDatOrZero()
+    {
+        var sessionId = Guid.NewGuid();
+        var session = new VivaSession
+        {
+            SessionId = sessionId,
+            ExamId = "EXAM01",
+            StudentId = "10",
+            State = (byte)VivaSessionState.Completed,
+            StartedAtUtc = DateTime.UtcNow.AddMinutes(-10),
+            CompletedAtUtc = DateTime.UtcNow.AddMinutes(-2),
+            Turns = new List<VivaSessionTurn>
+            {
+                new()
+                {
+                    TurnId = Guid.NewGuid(),
+                    SessionId = sessionId,
+                    QuestionId = "Q1",
+                    TurnOrdinal = 1,
+                    TranscriptText = "Trả lời câu 1."
+                }
+            }
+        };
+
+        var sessionRepo = new StubSessionRepo([session]);
+        var questionRepo = new StubQuestionRepo([
+            new VivaQuestion { QuestionId = "Q1", ExamId = "EXAM01", Title = "DI Lifetime", Content = "Giải thích vòng đời DI." }
+        ]);
+        var accountRepo = new StubAccountRepo([
+            new SystemAccount { AccountId = 10, AccountName = "Phạm Minh Khoa", AccountEmail = "khoa@fpt.edu.vn", AccountRole = 1 }
+        ]);
+
+        var realRepo = new ExamReportRepository(sessionRepo, questionRepo, accountRepo);
+        var classService = new ClassReportService(realRepo);
+
+        var stats = await classService.GetClassStatisticsAsync("GV01", "EXAM01", "EXAM01");
+
+        Assert.NotNull(stats);
+        var row = Assert.Single(stats.GradeExportRows);
+        Assert.Equal("Chưa chấm", row.Attempt1Score);
+        Assert.Equal("Chưa chấm", row.AverageScore);
+        Assert.Equal("Chưa chấm", row.ResultStatus);
+    }
+
     private sealed class StubSessionRepo(List<VivaSession> sessions) : IVivaSessionRepository
     {
+        public int GetSessionsWithDetailsCallCount { get; private set; }
+        public int GetDistinctExamIdsCallCount { get; private set; }
+
         public Task<VivaSession?> GetByIdAsync(Guid sessionId, CancellationToken ct = default) =>
             Task.FromResult(sessions.FirstOrDefault(s => s.SessionId == sessionId));
         public Task<VivaSession?> GetWithDetailsAsync(Guid sessionId, CancellationToken ct = default) =>
             Task.FromResult(sessions.FirstOrDefault(s => s.SessionId == sessionId));
         public Task<List<VivaSession>> GetSessionsWithDetailsAsync(string? examId = null, string? studentId = null, CancellationToken ct = default)
         {
+            GetSessionsWithDetailsCallCount++;
             var q = sessions.AsEnumerable();
             if (!string.IsNullOrWhiteSpace(examId)) q = q.Where(s => s.ExamId == examId);
             if (!string.IsNullOrWhiteSpace(studentId)) q = q.Where(s => s.StudentId == studentId);
             return Task.FromResult(q.OrderBy(s => s.StartedAtUtc).ToList());
+        }
+        public Task<List<string>> GetDistinctExamIdsAsync(CancellationToken ct = default)
+        {
+            GetDistinctExamIdsCallCount++;
+            return Task.FromResult(sessions.Select(s => s.ExamId).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList());
         }
         public Task<Guid> CreateSessionAsync(VivaSession session, CancellationToken ct = default) => Task.FromResult(session.SessionId);
         public Task UpdateStateAsync(Guid sessionId, byte state, CancellationToken ct = default) => Task.CompletedTask;

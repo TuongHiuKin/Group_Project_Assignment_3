@@ -42,6 +42,11 @@ public class VivaSessionOrchestratorTests
             return Task.FromResult(query.OrderBy(s => s.StartedAtUtc).ToList());
         }
 
+        public Task<List<string>> GetDistinctExamIdsAsync(CancellationToken ct = default)
+        {
+            return Task.FromResult(Sessions.Values.Select(s => s.ExamId).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct().ToList());
+        }
+
         public Task<Guid> CreateSessionAsync(VivaSession session, CancellationToken ct = default)
         {
             Sessions[session.SessionId] = session;

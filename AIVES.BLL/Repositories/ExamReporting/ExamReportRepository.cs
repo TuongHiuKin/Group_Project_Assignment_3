@@ -90,9 +90,15 @@ public sealed class ExamReportRepository : IExamReportRepository
         return result;
     }
 
+    /// <summary>
+    /// Assignment 2 Scope Limitation: The database schema does not include a Class or TeacherAssignment table
+    /// (sessions are grouped by <c>ExamId</c>). Therefore, any authenticated teacher/admin with a non-empty
+    /// <paramref name="teacherId"/> and <paramref name="classId"/> is permitted to view the exam report.
+    /// Role-level access control (<c>Admin,Lecturer</c>) is enforced at the Razor Page boundary.
+    /// </summary>
     public Task<bool> IsTeacherAssignedToClassAsync(string teacherId, string classId, CancellationToken ct = default)
     {
-        // In Assignment 2, there is no ClassId/TeacherAssignment table in SQL Server; any authenticated Lecturer/Admin can view exam reports.
+        // Intentional ASM2 limitation: no teacher-class assignment table exists in SQL Server.
         return Task.FromResult(!string.IsNullOrWhiteSpace(teacherId) && !string.IsNullOrWhiteSpace(classId));
     }
 
@@ -106,8 +112,8 @@ public sealed class ExamReportRepository : IExamReportRepository
         var questions = await _questionRepo.GetQuestionsByExamAsync(examId, ct);
         if (questions.Count == 0)
         {
-            var sessions = await _sessionRepo.GetSessionsWithDetailsAsync(examId: examId, studentId: null, ct);
-            if (sessions.Count == 0)
+            var sessionExamIds = await _sessionRepo.GetDistinctExamIdsAsync(ct);
+            if (!sessionExamIds.Any(id => string.Equals(id, examId, StringComparison.OrdinalIgnoreCase)))
             {
                 return null;
             }
@@ -140,11 +146,11 @@ public sealed class ExamReportRepository : IExamReportRepository
     public async Task<List<ExamSettingsSnapshot>> GetAvailableExamsAsync(CancellationToken ct = default)
     {
         var examIdsFromQuestions = await _questionRepo.GetDistinctExamIdsAsync(ct);
-        var allSessions = await _sessionRepo.GetSessionsWithDetailsAsync(ct: ct);
-        var examIdsFromSessions = allSessions.Select(s => s.ExamId).Where(id => !string.IsNullOrWhiteSpace(id));
+        var examIdsFromSessions = await _sessionRepo.GetDistinctExamIdsAsync(ct);
 
         var distinctExamIds = examIdsFromQuestions
             .Concat(examIdsFromSessions)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
             .ToList();
