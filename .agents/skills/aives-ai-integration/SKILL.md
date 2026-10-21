@@ -26,14 +26,14 @@ All AI services must be accessed through explicit BLL abstractions defined in `A
 ## 2. Mock & Real Adapter Implementations
 
 Every AI component must provide two implementations:
-1. **Mock Implementation (Default for CI/CD & Local Development):**
+1. **Mock Implementation (For Automated Tests Only when `AllowMockFallback = true`):**
    - Deterministic, fast, offline responses without requiring cloud API keys.
    - Examples: `MockSpeechToTextService`, `MockTextToSpeechService`, `MockFollowUpGeneratorService`.
-2. **Real Cloud/API Adapter (Configurable via `appsettings.json`):**
-   - E.g. OpenAI Whisper / Azure Cognitive Services for STT.
-   - Azure Speech / Google TTS for TTS.
-   - OpenAI GPT-4o / Google Gemini for LLM follow-up.
-   - Enabled when valid configuration keys exist; falls back to Mock if unconfigured.
+   - **Note on Mock Audio & Browser Speech Synthesis:** By default (`AllowMockFallback = false`), real AI adapters do not fall back to mock services on runtime failure, returning a clear Vietnamese error instead. When `AllowMockFallback = true` is explicitly enabled for automated tests, mock TTS returns `/audio/mock-*.mp3` URLs; the client script (`viva-signalr-client.js`) ignores `/audio/mock-` URLs so it does not attempt to load a non-existent static audio file, and browser `speechSynthesis` is only auto-triggered when `audioUrl` is empty (not when a mock URL is returned).
+2. **Real Cloud/API Adapter (Configurable via `appsettings.json` & `IAiCredentialStore`):**
+   - E.g. OpenAI Whisper / Google Gemini for STT.
+   - OpenAI TTS / Google Gemini TTS for TTS.
+   - OpenAI GPT-4o-mini / Google Gemini for LLM follow-up.
 
 ---
 

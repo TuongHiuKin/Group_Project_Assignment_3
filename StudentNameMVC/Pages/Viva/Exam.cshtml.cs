@@ -16,11 +16,14 @@ public class ExamModel : PageModel
     private readonly IVivaRealtimeSessionService? _realtimeService;
     private readonly ILogger<ExamModel> _logger;
 
-    public ExamModel(ILogger<ExamModel> logger, IServiceProvider serviceProvider)
+    public ExamModel(
+        ILogger<ExamModel> logger,
+        IVivaSessionOrchestrator? orchestrator = null,
+        IVivaRealtimeSessionService? realtimeService = null)
     {
         _logger = logger;
-        _orchestrator = serviceProvider.GetService<IVivaSessionOrchestrator>();
-        _realtimeService = serviceProvider.GetService<IVivaRealtimeSessionService>();
+        _orchestrator = orchestrator;
+        _realtimeService = realtimeService;
     }
 
     [BindProperty(SupportsGet = true)]
