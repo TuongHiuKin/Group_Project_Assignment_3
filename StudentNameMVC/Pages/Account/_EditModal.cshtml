@@ -9,7 +9,7 @@
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="editAccountForm" asp-controller="Account" asp-action="Edit" asp-route-id="@Model.AccountId" method="post">
+            <form id="editAccountForm" asp-page="/Account/Index" asp-page-handler="Edit" asp-route-id="@Model.AccountId" method="post">
                 @Html.AntiForgeryToken()
                 <input type="hidden" asp-for="AccountId" />
 

@@ -1,4 +1,5 @@
 using AIVES.BLL.Interfaces;
+using AIVES.BLL.Models;
 using AIVES.DAL.Entities;
 using AIVES.DAL.Repositories.Interfaces;
 using AIVES.DAL.Repositories.Models;
@@ -147,18 +148,24 @@ public class SystemAccountService : ISystemAccountService, ISystemAccountService
         return await _accountRepo.SoftDeleteAsync(id, ct);
     }
 
-    public async Task<DeleteResult> HardDeleteAccountAsync(int id, CancellationToken ct = default)
+    public async Task<AccountDeleteResult> HardDeleteAccountAsync(int id, CancellationToken ct = default)
     {
-        if (id <= 0) return DeleteResult.NotFound;
+        if (id <= 0) return AccountDeleteResult.NotFound;
 
         // Check if account is referenced by any news articles
         var isReferenced = await _accountRepo.IsReferencedAsync(id, ct);
         if (isReferenced)
         {
-            return DeleteResult.InUse;
+            return AccountDeleteResult.InUse;
         }
 
-        return await _accountRepo.HardDeleteAsync(id, ct);
+        var dalResult = await _accountRepo.HardDeleteAsync(id, ct);
+        return dalResult switch
+        {
+            DeleteResult.Deleted => AccountDeleteResult.Deleted,
+            DeleteResult.InUse => AccountDeleteResult.InUse,
+            _ => AccountDeleteResult.NotFound
+        };
     }
 
     public async Task<bool> IsAccountReferencedAsync(int id, CancellationToken ct = default)

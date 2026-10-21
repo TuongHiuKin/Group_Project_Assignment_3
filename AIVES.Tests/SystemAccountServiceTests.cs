@@ -1,3 +1,4 @@
+using AIVES.BLL.Models;
 using AIVES.BLL.Services;
 using AIVES.DAL.Entities;
 using AIVES.DAL.Repositories.Interfaces;
@@ -254,7 +255,7 @@ public class SystemAccountServiceTests
 
         var result = await service.HardDeleteAccountAsync(8);
 
-        Assert.Equal(DeleteResult.InUse, result);
+        Assert.Equal(AccountDeleteResult.InUse, result);
         Assert.Single(repo.Accounts); // Account was not removed!
     }
 
@@ -267,7 +268,7 @@ public class SystemAccountServiceTests
 
         var result = await service.HardDeleteAccountAsync(9);
 
-        Assert.Equal(DeleteResult.Deleted, result);
+        Assert.Equal(AccountDeleteResult.Deleted, result);
         Assert.Empty(repo.Accounts);
     }
 
