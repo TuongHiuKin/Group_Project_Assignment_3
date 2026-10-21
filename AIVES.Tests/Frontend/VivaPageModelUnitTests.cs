@@ -274,9 +274,22 @@ public sealed class VivaPageModelUnitTests
 
         var result = await model.OnGetAsync(sessionId);
 
-        var redirect = Assert.IsType<RedirectToActionResult>(result);
-        Assert.Equal("AccessDenied", redirect.ActionName);
-        Assert.Equal("Account", redirect.ControllerName);
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.Equal("/Account/AccessDenied", redirect.PageName);
+    }
+
+    [Fact]
+    public void ExamPage_CompletedCard_LinksPointToRazorPages()
+    {
+        var examViewPath = System.IO.Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "StudentNameMVC", "Pages", "Viva", "Exam.cshtml");
+        if (System.IO.File.Exists(examViewPath))
+        {
+            var content = System.IO.File.ReadAllText(examViewPath);
+            Assert.Contains("asp-page=\"/StudentReports/Index\"", content);
+            Assert.Contains("asp-page=\"/Account/Dashboard\"", content);
+            Assert.DoesNotContain("asp-controller=\"StudentReports\"", content);
+            Assert.DoesNotContain("asp-controller=\"Account\"", content);
+        }
     }
 
     [Fact]
