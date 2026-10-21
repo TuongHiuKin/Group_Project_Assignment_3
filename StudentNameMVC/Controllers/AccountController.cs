@@ -21,12 +21,14 @@ public class AccountController : Controller
         _authService = authService ?? throw new ArgumentNullException(nameof(authService));
     }
 
-    #region Authentication (TV2 - AUTH-01, AUTH-02, FIX-03)
+    #region Authentication (Converted to Razor Pages in Pages/Account/*; marked [NonAction] until Step 3 controller removal)
 
+    [NonAction]
     [AllowAnonymous]
     [HttpGet]
     public IActionResult ForgotPassword() => View(new ForgotPasswordViewModel());
 
+    [NonAction]
     [AllowAnonymous]
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -51,6 +53,7 @@ public class AccountController : Controller
         return View(new ForgotPasswordViewModel { Submitted = true });
     }
 
+    [NonAction]
     [AllowAnonymous]
     [HttpGet]
     public IActionResult ResetPassword(string? email, string? token)
@@ -60,6 +63,7 @@ public class AccountController : Controller
         return View(new ResetPasswordViewModel { Email = email ?? string.Empty, Token = token ?? string.Empty });
     }
 
+    [NonAction]
     [AllowAnonymous]
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -78,6 +82,7 @@ public class AccountController : Controller
         return RedirectToAction(nameof(Login));
     }
 
+    [NonAction]
     [AllowAnonymous]
     [HttpGet]
     public IActionResult Login(string? returnUrl = null)
@@ -93,6 +98,7 @@ public class AccountController : Controller
         });
     }
 
+    [NonAction]
     [AllowAnonymous]
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -136,6 +142,7 @@ public class AccountController : Controller
         return RedirectToDefaultRolePage(principal);
     }
 
+    [NonAction]
     [Authorize]
     [HttpGet]
     public IActionResult Dashboard()
@@ -153,18 +160,22 @@ public class AccountController : Controller
         return RedirectToAction(nameof(StudentDashboard));
     }
 
+    [NonAction]
     [Authorize(Roles = ApplicationRoles.Admin)]
     [HttpGet]
     public IActionResult AdminDashboard() => View();
 
+    [NonAction]
     [Authorize(Roles = ApplicationRoles.Lecturer)]
     [HttpGet]
     public IActionResult LecturerDashboard() => View();
 
+    [NonAction]
     [Authorize(Roles = ApplicationRoles.Staff)]
     [HttpGet]
     public IActionResult StudentDashboard() => View();
 
+    [NonAction]
     [Authorize]
     [HttpPost]
     [ValidateAntiForgeryToken]
@@ -174,6 +185,7 @@ public class AccountController : Controller
         return RedirectToAction(nameof(Login));
     }
 
+    [NonAction]
     [AllowAnonymous]
     [HttpGet]
     public IActionResult AccessDenied() => View();
@@ -195,73 +207,8 @@ public class AccountController : Controller
         return RedirectToAction(nameof(StudentDashboard));
     }
 
-    private static bool CanAccessReturnUrl(ClaimsPrincipal user, string? returnUrl)
-    {
-        if (string.IsNullOrWhiteSpace(returnUrl) || !returnUrl.StartsWith('/'))
-        {
-            return false;
-        }
-
-        if (returnUrl.StartsWith("//") || returnUrl.StartsWith("/\\"))
-        {
-            return false;
-        }
-
-        var path = returnUrl.Split('?')[0].Split('#')[0].TrimEnd('/');
-        if (string.IsNullOrEmpty(path))
-        {
-            path = "/";
-        }
-
-        if (path.Equals("/Account/Login", StringComparison.OrdinalIgnoreCase) ||
-            path.Equals("/Account/Logout", StringComparison.OrdinalIgnoreCase) ||
-            path.Equals("/Account/AccessDenied", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        var isAdmin = user.IsInRole(ApplicationRoles.Admin);
-        var isLecturer = user.IsInRole(ApplicationRoles.Lecturer);
-        var isStaff = user.IsInRole(ApplicationRoles.Staff);
-
-        // Admin-only paths
-        if (path.StartsWith("/Admin", StringComparison.OrdinalIgnoreCase) ||
-            path.Equals("/Account/Index", StringComparison.OrdinalIgnoreCase) ||
-            path.Equals("/Account/AdminDashboard", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/Account/Create", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/Account/Edit", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/Account/Delete", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/Account/Details", StringComparison.OrdinalIgnoreCase))
-        {
-            return isAdmin;
-        }
-
-        // Lecturer-only dashboard
-        if (path.Equals("/Account/LecturerDashboard", StringComparison.OrdinalIgnoreCase))
-        {
-            return isLecturer;
-        }
-
-        // Class reports accessible to Admin and Lecturer
-        if (path.StartsWith("/ClassReports", StringComparison.OrdinalIgnoreCase))
-        {
-            return isAdmin || isLecturer;
-        }
-
-        // Student-only dashboard
-        if (path.Equals("/Account/StudentDashboard", StringComparison.OrdinalIgnoreCase))
-        {
-            return isStaff;
-        }
-
-        // Student reports accessible to Admin and Staff
-        if (path.StartsWith("/StudentReports", StringComparison.OrdinalIgnoreCase))
-        {
-            return isAdmin || isStaff;
-        }
-
-        return true;
-    }
+    private static bool CanAccessReturnUrl(ClaimsPrincipal user, string? returnUrl) =>
+        StudentNameMVC.Pages.Account.LoginModel.CanAccessReturnUrl(user, returnUrl);
 
     #endregion
 
