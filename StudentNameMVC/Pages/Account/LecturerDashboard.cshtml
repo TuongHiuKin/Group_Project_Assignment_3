@@ -5,6 +5,9 @@
     ViewData["Title"] = "Lecturer Dashboard";
     var userRole = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? ApplicationRoles.Lecturer;
     var userName = User.Identity?.Name ?? "Giảng viên";
+    var teacherId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "GV01";
+    var defaultClass = Model.SelectedClassId ?? "Lớp học";
+    var defaultExam = Model.SelectedExamId ?? "EXAM01";
 }
 
 <!-- Top Role Header Bar -->
@@ -22,10 +25,13 @@
         <a href="/ClassReports" class="btn btn-outline-secondary rounded-pill px-3 py-1.5 fw-bold">
             <i class="bi bi-bar-chart-steps me-1"></i> Thống kê Lớp học
         </a>
-        <a href="/ClassReports/ExportGradeSheet?teacherId=GV01&amp;classId=SE1701&amp;examId=EXAM01"
-           class="btn rounded-pill px-3 py-1.5 fw-bold text-white shadow-sm" style="background: #0d9488;">
-            <i class="bi bi-file-earmark-excel-fill me-1"></i> Xuất Bảng Điểm CSV
-        </a>
+        @if (!string.IsNullOrWhiteSpace(Model.SelectedClassId) && !string.IsNullOrWhiteSpace(Model.SelectedExamId))
+        {
+            <a href="/ClassReports/ExportGradeSheet?teacherId=@Uri.EscapeDataString(teacherId)&amp;classId=@Uri.EscapeDataString(Model.SelectedClassId)&amp;examId=@Uri.EscapeDataString(Model.SelectedExamId)"
+               class="btn rounded-pill px-3 py-1.5 fw-bold text-white shadow-sm" style="background: #0d9488;">
+                <i class="bi bi-file-earmark-excel-fill me-1"></i> Xuất Bảng Điểm CSV
+            </a>
+        }
     </div>
 </div>
 
@@ -48,10 +54,13 @@
                     <span>Thống kê Lớp học</span>
                     <span class="hero-btn-arrow"><i class="bi bi-bar-chart-steps"></i></span>
                 </a>
-                <a href="/ClassReports/ExportGradeSheet?teacherId=GV01&amp;classId=SE1701&amp;examId=EXAM01"
-                   class="btn btn-light rounded-pill px-4 py-2.5 fw-bold text-dark shadow-sm">
-                    <i class="bi bi-file-earmark-excel-fill text-success me-1"></i> Xuất Bảng Điểm CSV
-                </a>
+                @if (!string.IsNullOrWhiteSpace(Model.SelectedClassId) && !string.IsNullOrWhiteSpace(Model.SelectedExamId))
+                {
+                    <a href="/ClassReports/ExportGradeSheet?teacherId=@Uri.EscapeDataString(teacherId)&amp;classId=@Uri.EscapeDataString(Model.SelectedClassId)&amp;examId=@Uri.EscapeDataString(Model.SelectedExamId)"
+                       class="btn btn-light rounded-pill px-4 py-2.5 fw-bold text-dark shadow-sm">
+                        <i class="bi bi-file-earmark-excel-fill text-success me-1"></i> Xuất Bảng Điểm CSV
+                    </a>
+                }
             </div>
         </div>
 
@@ -62,8 +71,8 @@
                     <i class="bi bi-people-fill"></i>
                 </div>
                 <div class="stat-mini-info">
-                    <span class="stat-mini-metric">Lớp SE1701</span>
-                    <span class="stat-mini-title">48 Sinh viên</span>
+                    <span class="stat-mini-metric">@(Model.ClassStats?.TotalStudentsCount ?? 0) Sinh viên</span>
+                    <span class="stat-mini-title">@defaultClass · @defaultExam</span>
                 </div>
             </div>
 
@@ -72,8 +81,16 @@
                     <i class="bi bi-award-fill"></i>
                 </div>
                 <div class="stat-mini-info">
-                    <span class="stat-mini-metric">Điểm TB Lớp</span>
-                    <span class="stat-mini-title">7.65 / 10 Điểm</span>
+                    @if (Model.ClassStats != null && Model.ClassStats.AverageClassScore > 0)
+                    {
+                        <span class="stat-mini-metric">@Model.ClassStats.AverageClassScore.ToString("F2") / 10</span>
+                        <span class="stat-mini-title">Điểm TB Lớp</span>
+                    }
+                    else
+                    {
+                        <span class="stat-mini-metric">Chưa chấm</span>
+                        <span class="stat-mini-title">Điểm TB Lớp</span>
+                    }
                 </div>
             </div>
 
@@ -82,139 +99,122 @@
                     <i class="bi bi-fire"></i>
                 </div>
                 <div class="stat-mini-info">
-                    <span class="stat-mini-metric">Câu khó nhất</span>
-                    <span class="stat-mini-title">Q1 (Bloom: Vận dụng)</span>
+                    @if (Model.ClassStats?.HardestQuestions != null && Model.ClassStats.HardestQuestions.Count > 0)
+                    {
+                        var hardest = Model.ClassStats.HardestQuestions[0];
+                        <span class="stat-mini-metric">@hardest.QuestionId</span>
+                        <span class="stat-mini-title">@(string.IsNullOrWhiteSpace(hardest.QuestionTitle) ? hardest.CognitiveLevel : hardest.QuestionTitle)</span>
+                    }
+                    else
+                    {
+                        <span class="stat-mini-metric">Chưa có dữ liệu</span>
+                        <span class="stat-mini-title">Câu khó nhất</span>
+                    }
                 </div>
             </div>
         </div>
 
         <!-- 3. Các lớp học phần phụ trách -->
         <div class="section-header">
-            <h2 class="section-title">Lớp học phần & Kỳ thi vấn đáp phụ trách</h2>
+            <h2 class="section-title">Lớp học phần phụ trách</h2>
             <span class="badge tag-cyan">Học kỳ Fall 2026</span>
         </div>
 
         <div class="course-cards-grid">
-            <!-- Class 1 -->
-            <div class="course-card">
-                <div class="course-card-thumb-wrap">
-                    <img src="https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80" alt="Lớp SE1701" class="course-card-thumb-img" />
+            @if (Model.AvailableClasses.Count == 0)
+            {
+                <div class="p-4 text-center text-muted w-100">
+                    <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                    <span>Chưa có dữ liệu lớp học</span>
                 </div>
-                <div class="course-card-body">
-                    <span class="course-tag-pill tag-purple">LỚP SE1701 · PRN222</span>
-                    <h3 class="course-card-title">Kiến trúc 3 lớp & Dependency Injection trong .NET 8</h3>
-                    <div class="mt-auto pt-2">
-                        <a href="/ClassReports?classId=SE1701" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
-                            <i class="bi bi-bar-chart-fill me-1"></i> Xem thống kê lớp
-                        </a>
+            }
+            else
+            {
+                @foreach (var c in Model.AvailableClasses)
+                {
+                    <div class="course-card">
+                        <div class="course-card-thumb-wrap p-4 d-flex align-items-center justify-content-center" style="background: linear-gradient(135deg, #0d9488 0%, #14b8a6 100%); min-height: 140px;">
+                            <i class="bi bi-mortarboard-fill text-white" style="font-size: 3rem;"></i>
+                        </div>
+                        <div class="course-card-body">
+                            <span class="course-tag-pill tag-cyan">LỚP @c</span>
+                            <h3 class="course-card-title">Học phần Khảo thí Viva</h3>
+                            <div class="mt-auto pt-2">
+                                <a href="/ClassReports?classId=@Uri.EscapeDataString(c)" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
+                                    <i class="bi bi-bar-chart-fill me-1"></i> Xem thống kê lớp
+                                </a>
+                            </div>
+                        </div>
                     </div>
-                </div>
-            </div>
-
-            <!-- Class 2 -->
-            <div class="course-card">
-                <div class="course-card-thumb-wrap">
-                    <img src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=600&q=80" alt="Lớp SE1702" class="course-card-thumb-img" />
-                </div>
-                <div class="course-card-body">
-                    <span class="course-tag-pill tag-cyan">LỚP SE1702 · PRN231</span>
-                    <h3 class="course-card-title">Thiết kế RESTful API & SignalR Realtime Gateway</h3>
-                    <div class="mt-auto pt-2">
-                        <a href="/ClassReports?classId=SE1702" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
-                            <i class="bi bi-bar-chart-fill me-1"></i> Xem thống kê lớp
-                        </a>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Class 3 -->
-            <div class="course-card">
-                <div class="course-card-thumb-wrap">
-                    <img src="https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=600&q=80" alt="Lớp SE1703" class="course-card-thumb-img" />
-                </div>
-                <div class="course-card-body">
-                    <span class="course-tag-pill tag-pink">LỚP SE1703 · PRN211</span>
-                    <h3 class="course-card-title">Lập trình hướng đối tượng nâng cao C# & LINQ</h3>
-                    <div class="mt-auto pt-2">
-                        <a href="/ClassReports?classId=SE1703" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
-                            <i class="bi bi-bar-chart-fill me-1"></i> Xem thống kê lớp
-                        </a>
-                    </div>
-                </div>
-            </div>
+                }
+            }
         </div>
 
         <!-- 4. Danh sách sinh viên vừa nộp bài cần duyệt -->
         <div class="section-header">
-            <h2 class="section-title">Sinh viên vừa hoàn thành bài thi vấn đáp</h2>
+            <h2 class="section-title">Sinh viên hoàn thành bài thi vấn đáp</h2>
             <a href="/ClassReports" class="section-link">Xem tất cả lớp</a>
         </div>
 
         <div class="lesson-table-wrap">
-            <table class="lesson-table">
-                <thead>
-                    <tr>
-                        <th>SINH VIÊN</th>
-                        <th>MÔN THI</th>
-                        <th>ĐIỂM SỐ</th>
-                        <th>KẾT QUẢ</th>
-                        <th style="text-align: right;">XEM BÀI THI</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>
-                            <div class="table-mentor-cell">
-                                <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&q=80" alt="Avatar" class="table-mentor-avatar" />
-                                <div>
-                                    <div class="table-mentor-name">Nguyễn Văn A</div>
-                                    <div class="table-mentor-date">MSSV: SV01 · Lớp SE1701</div>
-                                </div>
-                            </div>
-                        </td>
-                        <td><span class="badge tag-purple m-0">EXAM01 (.NET)</span></td>
-                        <td><strong class="text-success fs-6">8.5 / 10</strong></td>
-                        <td><span class="badge bg-success text-white rounded-pill px-3">ĐẠT CHUẨN</span></td>
-                        <td style="text-align: right;">
-                            <a href="/ClassReports/StudentDetail?studentId=SV01" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <div class="table-mentor-cell">
-                                <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=80&q=80" alt="Avatar" class="table-mentor-avatar" />
-                                <div>
-                                    <div class="table-mentor-name">Trần Thị B</div>
-                                    <div class="table-mentor-date">MSSV: SV02 · Lớp SE1701</div>
-                                </div>
-                            </div>
-                        </td>
-                        <td><span class="badge tag-purple m-0">EXAM01 (.NET)</span></td>
-                        <td><strong class="text-success fs-6">9.0 / 10</strong></td>
-                        <td><span class="badge bg-success text-white rounded-pill px-3">ĐẠT CHUẨN</span></td>
-                        <td style="text-align: right;">
-                            <a href="/ClassReports/StudentDetail?studentId=SV02" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <div class="table-mentor-cell">
-                                <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=80&q=80" alt="Avatar" class="table-mentor-avatar" />
-                                <div>
-                                    <div class="table-mentor-name">Lê Văn C</div>
-                                    <div class="table-mentor-date">MSSV: SV03 · Lớp SE1701</div>
-                                </div>
-                            </div>
-                        </td>
-                        <td><span class="badge tag-purple m-0">EXAM01 (.NET)</span></td>
-                        <td><strong class="text-danger fs-6">4.5 / 10</strong></td>
-                        <td><span class="badge bg-danger text-white rounded-pill px-3">CHƯA ĐẠT</span></td>
-                        <td style="text-align: right;">
-                            <a href="/ClassReports/StudentDetail?studentId=SV03" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+            @if (Model.ClassStats?.GradeExportRows == null || Model.ClassStats.GradeExportRows.Count == 0)
+            {
+                <div class="p-4 text-center text-muted">
+                    <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                    <span>Chưa có dữ liệu bài thi</span>
+                </div>
+            }
+            else
+            {
+                <table class="lesson-table">
+                    <thead>
+                        <tr>
+                            <th>SINH VIÊN</th>
+                            <th>MÔN THI</th>
+                            <th>ĐIỂM SỐ</th>
+                            <th>KẾT QUẢ</th>
+                            <th style="text-align: right;">XEM BÀI THI</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in Model.ClassStats.GradeExportRows)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="table-mentor-cell">
+                                        <div class="brand-icon-box" style="width: 34px; height: 34px; font-size: 16px; border-radius: 10px;">
+                                            <i class="bi bi-person-fill"></i>
+                                        </div>
+                                        <div>
+                                            <div class="table-mentor-name">@row.StudentName</div>
+                                            <div class="table-mentor-date">MSSV: @row.StudentId · Lớp: @row.ClassId</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td><span class="badge tag-purple m-0">@defaultExam</span></td>
+                                <td><strong class="fs-6">@row.AverageScore</strong></td>
+                                <td>
+                                    @if (row.ResultStatus.Contains("Đạt", StringComparison.OrdinalIgnoreCase) && !row.ResultStatus.Contains("Chưa", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <span class="badge bg-success text-white rounded-pill px-3">@row.ResultStatus</span>
+                                    }
+                                    else if (row.ResultStatus.Contains("Chưa chấm", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <span class="badge bg-secondary text-white rounded-pill px-3">Chưa chấm</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger text-white rounded-pill px-3">@row.ResultStatus</span>
+                                    }
+                                </td>
+                                <td style="text-align: right;">
+                                    <a href="/ClassReports/StudentDetail?studentId=@Uri.EscapeDataString(row.StudentId)&amp;classId=@Uri.EscapeDataString(row.ClassId)&amp;examId=@Uri.EscapeDataString(defaultExam)" class="table-action-btn" title="Xem chi tiết"><i class="bi bi-arrow-up-right"></i></a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
         </div>
     </div>
 
@@ -228,25 +228,38 @@
 
             <div class="statistic-user-card">
                 <div class="avatar-progress-container">
-                    <div class="avatar-progress-ring" style="background: conic-gradient(#0d9488 0% 92%, #e2e8f0 92% 100%);">
+                    <div class="avatar-progress-ring" style="background: conic-gradient(#0d9488 0% 100%, #e2e8f0 100%);">
                         <div class="avatar-progress-inner">
-                            <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80" alt="Avatar" class="avatar-progress-img" />
+                            <div class="brand-icon-box" style="width: 76px; height: 76px; font-size: 32px; border-radius: 50%;">
+                                <i class="bi bi-person-check-fill"></i>
+                            </div>
                         </div>
                     </div>
-                    <span class="avatar-percentage-badge" style="background: #0d9488;">92%</span>
                 </div>
 
                 <div class="statistic-user-greeting">Xin chào, @userName 🔥</div>
-                <div class="statistic-user-sub">92% sinh viên lớp SE1701 đã hoàn thành bài thi vấn đáp.</div>
+                <div class="statistic-user-sub">Lớp @defaultClass · Đề @defaultExam</div>
             </div>
 
             <!-- Mini Bar Chart -->
             <div class="chart-card">
                 <div class="chart-bars-wrap">
-                    <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 35%; background: #99f6e4;"></div></div>
-                    <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 60%; background: #5eead4;"></div></div>
-                    <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 90%; background: #0d9488;"></div></div>
-                    <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 70%; background: #2dd4bf;"></div></div>
+                    @if (Model.ClassStats?.ScoreDistribution != null && Model.ClassStats.ScoreDistribution.Count > 0)
+                    {
+                        var maxCount = Model.ClassStats.ScoreDistribution.Max(b => b.StudentCount);
+                        @foreach (var bin in Model.ClassStats.ScoreDistribution)
+                        {
+                            var h = maxCount > 0 ? Math.Max(15, (int)(bin.StudentCount * 100.0 / maxCount)) : 20;
+                            <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: @(h)%; background: #0d9488;"></div></div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 35%; background: #99f6e4;"></div></div>
+                        <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 60%; background: #5eead4;"></div></div>
+                        <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 90%; background: #0d9488;"></div></div>
+                        <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 70%; background: #2dd4bf;"></div></div>
+                    }
                 </div>
                 <div class="chart-axis-labels">
                     <span>Điểm 0-4</span>
@@ -261,8 +274,16 @@
                 <div class="d-flex align-items-center gap-2 mb-1 text-danger fw-bold small">
                     <i class="bi bi-fire"></i> CÂU HỎI CẦN LƯU Ý
                 </div>
-                <div class="fw-bold text-dark small mb-1">Q1: Dependency Injection</div>
-                <div class="text-secondary small">Có 33% sinh viên trả lời thiếu ý về DbContext trong Singleton.</div>
+                @if (Model.ClassStats?.HardestQuestions != null && Model.ClassStats.HardestQuestions.Count > 0)
+                {
+                    var hardest = Model.ClassStats.HardestQuestions[0];
+                    <div class="fw-bold text-dark small mb-1">@hardest.QuestionId: @hardest.QuestionTitle</div>
+                    <div class="text-secondary small">Tỉ lệ chưa đạt: @hardest.FailRate.ToString("F1")%</div>
+                }
+                else
+                {
+                    <div class="text-secondary small">Chưa có dữ liệu câu hỏi</div>
+                }
             </div>
 
             <a href="/ClassReports" class="btn-see-all-mentors" style="background: #ccfbf1; color: #0f766e;">
