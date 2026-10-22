@@ -268,7 +268,7 @@ public class WhisperSpeechToTextServiceTests
         var handler = new DelegatingHandlerStub(async (req, ct) =>
         {
             // Simulate 1500ms delay while timeout is set to 1000ms (1s)
-            await Task.Delay(1500, ct);
+            await Task.Delay(Timeout.Infinite, ct);
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent("""{"text":"late"}""")
