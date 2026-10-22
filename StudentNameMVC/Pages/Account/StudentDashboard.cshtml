@@ -5,6 +5,7 @@
     ViewData["Title"] = "Student Dashboard";
     var userRole = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? ApplicationRoles.Staff;
     var userName = User.Identity?.Name ?? "Sinh viên";
+    var studentId = !string.IsNullOrWhiteSpace(Model.StudentId) ? Model.StudentId : (User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? User.Identity?.Name ?? "Chưa xác định");
 }
 
 <!-- Top Role Header Bar -->
@@ -52,179 +53,139 @@
         <div class="stat-mini-row">
             <div class="stat-mini-card">
                 <div class="stat-mini-icon-box icon-purple">
-                    <i class="bi bi-code-slash"></i>
+                    <i class="bi bi-journal-check"></i>
                 </div>
                 <div class="stat-mini-info">
-                    <span class="stat-mini-metric">2/8 hoàn thành</span>
-                    <span class="stat-mini-title">ASP.NET Core DI</span>
+                    <span class="stat-mini-metric">@(Model.StudentReport?.CompletedAttemptsCount ?? 0)/@(Model.StudentReport?.MaxAllowedAttemptsCount ?? 3) lượt thi</span>
+                    <span class="stat-mini-title">@Model.SelectedExamId</span>
                 </div>
             </div>
 
             <div class="stat-mini-card">
                 <div class="stat-mini-icon-box icon-pink">
-                    <i class="bi bi-chat-quote-fill"></i>
+                    <i class="bi bi-hourglass-split"></i>
                 </div>
                 <div class="stat-mini-info">
-                    <span class="stat-mini-metric">3 lượt hỏi xoáy</span>
-                    <span class="stat-mini-title">AI Adaptive LLM</span>
+                    <span class="stat-mini-metric">@(Model.StudentReport?.PendingAttemptsCount ?? 0) chờ chấm</span>
+                    <span class="stat-mini-title">@(Model.StudentReport?.GradedAttemptsCount ?? 0) đã chấm</span>
                 </div>
             </div>
 
             <div class="stat-mini-card">
                 <div class="stat-mini-icon-box icon-cyan">
-                    <i class="bi bi-mic-fill"></i>
+                    <i class="bi bi-award-fill"></i>
                 </div>
                 <div class="stat-mini-info">
-                    <span class="stat-mini-metric">98% tin cậy</span>
-                    <span class="stat-mini-title">Whisper Voice STT</span>
+                    @if (Model.StudentReport?.AverageScore != null)
+                    {
+                        <span class="stat-mini-metric">@Model.StudentReport.AverageScore.Value.ToString("F2")/10</span>
+                        <span class="stat-mini-title">Điểm trung bình</span>
+                    }
+                    else
+                    {
+                        <span class="stat-mini-metric">Chưa chấm</span>
+                        <span class="stat-mini-title">Điểm số</span>
+                    }
                 </div>
             </div>
         </div>
 
-        <!-- 3. Đề thi vấn đáp sẵn sàng (Continue Watching style) -->
+        <!-- 3. Đề thi vấn đáp sẵn sàng -->
         <div class="section-header">
             <h2 class="section-title">Chủ đề thi vấn đáp & Phòng thi sẵn sàng</h2>
-            <div class="section-controls">
-                <button type="button" class="carousel-arrow-btn" aria-label="Previous"><i class="bi bi-chevron-left"></i></button>
-                <button type="button" class="carousel-arrow-btn" aria-label="Next"><i class="bi bi-chevron-right"></i></button>
-            </div>
         </div>
 
         <div class="course-cards-grid">
-            <!-- Card 1 -->
-            <div class="course-card">
-                <div class="course-card-thumb-wrap">
-                    <img src="https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80" alt="ASP.NET Core" class="course-card-thumb-img" />
-                    <button type="button" class="course-card-heart" title="Lưu chủ đề"><i class="bi bi-heart"></i></button>
+            @if (Model.AvailableExams.Count == 0)
+            {
+                <div class="p-4 text-center text-muted w-100">
+                    <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                    <span>Chưa có dữ liệu đề thi</span>
                 </div>
-                <div class="course-card-body">
-                    <span class="course-tag-pill tag-cyan">KIẾN TRÚC .NET</span>
-                    <h3 class="course-card-title">Thiết kế kiến trúc 3 lớp & Dependency Injection trong .NET 8</h3>
-                    <div class="course-card-footer">
-                        <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=80&q=80" alt="Mentor" class="course-mentor-avatar" />
-                        <div class="course-mentor-info">
-                            <span class="course-mentor-name">TS. Hoàng Yến</span>
-                            <span class="course-mentor-role">Giám khảo AI</span>
+            }
+            else
+            {
+                @foreach (var ex in Model.AvailableExams)
+                {
+                    <div class="course-card">
+                        <div class="course-card-thumb-wrap p-4 d-flex align-items-center justify-content-center" style="background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); min-height: 140px;">
+                            <i class="bi bi-code-square text-white" style="font-size: 3rem;"></i>
+                        </div>
+                        <div class="course-card-body">
+                            <span class="course-tag-pill tag-cyan">@ex.SubjectCode · @ex.ExamId</span>
+                            <h3 class="course-card-title">@ex.ExamTitle</h3>
+                            <div class="mt-auto pt-2">
+                                <a asp-page="/Viva/Index" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
+                                    <i class="bi bi-play-circle-fill me-1"></i> Vào phòng thi
+                                </a>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <!-- Card 2 -->
-            <div class="course-card">
-                <div class="course-card-thumb-wrap">
-                    <img src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=600&q=80" alt="SignalR Realtime" class="course-card-thumb-img" />
-                    <button type="button" class="course-card-heart" title="Lưu chủ đề"><i class="bi bi-heart"></i></button>
-                </div>
-                <div class="course-card-body">
-                    <span class="course-tag-pill tag-purple">REALTIME SIGNALR</span>
-                    <h3 class="course-card-title">Xử lý phòng thi tương tác trực tiếp & Truyền tải sự kiện giọng nói</h3>
-                    <div class="course-card-footer">
-                        <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=80&q=80" alt="Mentor" class="course-mentor-avatar" />
-                        <div class="course-mentor-info">
-                            <span class="course-mentor-name">ThS. Minh Trí</span>
-                            <span class="course-mentor-role">Giám khảo LLM</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Card 3 -->
-            <div class="course-card">
-                <div class="course-card-thumb-wrap">
-                    <img src="https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=600&q=80" alt="System Design" class="course-card-thumb-img" />
-                    <button type="button" class="course-card-heart" title="Lưu chủ đề"><i class="bi bi-heart"></i></button>
-                </div>
-                <div class="course-card-body">
-                    <span class="course-tag-pill tag-pink">THANG ĐO BLOOM</span>
-                    <h3 class="course-card-title">Hỏi xoáy & Đánh giá năng lực giải quyết vấn đề theo Rubric</h3>
-                    <div class="course-card-footer">
-                        <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=80&q=80" alt="Mentor" class="course-mentor-avatar" />
-                        <div class="course-mentor-info">
-                            <span class="course-mentor-name">TS. Lê Văn Hải</span>
-                            <span class="course-mentor-role">Cố vấn chuyên môn</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
+                }
+            }
         </div>
 
-        <!-- 4. Lịch sử câu hỏi & Tiến trình thi gần đây -->
+        <!-- 4. Lịch sử bài thi cá nhân gần nhất -->
         <div class="section-header">
-            <h2 class="section-title">Lịch sử câu hỏi & Lượt thi gần đây</h2>
-            <a href="/StudentReports" class="section-link">Xem tất cả</a>
+            <h2 class="section-title">Lịch sử bài thi gần đây</h2>
+            <a href="/StudentReports" class="section-link">Xem báo cáo chi tiết</a>
         </div>
 
         <div class="lesson-table-wrap">
-            <table class="lesson-table">
-                <thead>
-                    <tr>
-                        <th>GIÁM KHẢO</th>
-                        <th>CHỦ ĐỀ</th>
-                        <th>NỘI DUNG TRẢ LỜI</th>
-                        <th style="text-align: right;">CHI TIẾT</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>
-                            <div class="table-mentor-cell">
-                                <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=80&q=80" alt="Avatar" class="table-mentor-avatar" />
-                                <div>
-                                    <div class="table-mentor-name">TS. Hoàng Yến</div>
-                                    <div class="table-mentor-date">17/10/2026 · EXAM01</div>
-                                </div>
-                            </div>
-                        </td>
-                        <td><span class="course-tag-pill tag-purple m-0">KIẾN TRÚC .NET</span></td>
-                        <td>
-                            <strong>Transient vs Scoped vs Singleton</strong>
-                            <div class="small text-muted">Đã trả lời câu hỏi phụ về việc inject DbContext vào Singleton</div>
-                        </td>
-                        <td style="text-align: right;">
-                            <a href="/StudentReports" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <div class="table-mentor-cell">
-                                <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=80&q=80" alt="Avatar" class="table-mentor-avatar" />
-                                <div>
-                                    <div class="table-mentor-name">ThS. Minh Trí</div>
-                                    <div class="table-mentor-date">16/10/2026 · EXAM01</div>
-                                </div>
-                            </div>
-                        </td>
-                        <td><span class="course-tag-pill tag-cyan m-0">REALTIME HUB</span></td>
-                        <td>
-                            <strong>SignalR Group Security</strong>
-                            <div class="small text-muted">Cô lập phòng thi theo từng SessionId để bảo mật luồng âm thanh</div>
-                        </td>
-                        <td style="text-align: right;">
-                            <a href="/StudentReports" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <div class="table-mentor-cell">
-                                <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=80&q=80" alt="Avatar" class="table-mentor-avatar" />
-                                <div>
-                                    <div class="table-mentor-name">TS. Lê Văn Hải</div>
-                                    <div class="table-mentor-date">15/10/2026 · EXAM01</div>
-                                </div>
-                            </div>
-                        </td>
-                        <td><span class="course-tag-pill tag-pink m-0">SPEECH TO TEXT</span></td>
-                        <td>
-                            <strong>Whisper Audio Transcription</strong>
-                            <div class="small text-muted">Nhận diện giọng nói chuẩn xác 96% qua microphone WebAudio</div>
-                        </td>
-                        <td style="text-align: right;">
-                            <a href="/StudentReports" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+            @if (Model.StudentReport?.Attempts == null || Model.StudentReport.Attempts.Count == 0)
+            {
+                <div class="p-4 text-center text-muted">
+                    <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                    <span>Chưa có dữ liệu bài thi</span>
+                </div>
+            }
+            else
+            {
+                <table class="lesson-table">
+                    <thead>
+                        <tr>
+                            <th>LƯỢT THI</th>
+                            <th>MÃ ĐỀ</th>
+                            <th>THỜI GIAN NỘP</th>
+                            <th>ĐIỂM SỐ</th>
+                            <th style="text-align: right;">BÁO CÁO</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var att in Model.StudentReport.Attempts)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="table-mentor-cell">
+                                        <div class="brand-icon-box" style="width: 34px; height: 34px; font-size: 16px; border-radius: 10px;">
+                                            <i class="bi bi-mic-fill"></i>
+                                        </div>
+                                        <div>
+                                            <div class="table-mentor-name">Lượt thi số @att.AttemptOrdinal</div>
+                                            <div class="table-mentor-date">@att.ExamState.ToString()</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td><span class="badge tag-purple m-0">@att.ExamId</span></td>
+                                <td class="text-secondary small">@(att.CompletedAt?.ToString("dd/MM/yyyy HH:mm") ?? "Đang thi")</td>
+                                <td>
+                                    @if (att.GradingState == AIVES.BLL.Models.ExamReporting.GradingState.Pending)
+                                    {
+                                        <span class="badge bg-secondary text-white rounded-pill px-3">Chưa chấm</span>
+                                    }
+                                    else
+                                    {
+                                        <strong class="fs-6">@att.NormalizedScore.ToString("F1") / 10</strong>
+                                    }
+                                </td>
+                                <td style="text-align: right;">
+                                    <a href="/StudentReports?examId=@Uri.EscapeDataString(att.ExamId)" class="table-action-btn" title="Xem báo cáo"><i class="bi bi-arrow-up-right"></i></a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
         </div>
     </div>
 
@@ -232,83 +193,54 @@
     <div class="dashboard-side-col">
         <div class="statistic-panel">
             <div class="statistic-header">
-                <h3 class="statistic-title">Statistic</h3>
+                <h3 class="statistic-title">Học tập Cá nhân</h3>
                 <button type="button" class="statistic-more-btn"><i class="bi bi-three-dots-vertical"></i></button>
             </div>
 
             <div class="statistic-user-card">
                 <div class="avatar-progress-container">
-                    <div class="avatar-progress-ring">
+                    <div class="avatar-progress-ring" style="background: conic-gradient(#3b82f6 0% 100%, #e2e8f0 100%);">
                         <div class="avatar-progress-inner">
-                            <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=160&q=80" alt="Avatar" class="avatar-progress-img" />
+                            <div class="brand-icon-box" style="width: 76px; height: 76px; font-size: 32px; border-radius: 50%;">
+                                <i class="bi bi-mortarboard-fill"></i>
+                            </div>
                         </div>
                     </div>
-                    <span class="avatar-percentage-badge">85%</span>
                 </div>
 
                 <div class="statistic-user-greeting">Xin chào, @userName 🔥</div>
-                <div class="statistic-user-sub">Tiếp tục hoàn thành bài thi vấn đáp hôm nay để đạt mục tiêu nhé!</div>
+                <div class="statistic-user-sub">MSSV: @studentId · Đề @Model.SelectedExamId</div>
             </div>
 
             <!-- Mini Bar Chart -->
             <div class="chart-card">
                 <div class="chart-bars-wrap">
-                    <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 40%;"></div></div>
-                    <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 65%;"></div></div>
-                    <div class="chart-bar-col"><div class="chart-bar-pillar active" style="height: 90%;"></div></div>
-                    <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 45%;"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 40%; background: #93c5fd;"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 65%; background: #60a5fa;"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 90%; background: #3b82f6;"></div></div>
+                    <div class="chart-bar-col"><div class="chart-bar-pillar" style="height: 75%; background: #2563eb;"></div></div>
                 </div>
                 <div class="chart-axis-labels">
-                    <span>1-10 Oct</span>
-                    <span>11-20 Oct</span>
-                    <span>21-30 Oct</span>
-                    <span>Hôm nay</span>
+                    <span>Lần 1</span>
+                    <span>Lần 2</span>
+                    <span>Lần 3</span>
+                    <span>Chuẩn</span>
                 </div>
             </div>
 
-            <!-- Your Mentor List -->
+            <!-- Quick Links -->
             <div>
-                <div class="mentor-list-header">
-                    <h4 class="mentor-list-title">Hội đồng khảo thí AI</h4>
-                    <button type="button" class="mentor-add-btn"><i class="bi bi-plus-lg"></i></button>
+                <h4 class="mentor-list-title mb-3">Lối tắt Thí sinh</h4>
+                <div class="d-flex flex-column gap-2">
+                    <a asp-page="/Viva/Index" class="btn btn-light text-start py-2.5 px-3 rounded-4 border d-flex align-items-center justify-content-between">
+                        <span class="fw-bold small text-dark"><i class="bi bi-mic text-danger me-2"></i>Vào phòng thi AI</span>
+                        <i class="bi bi-chevron-right text-muted small"></i>
+                    </a>
+                    <a href="/StudentReports" class="btn btn-light text-start py-2.5 px-3 rounded-4 border d-flex align-items-center justify-content-between">
+                        <span class="fw-bold small text-dark"><i class="bi bi-journal-check text-primary me-2"></i>Báo cáo chi tiết</span>
+                        <i class="bi bi-chevron-right text-muted small"></i>
+                    </a>
                 </div>
-
-                <div class="mentor-items-list">
-                    <div class="mentor-item">
-                        <div class="mentor-profile-group">
-                            <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=80&q=80" alt="Mentor" class="mentor-pic" />
-                            <div class="mentor-text-info">
-                                <span class="mentor-name">TS. Hoàng Yến</span>
-                                <span class="mentor-role">Giám khảo AI</span>
-                            </div>
-                        </div>
-                        <a href="javascript:void(0)" class="btn-follow"><i class="bi bi-person-plus"></i> Follow</a>
-                    </div>
-
-                    <div class="mentor-item">
-                        <div class="mentor-profile-group">
-                            <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=80&q=80" alt="Mentor" class="mentor-pic" />
-                            <div class="mentor-text-info">
-                                <span class="mentor-name">ThS. Minh Trí</span>
-                                <span class="mentor-role">Hỏi xoáy LLM</span>
-                            </div>
-                        </div>
-                        <a href="javascript:void(0)" class="btn-follow"><i class="bi bi-person-plus"></i> Follow</a>
-                    </div>
-
-                    <div class="mentor-item">
-                        <div class="mentor-profile-group">
-                            <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=80&q=80" alt="Mentor" class="mentor-pic" />
-                            <div class="mentor-text-info">
-                                <span class="mentor-name">TS. Lê Văn Hải</span>
-                                <span class="mentor-role">Cố vấn kiến trúc</span>
-                            </div>
-                        </div>
-                        <a href="javascript:void(0)" class="btn-follow"><i class="bi bi-person-plus"></i> Follow</a>
-                    </div>
-                </div>
-
-                <a asp-page="/Viva/Index" class="btn-see-all-mentors">Xem tất cả phòng thi</a>
             </div>
         </div>
     </div>

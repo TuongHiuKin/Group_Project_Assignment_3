@@ -3,6 +3,8 @@ using System.Reflection;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using AIVES.BLL.Interfaces.Ai;
+using AIVES.BLL.Interfaces.ExamReporting;
+using AIVES.BLL.Models.ExamReporting;
 using AIVES.BLL.Models.VivaInterview;
 using AIVES.BLL.Security;
 using AIVES.DAL.Repositories.Interfaces;
@@ -50,6 +52,7 @@ public sealed class VivaRazorPagesIntegrationTests : IClassFixture<VivaRazorPage
                 services.AddSingleton<ISpeechToTextService>(ai);
                 services.AddSingleton<ITextToSpeechService>(ai);
                 services.AddSingleton<IFollowUpGeneratorService>(ai);
+                services.AddSingleton<IStudentReportService>(new TestStudentReportService());
 
                 services.AddAuthentication(options =>
                 {
@@ -262,5 +265,13 @@ public sealed class VivaRazorPagesIntegrationTests : IClassFixture<VivaRazorPage
         var response = await client.GetAsync("/");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+    private sealed class TestStudentReportService : IStudentReportService
+    {
+        public Task<List<ExamSettingsSnapshot>> GetAvailableExamsAsync(CancellationToken ct = default)
+            => Task.FromResult(new List<ExamSettingsSnapshot>());
+
+        public Task<StudentReportDto?> GetStudentReportAsync(string studentId, string examId, CancellationToken ct = default)
+            => Task.FromResult<StudentReportDto?>(null);
     }
 }

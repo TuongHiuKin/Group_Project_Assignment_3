@@ -1,8 +1,12 @@
+using System.IO;
 using System.Reflection;
 using System.Security.Claims;
 using AIVES.BLL.Interfaces;
+using AIVES.BLL.Interfaces.ExamReporting;
 using AIVES.BLL.Models;
+using AIVES.BLL.Models.ExamReporting;
 using AIVES.BLL.Security;
+using AIVES.DAL.Entities;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -162,6 +166,152 @@ public sealed class AccountAuthRazorPagesTests
         Assert.Equal(expectedPage, redirect.PageName);
     }
 
+    [Fact]
+    public async Task AdminDashboardModel_OnGetAsync_PopulatesRealCountsAndAccounts()
+    {
+        var accountService = new StubDashboardAccountService
+        {
+            Accounts = new List<SystemAccount>
+            {
+                new() { AccountId = 1, AccountName = "Admin", AccountEmail = "admin@test.com", AccountRole = 0 },
+                new() { AccountId = 2, AccountName = "Lecturer A", AccountEmail = "gv@test.com", AccountRole = 2 },
+                new() { AccountId = 3, AccountName = "Student A", AccountEmail = "sv@test.com", AccountRole = 1 }
+            }
+        };
+        var reportService = new StubDashboardStudentReportService
+        {
+            Exams = new List<ExamSettingsSnapshot> { new() { ExamId = "EXAM01", ExamTitle = "Test Exam" } }
+        };
+
+        var model = new AdminDashboardModel(accountService, reportService);
+        await model.OnGetAsync();
+
+        Assert.Equal(3, model.TotalAccounts);
+        Assert.Equal(1, model.TotalStudents);
+        Assert.Equal(1, model.TotalLecturers);
+        Assert.Equal(1, model.TotalExams);
+        Assert.Equal(3, model.RecentAccounts.Count);
+    }
+
+    [Fact]
+    public async Task AdminDashboardModel_OnGetAsync_WhenEmpty_HandlesSafely()
+    {
+        var accountService = new StubDashboardAccountService();
+        var reportService = new StubDashboardStudentReportService();
+
+        var model = new AdminDashboardModel(accountService, reportService);
+        await model.OnGetAsync();
+
+        Assert.Equal(0, model.TotalAccounts);
+        Assert.Equal(0, model.TotalStudents);
+        Assert.Equal(0, model.TotalLecturers);
+        Assert.Equal(0, model.TotalExams);
+        Assert.Empty(model.RecentAccounts);
+    }
+
+    [Fact]
+    public async Task LecturerDashboardModel_OnGetAsync_PopulatesClassStatistics()
+    {
+        var classReportService = new StubDashboardClassReportService
+        {
+            Classes = new List<string> { "SE1701" },
+            Exams = new List<ExamSettingsSnapshot> { new() { ExamId = "EXAM01", ExamTitle = "PRN222" } },
+            Stats = new ClassStatisticsDto
+            {
+                ClassId = "SE1701",
+                ExamId = "EXAM01",
+                TotalStudentsCount = 25,
+                AverageClassScore = 7.5m,
+                HardestQuestions = new List<QuestionStatDto>
+                {
+                    new() { QuestionId = "Q1", QuestionTitle = "DI Lifetime", FailRate = 35.0m }
+                }
+            }
+        };
+
+        var model = new LecturerDashboardModel(classReportService)
+        {
+            PageContext = new PageContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(new[]
+                    {
+                        new Claim(ClaimTypes.NameIdentifier, "GV01"),
+                        new Claim(ClaimTypes.Role, ApplicationRoles.Lecturer)
+                    }, "TestAuth"))
+                }
+            }
+        };
+
+        await model.OnGetAsync();
+
+        Assert.Equal("SE1701", model.SelectedClassId);
+        Assert.Equal("EXAM01", model.SelectedExamId);
+        Assert.NotNull(model.ClassStats);
+        Assert.Equal(25, model.ClassStats.TotalStudentsCount);
+        Assert.Equal(7.5m, model.ClassStats.AverageClassScore);
+    }
+
+    [Fact]
+    public async Task StudentDashboardModel_OnGetAsync_PopulatesStudentReportAndExams()
+    {
+        var studentReportService = new StubDashboardStudentReportService
+        {
+            Exams = new List<ExamSettingsSnapshot> { new() { ExamId = "EXAM01", ExamTitle = "PRN222 Viva" } },
+            Report = new StudentReportDto
+            {
+                StudentId = "SV01",
+                ExamId = "EXAM01",
+                CompletedAttemptsCount = 1,
+                MaxAllowedAttemptsCount = 3,
+                PendingAttemptsCount = 1,
+                GradedAttemptsCount = 0
+            }
+        };
+
+        var model = new StudentDashboardModel(studentReportService)
+        {
+            PageContext = new PageContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(new ClaimsIdentity(new[]
+                    {
+                        new Claim(ClaimTypes.NameIdentifier, "SV01"),
+                        new Claim(ClaimTypes.Role, ApplicationRoles.Staff)
+                    }, "TestAuth"))
+                }
+            }
+        };
+
+        await model.OnGetAsync();
+
+        Assert.Equal("EXAM01", model.SelectedExamId);
+        Assert.Single(model.AvailableExams);
+        Assert.NotNull(model.StudentReport);
+        Assert.Equal(1, model.StudentReport.CompletedAttemptsCount);
+        Assert.Equal(1, model.StudentReport.PendingAttemptsCount);
+    }
+
+    [Fact]
+    public void Layout_And_Dashboards_DoNotContainUnsplashOrFakeExaminers()
+    {
+        var mvcPagesDir = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "StudentNameMVC", "Pages");
+        if (Directory.Exists(mvcPagesDir))
+        {
+            var files = Directory.GetFiles(mvcPagesDir, "*.cshtml", SearchOption.AllDirectories);
+            foreach (var file in files)
+            {
+                var content = File.ReadAllText(file);
+                Assert.DoesNotContain("images.unsplash.com", content);
+                Assert.DoesNotContain("TS. Hoàng Yến", content);
+                Assert.DoesNotContain("ThS. Minh Trí", content);
+                Assert.DoesNotContain("TS. Lê Văn Hải", content);
+            }
+        }
+    }
+
     private static LoginModel CreateLoginModel(IAuthService authService, out RecordingAuthenticationService authRecorder)
     {
         authRecorder = new RecordingAuthenticationService();
@@ -223,5 +373,61 @@ public sealed class AccountAuthRazorPagesTests
             SignedOut = true;
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class StubDashboardAccountService : ISystemAccountService
+    {
+        public List<SystemAccount> Accounts { get; set; } = new();
+
+        public Task<List<SystemAccount>> SearchAccountsAsync(string? keyword = null, byte? role = null, bool includeDeleted = true, CancellationToken ct = default)
+            => Task.FromResult(Accounts);
+
+        public Task<SystemAccount?> GetAccountByIdAsync(int id, bool includeDeleted = false, CancellationToken ct = default)
+            => Task.FromResult(Accounts.FirstOrDefault(a => a.AccountId == id));
+
+        public Task<int> CreateAccountAsync(string name, string email, string password, byte role, CancellationToken ct = default) => Task.FromResult(1);
+        public Task<bool> UpdateAccountAsync(int id, string name, string email, byte role, string? newPassword = null, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<bool> SoftDeleteAccountAsync(int id, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<AccountDeleteResult> HardDeleteAccountAsync(int id, CancellationToken ct = default) => Task.FromResult(AccountDeleteResult.Deleted);
+        public Task<bool> IsAccountReferencedAsync(int id, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<bool> UpdateProfileAsync(int id, string name, string email, string? newPassword = null, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<SystemAccount?> AuthenticateAsync(string email, string password, CancellationToken ct = default) => Task.FromResult<SystemAccount?>(null);
+        public Task<List<NewsArticle>> GetNewsArticlesFromUserAsync(int accountId, CancellationToken ct = default) => Task.FromResult(new List<NewsArticle>());
+        public Task<List<NewsArticle>> GetNewsArticlesPublicAsync(CancellationToken ct = default) => Task.FromResult(new List<NewsArticle>());
+        public Task<List<NewsArticle>> GetNewsArticlesLecturerAsync(int accountId, CancellationToken ct = default) => Task.FromResult(new List<NewsArticle>());
+    }
+
+    private sealed class StubDashboardStudentReportService : IStudentReportService
+    {
+        public List<ExamSettingsSnapshot> Exams { get; set; } = new();
+        public StudentReportDto? Report { get; set; }
+
+        public Task<List<ExamSettingsSnapshot>> GetAvailableExamsAsync(CancellationToken ct = default)
+            => Task.FromResult(Exams);
+
+        public Task<StudentReportDto?> GetStudentReportAsync(string studentId, string examId, CancellationToken ct = default)
+            => Task.FromResult(Report);
+    }
+
+    private sealed class StubDashboardClassReportService : IClassReportService
+    {
+        public List<string> Classes { get; set; } = new();
+        public List<ExamSettingsSnapshot> Exams { get; set; } = new();
+        public ClassStatisticsDto? Stats { get; set; }
+
+        public Task<List<string>> GetAvailableClassesForTeacherAsync(string teacherId, CancellationToken ct = default)
+            => Task.FromResult(Classes);
+
+        public Task<List<ExamSettingsSnapshot>> GetAvailableExamsAsync(CancellationToken ct = default)
+            => Task.FromResult(Exams);
+
+        public Task<ClassStatisticsDto?> GetClassStatisticsAsync(string teacherId, string classId, string examId, int? specificAttemptOrdinal = null, CancellationToken ct = default)
+            => Task.FromResult(Stats);
+
+        public Task<byte[]> ExportClassGradeSheetCsvAsync(string teacherId, string classId, string examId, CancellationToken ct = default)
+            => Task.FromResult(Array.Empty<byte>());
+
+        public Task<StudentReportDto?> GetStudentExamDetailForTeacherAsync(string teacherId, string classId, string examId, string studentId, CancellationToken ct = default)
+            => Task.FromResult<StudentReportDto?>(null);
     }
 }

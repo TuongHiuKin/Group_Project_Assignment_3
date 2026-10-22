@@ -60,18 +60,18 @@
                     <i class="bi bi-people-fill"></i>
                 </div>
                 <div class="stat-mini-info">
-                    <span class="stat-mini-metric">Hệ thống</span>
-                    <span class="stat-mini-title">Quản lý Tài khoản (Nhóm 7)</span>
+                    <span class="stat-mini-metric">@Model.TotalAccounts tài khoản</span>
+                    <span class="stat-mini-title">@Model.TotalStudents Sinh viên · @Model.TotalLecturers Giảng viên</span>
                 </div>
             </div>
 
             <div class="stat-mini-card">
                 <div class="stat-mini-icon-box icon-cyan">
-                    <i class="bi bi-cpu-fill"></i>
+                    <i class="bi bi-journal-bookmark-fill"></i>
                 </div>
                 <div class="stat-mini-info">
-                    <span class="stat-mini-metric">AI Engine</span>
-                    <span class="stat-mini-title">Whisper · TTS · GPT-4o</span>
+                    <span class="stat-mini-metric">@Model.TotalExams đề thi</span>
+                    <span class="stat-mini-title">Học phần khảo thí AIVES</span>
                 </div>
             </div>
 
@@ -80,7 +80,7 @@
                     <i class="bi bi-shield-check"></i>
                 </div>
                 <div class="stat-mini-info">
-                    <span class="stat-mini-metric">Bảo mật</span>
+                    <span class="stat-mini-metric">Hạ tầng</span>
                     <span class="stat-mini-title">Cookie & Anti-Forgery</span>
                 </div>
             </div>
@@ -95,11 +95,11 @@
         <div class="course-cards-grid">
             <!-- Phân hệ 1: Quản trị tài khoản -->
             <div class="course-card">
-                <div class="course-card-thumb-wrap">
-                    <img src="https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=600&q=80" alt="Tài khoản" class="course-card-thumb-img" />
+                <div class="course-card-thumb-wrap p-4 d-flex align-items-center justify-content-center" style="background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%); min-height: 140px;">
+                    <i class="bi bi-people-fill text-white" style="font-size: 3rem;"></i>
                 </div>
                 <div class="course-card-body">
-                    <span class="course-tag-pill tag-purple">NHÓM 7 SECURITY</span>
+                    <span class="course-tag-pill tag-purple">TÀI KHOẢN & PHÂN QUYỀN</span>
                     <h3 class="course-card-title">Quản trị người dùng: Admin, Giảng viên và Sinh viên</h3>
                     <div class="mt-auto pt-2">
                         <a href="/Account/Index" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
@@ -111,11 +111,11 @@
 
             <!-- Phân hệ 2: Báo cáo & Thống kê -->
             <div class="course-card">
-                <div class="course-card-thumb-wrap">
-                    <img src="https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=600&q=80" alt="Thống kê" class="course-card-thumb-img" />
+                <div class="course-card-thumb-wrap p-4 d-flex align-items-center justify-content-center" style="background: linear-gradient(135deg, #0d9488 0%, #14b8a6 100%); min-height: 140px;">
+                    <i class="bi bi-bar-chart-steps text-white" style="font-size: 3rem;"></i>
                 </div>
                 <div class="course-card-body">
-                    <span class="course-tag-pill tag-cyan">NHÓM 6 REPORTING</span>
+                    <span class="course-tag-pill tag-cyan">BÁO CÁO HỌC VỤ</span>
                     <h3 class="course-card-title">Phân tích câu hỏi khó, phổ điểm & xuất bảng điểm CSV</h3>
                     <div class="mt-auto pt-2">
                         <a href="/ClassReports" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
@@ -127,11 +127,11 @@
 
             <!-- Phân hệ 3: Lõi Viva Realtime -->
             <div class="course-card">
-                <div class="course-card-thumb-wrap">
-                    <img src="https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80" alt="Viva Hub" class="course-card-thumb-img" />
+                <div class="course-card-thumb-wrap p-4 d-flex align-items-center justify-content-center" style="background: linear-gradient(135deg, #db2777 0%, #f43f5e 100%); min-height: 140px;">
+                    <i class="bi bi-mic-fill text-white" style="font-size: 3rem;"></i>
                 </div>
                 <div class="course-card-body">
-                    <span class="course-tag-pill tag-pink">NHÓM 3 VIVA AI</span>
+                    <span class="course-tag-pill tag-pink">PHÒNG THI VIVA</span>
                     <h3 class="course-card-title">Phòng thi vấn đáp Realtime SignalR & Hỏi xoáy AI</h3>
                     <div class="mt-auto pt-2">
                         <a asp-page="/Viva/Index" class="btn btn-outline-primary btn-sm w-100 rounded-pill fw-bold">
@@ -142,75 +142,68 @@
             </div>
         </div>
 
-        <!-- 4. Lịch sử hoạt động & Kiểm toán gần đây -->
+        <!-- 4. Lịch sử hoạt động & Tài khoản gần đây -->
         <div class="section-header">
-            <h2 class="section-title">Nhật ký phiên thi & Hoạt động quản trị gần nhất</h2>
-            <a href="/ClassReports" class="section-link">Xem tất cả</a>
+            <h2 class="section-title">Tài khoản người dùng gần nhất</h2>
+            <a href="/Account/Index" class="section-link">Xem tất cả</a>
         </div>
 
         <div class="lesson-table-wrap">
-            <table class="lesson-table">
-                <thead>
-                    <tr>
-                        <th>TÀI KHOẢN</th>
-                        <th>VAI TRÒ</th>
-                        <th>HOẠT ĐỘNG GẦN NHẤT</th>
-                        <th style="text-align: right;">THAO TÁC</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>
-                            <div class="table-mentor-cell">
-                                <div class="brand-icon-box" style="width: 34px; height: 34px; font-size: 16px; border-radius: 10px;">
-                                    <i class="bi bi-shield-lock-fill"></i>
-                                </div>
-                                <div>
-                                    <div class="table-mentor-name">admin@funews.com</div>
-                                    <div class="table-mentor-date">17/10/2026 09:15</div>
-                                </div>
-                            </div>
-                        </td>
-                        <td><span class="badge tag-purple m-0">ADMIN</span></td>
-                        <td>Đăng nhập hệ thống & kiểm tra phân quyền hệ thống</td>
-                        <td style="text-align: right;">
-                            <a href="/Account/Index" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <div class="table-mentor-cell">
-                                <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=80&q=80" alt="Avatar" class="table-mentor-avatar" />
-                                <div>
-                                    <div class="table-mentor-name">GV01 (TS. Hoàng Yến)</div>
-                                    <div class="table-mentor-date">17/10/2026 08:30</div>
-                                </div>
-                            </div>
-                        </td>
-                        <td><span class="badge tag-cyan m-0">GIẢNG VIÊN</span></td>
-                        <td>Xem thống kê lớp SE1701 & tải file điểm CSV UTF-8</td>
-                        <td style="text-align: right;">
-                            <a href="/ClassReports" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <div class="table-mentor-cell">
-                                <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=80&q=80" alt="Avatar" class="table-mentor-avatar" />
-                                <div>
-                                    <div class="table-mentor-name">SV01 (Nguyễn Văn A)</div>
-                                    <div class="table-mentor-date">17/10/2026 08:00</div>
-                                </div>
-                            </div>
-                        </td>
-                        <td><span class="badge tag-pink m-0">SINH VIÊN</span></td>
-                        <td>Hoàn thành bài thi vấn đáp EXAM01 qua Microphone STT</td>
-                        <td style="text-align: right;">
-                            <a href="/StudentReports" class="table-action-btn"><i class="bi bi-arrow-up-right"></i></a>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+            @if (Model.RecentAccounts.Count == 0)
+            {
+                <div class="p-4 text-center text-muted">
+                    <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                    <span>Chưa có dữ liệu</span>
+                </div>
+            }
+            else
+            {
+                <table class="lesson-table">
+                    <thead>
+                        <tr>
+                            <th>TÀI KHOẢN</th>
+                            <th>VAI TRÒ</th>
+                            <th>EMAIL</th>
+                            <th style="text-align: right;">THAO TÁC</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var acc in Model.RecentAccounts)
+                        {
+                            var roleBadgeClass = acc.AccountRole switch
+                            {
+                                2 => "tag-cyan",
+                                1 => "tag-pink",
+                                _ => "tag-purple"
+                            };
+                            var roleName = acc.AccountRole switch
+                            {
+                                2 => "GIẢNG VIÊN",
+                                1 => "SINH VIÊN",
+                                _ => "ADMIN"
+                            };
+                            <tr>
+                                <td>
+                                    <div class="table-mentor-cell">
+                                        <div class="brand-icon-box" style="width: 34px; height: 34px; font-size: 16px; border-radius: 10px;">
+                                            <i class="bi bi-person-fill"></i>
+                                        </div>
+                                        <div>
+                                            <div class="table-mentor-name">@acc.AccountName</div>
+                                            <div class="table-mentor-date">ID: @acc.AccountId</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td><span class="badge @roleBadgeClass m-0">@roleName</span></td>
+                                <td class="text-secondary small">@acc.AccountEmail</td>
+                                <td style="text-align: right;">
+                                    <a href="/Account/Index?keyword=@Uri.EscapeDataString(acc.AccountEmail)" class="table-action-btn" title="Xem chi tiết"><i class="bi bi-arrow-up-right"></i></a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
         </div>
     </div>
 
