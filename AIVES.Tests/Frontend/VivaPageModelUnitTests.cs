@@ -193,6 +193,26 @@ public sealed class VivaPageModelUnitTests
         Assert.Equal("SV_TEST_01", stub.CapturedStudentId);
     }
 
+    [Theory]
+    [InlineData(ApplicationRoles.Admin, "Quản trị viên")]
+    [InlineData(ApplicationRoles.Lecturer, "Giảng viên")]
+    public async Task IndexModel_OnPostCreateAsync_WhenUserIsNotStudent_DoesNotCreateSession(string role, string expectedRoleName)
+    {
+        var stub = new StubOrchestrator();
+        var model = new IndexModel(NullLogger<IndexModel>.Instance, stub)
+        {
+            PageContext = CreatePageContext(userId: ApplicationRoles.AdminSubjectId, role: role),
+            ExamIdInput = "EXAM01"
+        };
+
+        var result = await model.OnPostCreateAsync();
+
+        Assert.IsType<PageResult>(result);
+        Assert.False(model.IsCandidate);
+        Assert.Contains(expectedRoleName, model.ErrorMessage);
+        Assert.Null(stub.CapturedStudentId);
+    }
+
     private sealed class UnconfiguredAiStore : AIVES.BLL.Interfaces.Ai.IAiCredentialStore
     {
         public AIVES.BLL.Interfaces.Ai.AiCredentialStatus GetStatus() => new(false, false, null, null);
