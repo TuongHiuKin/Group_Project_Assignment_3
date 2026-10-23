@@ -11,12 +11,15 @@ namespace StudentNameMVC.Pages.Account;
 public class LecturerDashboardModel : PageModel
 {
     private readonly IClassReportService _classReportService;
+    private readonly IRubricGradingService _rubricGradingService;
 
-    public LecturerDashboardModel(IClassReportService classReportService)
+    public LecturerDashboardModel(IClassReportService classReportService, IRubricGradingService rubricGradingService)
     {
         _classReportService = classReportService ?? throw new ArgumentNullException(nameof(classReportService));
+        _rubricGradingService = rubricGradingService ?? throw new ArgumentNullException(nameof(rubricGradingService));
     }
 
+    public IReadOnlyList<QuestionRubric> Rubrics { get; set; } = Array.Empty<QuestionRubric>();
     public List<string> AvailableClasses { get; set; } = new();
     public List<ExamSettingsSnapshot> AvailableExams { get; set; } = new();
     public string? SelectedClassId { get; set; }
@@ -39,6 +42,8 @@ public class LecturerDashboardModel : PageModel
         SelectedExamId = !string.IsNullOrWhiteSpace(examId)
             ? examId
             : AvailableExams.FirstOrDefault()?.ExamId;
+
+        Rubrics = _rubricGradingService.GetRubrics(SelectedExamId ?? "EXAM01");
 
         if (!string.IsNullOrWhiteSpace(SelectedClassId) && !string.IsNullOrWhiteSpace(SelectedExamId))
         {

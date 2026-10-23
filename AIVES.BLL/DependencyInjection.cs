@@ -10,6 +10,7 @@ using AIVES.BLL.Services.Ai;
 using AIVES.BLL.Services.Ai.Adapters;
 using AIVES.BLL.Services.Ai.Gemini;
 using AIVES.BLL.Services.Ai.Mocks;
+using AIVES.BLL.Services.Ai.Unavailable;
 using AIVES.BLL.Services.VivaInterview;
 
 namespace AIVES.BLL;
@@ -62,127 +63,112 @@ public static class DependencyInjection
         services.AddHttpClient<WhisperSpeechToTextService>();
         services.AddHttpClient<OpenAiTextToSpeechService>();
         services.AddHttpClient<OpenAiFollowUpGeneratorService>();
-        services.AddHttpClient<GeminiSpeechToTextService>();
+        services.AddHttpClient<GeminiSpeechToTextService>(client => client.Timeout = TimeSpan.FromMinutes(3));
         services.AddHttpClient<GeminiTextToSpeechService>();
-        services.AddHttpClient<GeminiFollowUpGeneratorService>();
+        services.AddHttpClient<GeminiFollowUpGeneratorService>(client => client.Timeout = TimeSpan.FromMinutes(2));
 
         services.AddSingleton<FollowUpPolicyValidator>();
         services.AddScoped<MockSpeechToTextService>();
         services.AddScoped<MockTextToSpeechService>();
         services.AddScoped<MockFollowUpGeneratorService>();
 
-        services.AddScoped<ISpeechToTextService>(sp =>
-        {
-            var mock = sp.GetRequiredService<MockSpeechToTextService>();
-            var logger = sp.GetService<ILogger<ISpeechToTextService>>();
-            var store = sp.GetService<IAiCredentialStore>();
-            if (store == null) return mock;
-
-            var config = store.GetConfiguration();
-            if (!config.UseRealAi) return mock;
-
-            var target = config.Routing.Stt;
-            var profile = config.FindProfile(target.ProfileId);
-            if (profile == null) return mock;
-
-            var registry = sp.GetRequiredService<IAiProviderRegistry>();
-            var adapter = registry.GetAdapter(profile.Kind);
-            if (adapter == null) return mock;
-
-            try
-            {
-                var model = !string.IsNullOrWhiteSpace(target.Model)
-                    ? target.Model
-                    : adapter.GetDefaultModel(AiCapability.SpeechToText);
-                var service = adapter.CreateSpeechToTextService(sp, profile, model);
-                return service ?? mock;
-            }
-            catch (Exception ex)
-            {
-                var sanitized = AiKeySanitizer.Sanitize(ex.Message, profile.ApiKey);
-                logger?.LogWarning("Failed to create SpeechToTextService for provider {ProfileName} ({Kind}). Falling back to mock. Error: {Error}",
-                    profile.Name, profile.Kind, sanitized);
-                return mock;
-            }
-        });
+        services.AddScoped<ISpeechToTextService>(sp => ResolveCapability<ISpeechToTextService>(
+            sp,
+            AiCapability.SpeechToText,
+            config => (config.Routing.Stt.ProfileId, config.Routing.Stt.Model),
+            (adapter, profile, model, _) => adapter.CreateSpeechToTextService(sp, profile, model),
+            () => sp.GetRequiredService<MockSpeechToTextService>(),
+            reason => new UnavailableSpeechToTextService(reason)));
 
         services.AddScoped<ITextToSpeechService>(sp =>
         {
-            var mock = sp.GetRequiredService<MockTextToSpeechService>();
-            var logger = sp.GetService<ILogger<ITextToSpeechService>>();
-            var store = sp.GetService<IAiCredentialStore>();
-            if (store == null) return mock;
-
-            var config = store.GetConfiguration();
-            if (!config.UseRealAi) return mock;
-
-            var target = config.Routing.Tts;
-            var profile = config.FindProfile(target.ProfileId);
-            if (profile == null) return mock;
-
-            var registry = sp.GetRequiredService<IAiProviderRegistry>();
-            var adapter = registry.GetAdapter(profile.Kind);
-            if (adapter == null) return mock;
-
-            var options = sp.GetService<IOptions<AiServiceOptions>>()?.Value;
-            var cacheDir = options?.TtsCacheDirectory;
-
-            try
+            // Browser speechSynthesis reads the question on the client, so no cloud TTS is resolved.
+            if (sp.GetService<IOptions<AiServiceOptions>>()?.Value.UseBrowserSpeechSynthesis == true)
             {
-                var model = !string.IsNullOrWhiteSpace(target.Model)
-                    ? target.Model
-                    : adapter.GetDefaultModel(AiCapability.TextToSpeech);
-                var voice = !string.IsNullOrWhiteSpace(target.Voice)
-                    ? target.Voice
-                    : (string.Equals(profile.Kind, AiProviderKinds.Gemini, StringComparison.OrdinalIgnoreCase) ? "Puck" : "alloy");
+                return new BrowserSpeechSynthesisTextToSpeechService();
+            }
 
-                var service = adapter.CreateTextToSpeechService(sp, profile, model, voice, cacheDir);
-                return service ?? mock;
-            }
-            catch (Exception ex)
-            {
-                var sanitized = AiKeySanitizer.Sanitize(ex.Message, profile.ApiKey);
-                logger?.LogWarning("Failed to create TextToSpeechService for provider {ProfileName} ({Kind}). Falling back to mock. Error: {Error}",
-                    profile.Name, profile.Kind, sanitized);
-                return mock;
-            }
+            return ResolveCapability<ITextToSpeechService>(
+                sp,
+                AiCapability.TextToSpeech,
+                config => (config.Routing.Tts.ProfileId, config.Routing.Tts.Model),
+                (adapter, profile, model, config) =>
+                {
+                    var cacheDir = sp.GetService<IOptions<AiServiceOptions>>()?.Value.TtsCacheDirectory;
+                    var voice = !string.IsNullOrWhiteSpace(config.Routing.Tts.Voice)
+                        ? config.Routing.Tts.Voice
+                        : (string.Equals(profile.Kind, AiProviderKinds.Gemini, StringComparison.OrdinalIgnoreCase) ? "Puck" : "alloy");
+                    return adapter.CreateTextToSpeechService(sp, profile, model, voice, cacheDir);
+                },
+                () => sp.GetRequiredService<MockTextToSpeechService>(),
+                reason => new UnavailableTextToSpeechService(reason));
         });
 
-        services.AddScoped<IFollowUpGeneratorService>(sp =>
-        {
-            var mock = sp.GetRequiredService<MockFollowUpGeneratorService>();
-            var logger = sp.GetService<ILogger<IFollowUpGeneratorService>>();
-            var store = sp.GetService<IAiCredentialStore>();
-            if (store == null) return mock;
-
-            var config = store.GetConfiguration();
-            if (!config.UseRealAi) return mock;
-
-            var target = config.Routing.Llm;
-            var profile = config.FindProfile(target.ProfileId);
-            if (profile == null) return mock;
-
-            var registry = sp.GetRequiredService<IAiProviderRegistry>();
-            var adapter = registry.GetAdapter(profile.Kind);
-            if (adapter == null) return mock;
-
-            try
-            {
-                var model = !string.IsNullOrWhiteSpace(target.Model)
-                    ? target.Model
-                    : adapter.GetDefaultModel(AiCapability.FollowUpLlm);
-                var service = adapter.CreateFollowUpGeneratorService(sp, profile, model);
-                return service ?? mock;
-            }
-            catch (Exception ex)
-            {
-                var sanitized = AiKeySanitizer.Sanitize(ex.Message, profile.ApiKey);
-                logger?.LogWarning("Failed to create FollowUpGeneratorService for provider {ProfileName} ({Kind}). Falling back to mock. Error: {Error}",
-                    profile.Name, profile.Kind, sanitized);
-                return mock;
-            }
-        });
+        services.AddScoped<IFollowUpGeneratorService>(sp => ResolveCapability<IFollowUpGeneratorService>(
+            sp,
+            AiCapability.FollowUpLlm,
+            config => (config.Routing.Llm.ProfileId, config.Routing.Llm.Model),
+            (adapter, profile, model, _) => adapter.CreateFollowUpGeneratorService(sp, profile, model),
+            () => sp.GetRequiredService<MockFollowUpGeneratorService>(),
+            reason => new UnavailableFollowUpGeneratorService(reason)));
 
         return services;
+    }
+
+    /// <summary>
+    /// Resolves the real service for one capability from the routing table. When it cannot be resolved,
+    /// returns the mock only if mock mode is explicit (<c>UseMock</c>) or <c>AllowMockFallback</c> is on;
+    /// otherwise returns an "unavailable" service whose calls fail with a Vietnamese reason instead of fake data.
+    /// </summary>
+    private static TService ResolveCapability<TService>(
+        IServiceProvider sp,
+        AiCapability capability,
+        Func<AiConfigurationModel, (string? ProfileId, string? Model)> selectTarget,
+        Func<IAiProviderAdapter, AiProviderProfile, string, AiConfigurationModel, TService?> create,
+        Func<TService> createMock,
+        Func<string, TService> createUnavailable)
+        where TService : class
+    {
+        var logger = sp.GetService<ILoggerFactory>()?.CreateLogger(typeof(DependencyInjection).FullName!);
+        var options = sp.GetService<IOptions<AiServiceOptions>>()?.Value;
+        var mockAllowed = options == null || options.UseMock || options.AllowMockFallback;
+
+        TService Fallback(string reason)
+        {
+            if (mockAllowed)
+            {
+                logger?.LogWarning("{Capability}: {Reason}. Using mock service (UseMock/AllowMockFallback enabled).", capability, reason);
+                return createMock();
+            }
+
+            logger?.LogWarning("{Capability}: {Reason}. Mock fallback is disabled; returning unavailable service.", capability, reason);
+            return createUnavailable(reason);
+        }
+
+        var store = sp.GetService<IAiCredentialStore>();
+        if (store == null) return Fallback(AiUnavailableMessages.RealAiDisabled);
+
+        var config = store.GetConfiguration();
+        if (!config.UseRealAi) return Fallback(AiUnavailableMessages.RealAiDisabled);
+
+        var (profileId, targetModel) = selectTarget(config);
+        var profile = config.FindProfile(profileId);
+        if (profile == null) return Fallback(AiUnavailableMessages.NoProfileSelected);
+
+        var adapter = sp.GetRequiredService<IAiProviderRegistry>().GetAdapter(profile.Kind);
+        if (adapter == null) return Fallback(AiUnavailableMessages.ProviderNotSupported);
+
+        try
+        {
+            var model = !string.IsNullOrWhiteSpace(targetModel) ? targetModel : adapter.GetDefaultModel(capability);
+            return create(adapter, profile, model, config) ?? Fallback(AiUnavailableMessages.CapabilityNotEnabled);
+        }
+        catch (Exception ex)
+        {
+            var sanitized = AiKeySanitizer.Sanitize(ex.Message, profile.ApiKey);
+            logger?.LogWarning("Failed to create {Capability} service for provider {ProfileName} ({Kind}). Error: {Error}",
+                capability, profile.Name, profile.Kind, sanitized);
+            return Fallback(AiUnavailableMessages.CreationFailed);
+        }
     }
 }

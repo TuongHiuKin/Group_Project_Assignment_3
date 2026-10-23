@@ -114,6 +114,64 @@
             </div>
         </div>
 
+        <!-- 2.5. Thiết lập chấm điểm cho AI theo Rubric (dữ liệu mô phỏng: RubricCatalog trong BLL) -->
+        <div class="viva-panel-card p-4 mb-4 border-0 shadow-sm" style="background: #ffffff; border-radius: 18px; border: 1px solid #e2e8f0;">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3 pb-3 border-bottom">
+                <div>
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="badge rounded-pill px-3 py-1 text-white" style="background: #0f766e;">
+                            <i class="bi bi-card-checklist me-1"></i> RUBRIC
+                        </span>
+                        <span class="badge tag-purple">BỘ TIÊU CHÍ KHẢO THÍ ĐỀ @defaultExam</span>
+                    </div>
+                    <h5 class="fw-bold mb-1 text-dark">Thiết lập Chấm điểm cho AI theo Rubric</h5>
+                    <p class="text-secondary small mb-0">AI chấm gợi ý từng câu theo các tiêu chí, trọng số dưới đây; điểm câu = tổng trọng số tiêu chí đạt quy về thang 10. Giảng viên là người chốt điểm cuối cùng.</p>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-3 py-2 fw-semibold" title="Nhóm 1 (ngân hàng câu hỏi & rubric) và Nhóm 4 (AI chấm điểm) chưa triển khai: thiết lập và điểm AI là dữ liệu mô phỏng">
+                        <i class="bi bi-info-circle me-1"></i> Dữ liệu mô phỏng
+                    </span>
+                </div>
+            </div>
+
+            @if (Model.Rubrics.Count == 0)
+            {
+                <p class="text-muted small mb-0">Chưa có Rubric cho đề @defaultExam.</p>
+            }
+            else
+            {
+                <div class="row g-3">
+                    @foreach (var rubric in Model.Rubrics)
+                    {
+                        <div class="col-lg-4">
+                            <div class="p-3 rounded-4 h-100" style="background: #f8fafc; border: 1px solid #e2e8f0;">
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <span class="badge tag-purple fw-bold">@rubric.QuestionId</span>
+                                    <span class="badge bg-white text-dark border">Thang điểm: @rubric.MaxScore.ToString("0.#")</span>
+                                </div>
+                                <h6 class="fw-bold text-dark mb-1">@rubric.Title</h6>
+                                @if (!string.IsNullOrWhiteSpace(rubric.BloomLevel))
+                                {
+                                    <div class="small mb-2"><span class="badge bg-info-subtle text-info-emphasis border border-info-subtle"><i class="bi bi-diagram-3-fill me-1"></i>Bloom: @rubric.BloomLevel</span></div>
+                                }
+                                <div class="small text-secondary mb-3">Các ý trọng tâm được chấm:</div>
+                                <ul class="list-unstyled small mb-0 vstack gap-2">
+                                    @for (var i = 0; i < rubric.Criteria.Count; i++)
+                                    {
+                                        var criterion = rubric.Criteria[i];
+                                        <li class="d-flex align-items-start gap-2">
+                                            <i class="bi bi-dot text-primary"></i>
+                                            <span><strong>Ý @(i + 1) (@rubric.PointsFor(criterion).ToString("0.#")đ):</strong> @criterion.Description</span>
+                                        </li>
+                                    }
+                                </ul>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
         <!-- 3. Các lớp học phần phụ trách -->
         <div class="section-header">
             <h2 class="section-title">Lớp học phần phụ trách</h2>

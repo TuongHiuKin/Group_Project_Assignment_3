@@ -1,6 +1,7 @@
-using AIVES.BLL.Interfaces.ExamReporting;
+﻿using AIVES.BLL.Interfaces.ExamReporting;
 using AIVES.BLL.Models.ExamReporting;
 using AIVES.BLL.Models.VivaInterview;
+using AIVES.BLL.Services.ExamReporting;
 using AIVES.DAL.Entities;
 using AIVES.DAL.Repositories.Interfaces;
 
@@ -9,21 +10,28 @@ namespace AIVES.BLL.Repositories.ExamReporting;
 /// <summary>
 /// Real Exam Report repository backed by SQL Server via IVivaSessionRepository, IVivaQuestionRepository, and ISystemAccountRepository.
 /// Groups sessions by ExamId since SystemAccount does not have a ClassId column in Assignment 2.
+/// Completed turns are graded by <see cref="IRubricGradingService"/> (keyword rubric, no AI call).
 /// </summary>
 public sealed class ExamReportRepository : IExamReportRepository
 {
+    /// <summary>Ngưỡng đạt duy nhất dùng cho ExamSettings và chấm Rubric (DEC-03).</summary>
+    public const decimal DefaultPassThresholdScore = 6.0m;
+
     private readonly IVivaSessionRepository _sessionRepo;
     private readonly IVivaQuestionRepository _questionRepo;
     private readonly ISystemAccountRepository _accountRepo;
+    private readonly IRubricGradingService _gradingService;
 
     public ExamReportRepository(
         IVivaSessionRepository sessionRepo,
         IVivaQuestionRepository questionRepo,
-        ISystemAccountRepository accountRepo)
+        ISystemAccountRepository accountRepo,
+        IRubricGradingService? gradingService = null)
     {
         _sessionRepo = sessionRepo ?? throw new ArgumentNullException(nameof(sessionRepo));
         _questionRepo = questionRepo ?? throw new ArgumentNullException(nameof(questionRepo));
         _accountRepo = accountRepo ?? throw new ArgumentNullException(nameof(accountRepo));
+        _gradingService = gradingService ?? new RubricGradingService();
     }
 
     public async Task<List<AttemptSnapshotDto>> GetStudentAttemptsAsync(string studentId, string examId, CancellationToken ct = default)
@@ -132,7 +140,7 @@ public sealed class ExamReportRepository : IExamReportRepository
             SettingsVersion = "1.0",
             EvaluationMode = ExamEvaluationMode.Score,
             MaxAllowedAttempts = 3,
-            PassThresholdScore = 6.0m,
+            PassThresholdScore = DefaultPassThresholdScore,
             MinPassPercentage = 60.0m
         };
     }
@@ -188,7 +196,7 @@ public sealed class ExamReportRepository : IExamReportRepository
         return studentId;
     }
 
-    private static List<AttemptSnapshotDto> MapSessionsToAttempts(
+    private List<AttemptSnapshotDto> MapSessionsToAttempts(
         List<VivaSession> orderedSessions,
         Dictionary<string, VivaQuestion> questionMap,
         string studentId,
@@ -208,9 +216,6 @@ public sealed class ExamReportRepository : IExamReportRepository
                 _ => ExamState.InProgress
             };
 
-            // Group 4 (AI Automated Grading) is not implemented in ASM2: real turns are Pending grading.
-            var gradingState = examState == ExamState.Abandoned ? GradingState.Failed : GradingState.Pending;
-
             var orderedTurns = session.Turns.OrderBy(t => t.TurnOrdinal).ToList();
             var questionResults = new List<QuestionResultDto>();
 
@@ -223,22 +228,48 @@ public sealed class ExamReportRepository : IExamReportRepository
                     ? (!string.IsNullOrWhiteSpace(qEntity.Content) ? qEntity.Content : qEntity.Title)
                     : $"Câu hỏi {qGroup.Key}";
 
-                questionResults.Add(new QuestionResultDto
+                var questionResult = new QuestionResultDto
                 {
                     QuestionId = qGroup.Key,
                     QuestionTitle = qTitle,
-                    CognitiveLevel = "Vấn đáp AI",
+                    CognitiveLevel = _gradingService.GetRubric(qGroup.Key)?.BloomLevel is { Length: > 0 } bloom ? bloom : "Vấn đáp AI",
                     EarnedScore = 0m,
                     MaxScore = 10.0m,
-                    GradingState = gradingState,
+                    PassThresholdScore = DefaultPassThresholdScore,
+                    GradingState = examState == ExamState.Abandoned ? GradingState.Failed : GradingState.Pending,
                     IsPassed = false,
                     StudentInitialAnswerTranscript = turn1.TranscriptText ?? string.Empty,
                     AiFollowUpQuestion = turn1.FollowUpQuestionText ?? string.Empty,
                     StudentFollowUpAnswerTranscript = turn2?.TranscriptText ?? string.Empty
-                });
+                };
+
+                var answerTranscript = string.Join(" ", qGroup
+                    .Select(t => t.TranscriptText)
+                    .Where(t => !string.IsNullOrWhiteSpace(t)));
+
+                // Chỉ chấm khi phiên Completed và đã có transcript; còn lại giữ "Chưa chấm".
+                if (examState == ExamState.Completed && !string.IsNullOrWhiteSpace(answerTranscript))
+                {
+                    var questionText = string.Join(" ",
+                        qEntity?.Title, qEntity?.Content, turn1.FollowUpQuestionText);
+                    var grading = _gradingService.Grade(qGroup.Key, questionText, answerTranscript, DefaultPassThresholdScore);
+                    if (grading != null)
+                    {
+                        ApplyGrading(questionResult, grading);
+                    }
+                }
+
+                questionResults.Add(questionResult);
             }
 
-            result.Add(new AttemptSnapshotDto
+            var gradingState = examState switch
+            {
+                ExamState.Abandoned => GradingState.Failed,
+                ExamState.Completed when questionResults.Count > 0 && questionResults.All(q => q.GradingState == GradingState.Graded) => GradingState.Graded,
+                _ => GradingState.Pending
+            };
+
+            var attempt = new AttemptSnapshotDto
             {
                 AttemptId = session.SessionId.ToString(),
                 StudentId = studentId,
@@ -250,9 +281,27 @@ public sealed class ExamReportRepository : IExamReportRepository
                 GradingState = gradingState,
                 CompletedAt = session.CompletedAtUtc ?? session.StartedAtUtc,
                 QuestionResults = questionResults
-            });
+            };
+            attempt.IsPassed = gradingState == GradingState.Graded && attempt.NormalizedScore >= DefaultPassThresholdScore;
+
+            result.Add(attempt);
         }
 
         return result;
+    }
+
+    private static void ApplyGrading(QuestionResultDto questionResult, RubricGradingResult grading)
+    {
+        questionResult.EarnedScore = grading.EarnedScore;
+        questionResult.MaxScore = grading.MaxScore;
+        questionResult.AiSuggestedScore = grading.EarnedScore;
+        questionResult.PassThresholdScore = grading.PassThresholdScore;
+        questionResult.GradingState = GradingState.Graded;
+        questionResult.IsPassed = grading.IsPassed;
+        questionResult.RubricCriteria = grading.RubricDescription;
+        questionResult.CriteriaOutcomes = grading.Outcomes.ToDictionary(o => o.Name, o => o.IsMet);
+        questionResult.Strengths = grading.Strengths;
+        questionResult.Weaknesses = grading.Weaknesses;
+        questionResult.AiFeedback = grading.Feedback;
     }
 }

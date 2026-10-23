@@ -48,6 +48,7 @@ public class QuestionResultDto
     public string TeacherNotes { get; set; } = string.Empty;
 
     public bool IsPassed { get; set; }
+    public decimal PassThresholdScore { get; set; } = 6.0m;
     public GradingState GradingState { get; set; } = GradingState.Graded;
     public ExamEvaluationMode EvaluationMode { get; set; } = ExamEvaluationMode.Score;
 
@@ -102,6 +103,7 @@ public class StudentReportDto
     public int GradedAttemptsCount { get; set; }
     public int PendingAttemptsCount { get; set; }
     public decimal? AverageScore { get; set; }
+    public decimal PassThresholdScore { get; set; } = 6.0m;
     public decimal? PassRatePercentage { get; set; }
     public List<AttemptSnapshotDto> Attempts { get; set; } = new();
 }

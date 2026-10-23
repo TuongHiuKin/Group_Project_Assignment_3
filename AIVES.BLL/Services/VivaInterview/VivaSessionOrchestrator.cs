@@ -193,6 +193,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
 
         VivaSession session;
         VivaTimerManager.Deadline? acceptedDeadline = null;
+        var secondsLeftAtSubmit = 0;
         var persistedQuestionId = submission.QuestionId;
         // Serialize the accepting transition with timeout. Release before the slow STT call.
         using (var lease = _timers is null ? null : await _timers.LockSessionAsync(submission.SessionId, ct))
@@ -208,6 +209,8 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
                     throw new InvalidOperationException("The answering period is not active or has expired.");
                 if (!string.Equals(deadline.QuestionId, submission.QuestionId, StringComparison.Ordinal))
                     throw new ArgumentException("The answer does not match the active question.", nameof(submission));
+                // The clock is paused while STT runs; a retry gets back exactly the time left at submission.
+                secondsLeftAtSubmit = _timers.SecondsRemaining(deadline);
                 // Follow-ups are stored on a turn; preserve the FK to the primary question.
                 var details = await _sessionRepo.GetWithDetailsAsync(submission.SessionId, ct)
                     ?? throw new KeyNotFoundException("Examination session was not found.");
@@ -244,12 +247,12 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
                 using var lease = await _timers.LockSessionAsync(submission.SessionId, ct);
                 var current = await _sessionRepo.GetByIdAsync(submission.SessionId, ct)
                     ?? throw new KeyNotFoundException("Examination session was not found.");
-                canRetry = current.State == (byte)VivaSessionState.Transcribing && _timers.SecondsRemaining(acceptedDeadline) > 0;
+                canRetry = current.State == (byte)VivaSessionState.Transcribing && secondsLeftAtSubmit > 0;
                 var retryState = canRetry ? VivaSessionState.Answering : VivaSessionState.TimedOut;
                 if (current.State == (byte)VivaSessionState.Transcribing)
                 {
                     await _sessionRepo.UpdateStateAsync(submission.SessionId, (byte)retryState, ct);
-                    if (canRetry) _timers.Restore(acceptedDeadline);
+                    if (canRetry) _timers.Resume(acceptedDeadline, secondsLeftAtSubmit);
                     await _publisher.PublishStatusChangedAsync(new(submission.SessionId, session.ExamId, session.StudentId,
                         retryState, 1, DefaultMaxTurnsAllowed, DateTime.UtcNow), ct);
                 }
@@ -352,16 +355,34 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         ), ct);
 
         // 2. LLM Follow-Up Generation
-        var followUpResult = await _followUpService.GenerateFollowUpQuestionAsync(
-            originalQuestion: originalQuestionContent,
-            studentAnswerTranscript: turn.TranscriptText ?? string.Empty,
-            subjectContext: session.ExamId,
-            ct: ct
-        );
-
-        if (!followUpResult.IsSuccess || string.IsNullOrWhiteSpace(followUpResult.FollowUpQuestionText))
+        FollowUpResult followUpResult;
+        try
         {
-            _logger.LogWarning("Follow-up generation skipped or returned empty. Completing session {SessionId}.", sessionId);
+            followUpResult = await _followUpService.GenerateFollowUpQuestionAsync(
+                originalQuestion: originalQuestionContent,
+                studentAnswerTranscript: turn.TranscriptText ?? string.Empty,
+                subjectContext: session.ExamId,
+                ct: ct
+            );
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Follow-up generation threw for Session {SessionId}.", sessionId);
+            followUpResult = new FollowUpResult(false, string.Empty, string.Empty, "Lỗi không xác định khi gọi dịch vụ câu hỏi phụ.");
+        }
+
+        if (!followUpResult.IsSuccess)
+        {
+            // Infrastructure failure (429/503, timeout, unavailable provider): keep the session open and let the
+            // student retry or finish instead of silently completing at turn 1/2.
+            await ReportFollowUpFailureAsync(session, turnCount, followUpResult.ErrorMessage, ct);
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(followUpResult.FollowUpQuestionText))
+        {
+            _logger.LogInformation("Follow-up generator returned no question. Completing session {SessionId}.", sessionId);
             await CompleteSessionAsync(sessionId, ct);
             return null;
         }
@@ -410,6 +431,60 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         ), ct);
 
         return followUpDto;
+    }
+
+    public const string FollowUpFailedErrorCode = "FOLLOWUP_GENERATION_FAILED";
+
+    private async Task ReportFollowUpFailureAsync(VivaSession session, int turnCount, string? providerError, CancellationToken ct)
+    {
+        _logger.LogWarning("Follow-up generation failed for Session {SessionId}: {Error}. Session kept open for retry.",
+            session.SessionId, providerError);
+
+        // Persistence First: return to TranscriptReady so the student can retry or finish.
+        await _sessionRepo.UpdateStateAsync(session.SessionId, (byte)VivaSessionState.TranscriptReady, ct);
+        await _publisher.PublishStatusChangedAsync(new VivaSessionStatusDto(
+            SessionId: session.SessionId,
+            ExamId: session.ExamId,
+            StudentId: session.StudentId,
+            State: VivaSessionState.TranscriptReady,
+            CurrentTurnOrdinal: turnCount,
+            MaxTurnsAllowed: DefaultMaxTurnsAllowed,
+            UpdatedAtUtc: DateTime.UtcNow,
+            Message: "Follow-up generation failed."
+        ), ct);
+
+        await _publisher.PublishErrorAsync(new VivaErrorDto(
+            SessionId: session.SessionId,
+            ErrorCode: FollowUpFailedErrorCode,
+            ErrorMessage: BuildFollowUpFailureMessage(providerError),
+            CanRetry: true
+        ), ct);
+    }
+
+    public static string BuildFollowUpFailureMessage(string? providerError)
+    {
+        var error = providerError ?? string.Empty;
+        string reason;
+        if (error.Contains("503", StringComparison.Ordinal) || error.Contains("429", StringComparison.Ordinal) ||
+            error.Contains("high demand", StringComparison.OrdinalIgnoreCase) || error.Contains("quota", StringComparison.OrdinalIgnoreCase) ||
+            error.Contains("overloaded", StringComparison.OrdinalIgnoreCase))
+        {
+            reason = "máy chủ AI đang quá tải";
+        }
+        else if (error.Contains("timed out", StringComparison.OrdinalIgnoreCase) || error.Contains("timeout", StringComparison.OrdinalIgnoreCase))
+        {
+            reason = "máy chủ AI phản hồi quá thời gian chờ";
+        }
+        else if (!string.IsNullOrWhiteSpace(error))
+        {
+            reason = error.Trim().TrimEnd('.');
+        }
+        else
+        {
+            reason = "dịch vụ câu hỏi phụ không phản hồi";
+        }
+
+        return $"Giám khảo AI chưa tạo được câu hỏi phụ ({reason}). Bạn có thể bấm Thử lại hoặc Kết thúc bài thi.";
     }
 
     /// <inheritdoc />

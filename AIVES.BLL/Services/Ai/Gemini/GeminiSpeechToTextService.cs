@@ -19,19 +19,22 @@ public sealed class GeminiSpeechToTextService : ISpeechToTextService
     private readonly int _timeoutSeconds;
     private readonly ISpeechToTextService? _fallbackService;
     private readonly ILogger<GeminiSpeechToTextService>? _logger;
+    private readonly IReadOnlyList<TimeSpan> _retryDelays;
 
     public GeminiSpeechToTextService(
         HttpClient httpClient,
         AiProviderProfile profile,
         string? model = null,
-        int timeoutSeconds = 15,
+        int timeoutSeconds = 35,
         ILogger<GeminiSpeechToTextService>? logger = null,
-        ISpeechToTextService? fallbackService = null)
+        ISpeechToTextService? fallbackService = null,
+        IReadOnlyList<TimeSpan>? retryDelays = null)
     {
+        _retryDelays = retryDelays ?? GeminiRetryPolicy.DefaultDelays;
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
-        _model = string.IsNullOrWhiteSpace(model) ? "gemini-2.5-flash" : model;
-        _timeoutSeconds = timeoutSeconds > 0 ? timeoutSeconds : 15;
+        _model = string.IsNullOrWhiteSpace(model) ? GeminiModels.DefaultSpeechToText : model;
+        _timeoutSeconds = timeoutSeconds > 0 ? timeoutSeconds : 35;
         _logger = logger;
         _fallbackService = fallbackService;
     }
@@ -109,7 +112,7 @@ public sealed class GeminiSpeechToTextService : ISpeechToTextService
                         },
                         new
                         {
-                            text = "Hãy chép lại nguyên văn lời nói tiếng Việt trong đoạn âm thanh trên thành văn bản. Chỉ trả về phần văn bản đã chép, không giải thích hay thêm bất kỳ thông tin nào khác."
+                            text = "Chuyển âm thanh tiếng Việt trong đoạn ghi âm thành văn bản (Speech to text). Trả về chính xác những từ người nói đã phát âm (kể cả từ ngắn như 'alo', 'xin chào'). Chỉ trả về văn bản đã nhận diện, không giải thích."
                         }
                     }
                 }
@@ -125,7 +128,7 @@ public sealed class GeminiSpeechToTextService : ISpeechToTextService
         HttpResponseMessage response;
         try
         {
-            response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token).ConfigureAwait(false);
+            response = await GeminiRetryPolicy.SendAsync(_httpClient, request, _retryDelays, _logger, "Gemini STT", linkedCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

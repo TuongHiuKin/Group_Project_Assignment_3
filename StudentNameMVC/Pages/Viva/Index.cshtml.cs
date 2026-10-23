@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading;
@@ -44,6 +44,11 @@ public class IndexModel : PageModel
     public string? ErrorMessage { get; set; }
 
     public bool IsOrchestratorAvailable => _orchestrator != null;
+
+    /// <summary>Only students sit exams; Admin and Lecturer accounts never create viva sessions.</summary>
+    public bool IsCandidate =>
+        !User.IsInRole(AIVES.BLL.Security.ApplicationRoles.Admin) &&
+        !User.IsInRole(AIVES.BLL.Security.ApplicationRoles.Lecturer);
 
     public bool IsAiConfigured
     {
@@ -97,6 +102,18 @@ public class IndexModel : PageModel
         if (!IsAiConfigured)
         {
             ErrorMessage = "Chưa cấu hình AI, vui lòng nhờ Admin vào Cấu hình AI.";
+            return Page();
+        }
+
+        if (User.IsInRole(AIVES.BLL.Security.ApplicationRoles.Lecturer))
+        {
+            ErrorMessage = "Tài khoản Giảng viên không tham gia làm bài thi với tư cách thí sinh. Vui lòng đăng nhập với tài khoản Sinh viên để thi vấn đáp, hoặc truy cập Dashboard Giảng viên / Thống kê Lớp học để đánh giá kết quả.";
+            return Page();
+        }
+
+        if (User.IsInRole(AIVES.BLL.Security.ApplicationRoles.Admin))
+        {
+            ErrorMessage = "Tài khoản Quản trị viên không tham gia thi vấn đáp. Vui lòng đăng nhập với tài khoản Sinh viên để thi.";
             return Page();
         }
 

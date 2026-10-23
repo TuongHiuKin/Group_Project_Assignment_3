@@ -65,7 +65,10 @@
         <!-- LEFT COLUMN: Questions, AI Follow-up & Realtime Transcript -->
         <div class="col-lg-7">
             <!-- Initial Start Exam Callout (shown before question is delivered) -->
-            <div id="startExamBanner" class="viva-start-banner mb-4">
+            @{
+                var isAlreadyStarted = Model.SessionState != VivaSessionState.Created && Model.SessionState != VivaSessionState.Ready;
+            }
+            <div id="startExamBanner" class="viva-start-banner mb-4 @(isAlreadyStarted ? "d-none" : "")">
                 <div class="brand-icon-box mx-auto mb-3" style="width: 58px; height: 58px; font-size: 26px; border-radius: 18px;">
                     <i class="bi bi-mic-fill"></i>
                 </div>
@@ -82,7 +85,7 @@
             </div>
 
             <!-- Primary Question Card -->
-            <div id="questionCard" class="viva-panel-card mb-4 d-none">
+            <div id="questionCard" class="viva-panel-card mb-4 @(isAlreadyStarted ? "" : "d-none")">
                 <div class="viva-panel-header">
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge tag-purple">CÂU HỎI CHÍNH</span>
@@ -143,6 +146,22 @@
                 </div>
             </div>
 
+            <!-- Follow-up generation failure (LLM 429/503/timeout): retry or finish -->
+            <div id="followUpErrorCard" class="viva-panel-card mb-4 p-4 d-none" style="border: 2px solid #fecaca; background: #fef2f2;" role="alert">
+                <div class="d-flex align-items-start gap-2 mb-3">
+                    <i class="bi bi-exclamation-triangle-fill text-danger fs-5"></i>
+                    <span id="followUpErrorText" class="text-dark fw-semibold">Giám khảo AI chưa tạo được câu hỏi phụ.</span>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <button type="button" id="btnRetryFollowUp" class="btn btn-danger rounded-pill px-4 fw-bold">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Thử lại
+                    </button>
+                    <button type="button" id="btnFinishSession" class="btn btn-outline-secondary rounded-pill px-4 fw-bold">
+                        <i class="bi bi-flag me-1"></i> Kết thúc bài thi
+                    </button>
+                </div>
+            </div>
+
             <!-- Session Completed Summary Card -->
             <div id="completedCard" class="viva-panel-card p-5 text-center d-none" style="border: 2px solid #a7f3d0; background: #f0fdf4;">
                 <div class="mb-3">
@@ -167,7 +186,7 @@
 
         <!-- RIGHT COLUMN: Soundwave Visualizer & Microphone Control -->
         <div class="col-lg-5">
-            <div id="answeringSection" class="viva-panel-card">
+            <div id="answeringSection" class="viva-panel-card @(isAlreadyStarted ? "" : "d-none")">
                 <div class="viva-panel-header">
                     <h6 class="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
                         <i class="bi bi-mic text-danger"></i> Ghi âm câu trả lời
@@ -189,7 +208,9 @@
 
                     <!-- Recording Action Buttons -->
                     <div class="viva-record-btn-group">
-                        <button type="button" id="btnStartRecord" class="viva-btn-record viva-btn-record-danger">
+                        @* Locked until the answering window is open (client calls BeginAnswering after the question is read). *@
+                        <button type="button" id="btnStartRecord" class="viva-btn-record viva-btn-record-danger"
+                                disabled="@(Model.SessionState == VivaSessionState.Answering ? null : "disabled")">
                             <i class="bi bi-mic-fill fs-5"></i>
                             <span>Bắt đầu ghi âm câu trả lời</span>
                         </button>
@@ -246,6 +267,9 @@
                 antiForgeryToken: '@tokens.RequestToken',
                 submitAudioUrl: '@Url.Page("/Viva/Exam", "SubmitAudio")',
                 startSessionUrl: '@Url.Page("/Viva/Exam", "StartSession")',
+                retryFollowUpUrl: '@Url.Page("/Viva/Exam", "RetryFollowUp")',
+                finishSessionUrl: '@Url.Page("/Viva/Exam", "FinishSession")',
+                useBrowserTts: @(Model.UseBrowserSpeechSynthesis ? "true" : "false"),
                 initialState: '@Model.SessionState'
             });
             window.vivaExamClient = client;

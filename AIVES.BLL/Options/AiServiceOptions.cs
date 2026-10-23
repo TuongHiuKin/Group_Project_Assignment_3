@@ -36,6 +36,12 @@ public class AiServiceOptions
     public int FollowUpTimeoutSeconds { get; set; } = 15;
 
     /// <summary>
+    /// When true, questions are read aloud by the browser Web Speech API (speechSynthesis):
+    /// the server skips cloud TTS entirely and the exam page never plays synthesized audio files.
+    /// </summary>
+    public bool UseBrowserSpeechSynthesis { get; set; } = false;
+
+    /// <summary>
     /// Settings for OpenAI / Whisper / GPT-4o.
     /// </summary>
     public OpenAiOptions OpenAI { get; set; } = new();

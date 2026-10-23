@@ -1,4 +1,4 @@
-@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
+﻿@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @using AIVES.BLL.Security
 @{
     var roleClaimValue = User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Role)?.Value;
@@ -132,10 +132,10 @@
                                         <span>Thống kê Lớp học</span>
                                     </a>
                                 </li>
-                                <li class="sidebar-nav-item @(currentPage != null && currentPage.StartsWith("/Viva", StringComparison.OrdinalIgnoreCase) ? "active" : "")">
-                                    <a asp-page="/Viva/Index">
-                                        <i class="bi bi-camera-video-fill"></i>
-                                        <span>Phòng thi Viva</span>
+                                <li class="sidebar-nav-item @(currentPage != null && currentPage.StartsWith("/ClassReports/StudentDetail", StringComparison.OrdinalIgnoreCase) ? "active" : "")">
+                                    <a href="/ClassReports">
+                                        <i class="bi bi-file-earmark-check"></i>
+                                        <span>Đánh giá & Chấm thi</span>
                                     </a>
                                 </li>
                             </ul>

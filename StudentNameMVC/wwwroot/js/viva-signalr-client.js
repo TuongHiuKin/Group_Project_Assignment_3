@@ -3,6 +3,8 @@
  * Integrates VivaHub, MediaRecorder, TTS playback, and UX error handling.
  */
 class VivaExamClient {
+    static BROWSER_VOICE_FALLBACK_MESSAGE = 'Giọng AI lỗi, đang dùng giọng trình duyệt.';
+
     constructor(config) {
         this.sessionId = config.sessionId;
         this.examId = config.examId || '';
@@ -12,6 +14,10 @@ class VivaExamClient {
         this.antiForgeryToken = config.antiForgeryToken || '';
         this.submitAudioUrl = config.submitAudioUrl || '/Viva/Exam?handler=SubmitAudio';
         this.startSessionUrl = config.startSessionUrl || '/Viva/Exam?handler=StartSession';
+        this.retryFollowUpUrl = config.retryFollowUpUrl || '/Viva/Exam?handler=RetryFollowUp';
+        this.finishSessionUrl = config.finishSessionUrl || '/Viva/Exam?handler=FinishSession';
+        // AiServices:UseBrowserSpeechSynthesis: questions are always read by speechSynthesis, never by AI audio files.
+        this.useBrowserTts = config.useBrowserTts === true;
 
         this.recorder = new VivaAudioRecorder();
         this.connection = null;
@@ -50,6 +56,7 @@ class VivaExamClient {
 
             // Answering & Recording Section
             answeringSection: document.getElementById('answeringSection'),
+            startExamBanner: document.getElementById('startExamBanner'),
             btnStartExam: document.getElementById('btnStartExam'),
             btnStartRecord: document.getElementById('btnStartRecord'),
             btnStopRecord: document.getElementById('btnStopRecord'),
@@ -63,6 +70,12 @@ class VivaExamClient {
             transcriptText: document.getElementById('transcriptText'),
             transcriptConfidence: document.getElementById('transcriptConfidence'),
             transcriptionSpinner: document.getElementById('transcriptionSpinner'),
+
+            // Follow-up failure Section
+            followUpErrorCard: document.getElementById('followUpErrorCard'),
+            followUpErrorText: document.getElementById('followUpErrorText'),
+            btnRetryFollowUp: document.getElementById('btnRetryFollowUp'),
+            btnFinishSession: document.getElementById('btnFinishSession'),
 
             // Completed Section
             completedCard: document.getElementById('completedCard'),
@@ -105,6 +118,64 @@ class VivaExamClient {
                 const text = this.el.followUpContent ? this.el.followUpContent.textContent : '';
                 this.playTts(text, this.el.followUpAudio, this.el.followUpAudio?.src, null);
             });
+        }
+
+        if (this.el.btnRetryFollowUp) {
+            this.el.btnRetryFollowUp.addEventListener('click', () =>
+                this.postFollowUpAction(this.retryFollowUpUrl, { turnId: this.currentTurnId }, 'Đang thử tạo lại câu hỏi phụ...'));
+        }
+
+        if (this.el.btnFinishSession) {
+            this.el.btnFinishSession.addEventListener('click', () =>
+                this.postFollowUpAction(this.finishSessionUrl, {}, 'Đang kết thúc bài thi...'));
+        }
+    }
+
+    showFollowUpError(message) {
+        if (this.el.followUpErrorText) this.el.followUpErrorText.textContent = message;
+        if (this.el.followUpErrorCard) this.el.followUpErrorCard.classList.remove('d-none');
+        this.setFollowUpActionsDisabled(false);
+    }
+
+    hideFollowUpError() {
+        if (this.el.followUpErrorCard) this.el.followUpErrorCard.classList.add('d-none');
+    }
+
+    setFollowUpActionsDisabled(disabled) {
+        if (this.el.btnRetryFollowUp) this.el.btnRetryFollowUp.disabled = disabled;
+        if (this.el.btnFinishSession) this.el.btnFinishSession.disabled = disabled;
+    }
+
+    async postFollowUpAction(url, fields, pendingText) {
+        this.setFollowUpActionsDisabled(true);
+        if (this.el.followUpErrorText) this.el.followUpErrorText.textContent = pendingText;
+
+        try {
+            const formData = new FormData();
+            formData.append('sessionId', this.sessionId);
+            Object.entries(fields).forEach(([key, value]) => formData.append(key, value ?? ''));
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'RequestVerificationToken': this.antiForgeryToken },
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errJson = await response.json().catch(() => ({}));
+                throw new Error(errJson.message || `Lỗi máy chủ (${response.status})`);
+            }
+
+            // The server broadcasts FollowUpGenerated / SessionCompleted, or a new VivaError when the retry fails again.
+            const data = await response.json().catch(() => ({}));
+            if (url === this.finishSessionUrl || data.followUpGenerated) {
+                this.hideFollowUpError();
+            } else {
+                this.setFollowUpActionsDisabled(false);
+            }
+        } catch (err) {
+            console.error('Follow-up action error:', err);
+            this.showFollowUpError(err.message || 'Không thể thực hiện yêu cầu.');
         }
     }
 
@@ -227,6 +298,9 @@ class VivaExamClient {
                 this.audioPlayer.src = '';
             } catch (e) { }
         }
+        if ('speechSynthesis' in window) {
+            try { window.speechSynthesis.cancel(); } catch (e) { }
+        }
 
         // 3. Clear timers
         if (this.timerInterval) {
@@ -252,8 +326,24 @@ class VivaExamClient {
             this.handleSessionStatusChanged(snapshot.status);
         }
 
+        const stateName = typeof snapshot.status?.state === 'string'
+            ? snapshot.status.state
+            : this.mapStateToString(snapshot.status?.state);
+
+        const isPreStart = stateName === 'Created' || stateName === 'Ready';
+
         if (snapshot.currentQuestion) {
-            this.renderQuestion(snapshot.currentQuestion);
+            if (isPreStart) {
+                this.currentQuestionId = snapshot.currentQuestion.questionId;
+                if (this.el.startExamBanner) this.el.startExamBanner.classList.remove('d-none');
+                if (this.el.btnStartExam) this.el.btnStartExam.classList.remove('d-none');
+                if (this.el.questionCard) this.el.questionCard.classList.add('d-none');
+                if (this.el.answeringSection) this.el.answeringSection.classList.add('d-none');
+            } else if (stateName === 'QuestionDelivered') {
+                this.renderQuestion(snapshot.currentQuestion, true);
+            } else {
+                this.renderQuestion(snapshot.currentQuestion, false);
+            }
         }
 
         if (snapshot.latestTranscript) {
@@ -268,6 +358,12 @@ class VivaExamClient {
 
         if (snapshot.timer) {
             this.handleTimeRemainingChanged(snapshot.timer);
+        }
+
+        // Reloaded after a follow-up failure: the answer is saved but no follow-up exists yet.
+        if (stateName === 'TranscriptReady' && snapshot.latestTranscript && !snapshot.currentFollowUp) {
+            this.setRecordingUiState('disabled', 'Câu trả lời đã được lưu. Chọn Thử lại hoặc Kết thúc bài thi.');
+            this.showFollowUpError('Câu hỏi phụ chưa được tạo. Bạn có thể bấm Thử lại hoặc Kết thúc bài thi.');
         }
     }
 
@@ -302,21 +398,35 @@ class VivaExamClient {
         }
 
         // Handle states
-        if (stateName === 'Ready') {
+        if (stateName === 'Ready' || stateName === 'Created') {
+            if (this.el.startExamBanner) this.el.startExamBanner.classList.remove('d-none');
             if (this.el.btnStartExam) this.el.btnStartExam.classList.remove('d-none');
+            if (this.el.questionCard) this.el.questionCard.classList.add('d-none');
             if (this.el.answeringSection) this.el.answeringSection.classList.add('d-none');
-        } else if (stateName === 'QuestionDelivered') {
+        } else if (stateName === 'QuestionDelivered' || stateName === 'Answering') {
+            if (this.el.startExamBanner) this.el.startExamBanner.classList.add('d-none');
             if (this.el.btnStartExam) this.el.btnStartExam.classList.add('d-none');
             if (this.el.questionCard) this.el.questionCard.classList.remove('d-none');
             if (this.el.answeringSection) this.el.answeringSection.classList.remove('d-none');
-        } else if (stateName === 'Answering') {
-            if (this.el.btnStartExam) this.el.btnStartExam.classList.add('d-none');
-            if (this.el.answeringSection) this.el.answeringSection.classList.remove('d-none');
+            if (stateName === 'Answering') {
+                // Answering window is open on the server (also after a reload or an STT retry).
+                if (!this.recorder.isRecording) this.setRecordingUiState('ready', 'Mời bạn bắt đầu ghi âm câu trả lời.');
+            } else {
+                this.setRecordingUiState('disabled', 'Đang đọc câu hỏi, vui lòng nghe hết câu hỏi rồi ghi âm.');
+            }
         } else if (stateName === 'Transcribing') {
+            if (this.el.startExamBanner) this.el.startExamBanner.classList.add('d-none');
+            if (this.el.questionCard) this.el.questionCard.classList.remove('d-none');
             if (this.el.transcriptionSpinner) this.el.transcriptionSpinner.classList.remove('d-none');
             this.setRecordingUiState('disabled', 'AI đang chuyển giọng nói thành văn bản...');
-        } else if (stateName === 'TranscriptReady') {
+        } else if (stateName === 'TranscriptReady' || stateName === 'FollowUpDelivered') {
+            if (this.el.startExamBanner) this.el.startExamBanner.classList.add('d-none');
+            if (this.el.questionCard) this.el.questionCard.classList.remove('d-none');
+            if (this.el.answeringSection) this.el.answeringSection.classList.remove('d-none');
             if (this.el.transcriptionSpinner) this.el.transcriptionSpinner.classList.add('d-none');
+            this.setRecordingUiState('disabled', stateName === 'TranscriptReady'
+                ? 'Câu trả lời đã được lưu. Đang chờ giám khảo AI...'
+                : 'Đang đọc câu hỏi phụ, vui lòng nghe hết rồi ghi âm.');
         } else if (stateName === 'Completed') {
             this.handleSessionCompleted(status);
         } else if (stateName === 'TimedOut') {
@@ -327,7 +437,7 @@ class VivaExamClient {
 
     playTts(text, audioEl, audioUrl, onEndCallback) {
         // Playback via browser Web Speech API (Vietnamese voice)
-        const speakBrowserTts = () => {
+        const speakBrowserTts = async () => {
             if (!('speechSynthesis' in window) || !text) {
                 if (onEndCallback) onEndCallback();
                 return;
@@ -338,14 +448,16 @@ class VivaExamClient {
             utterance.lang = 'vi-VN';
             utterance.rate = 1.0;
 
-            const voices = window.speechSynthesis.getVoices();
-            const viVoice = voices.find(v => v.lang && (v.lang.startsWith('vi') || v.lang.includes('VIE')));
+            const viVoice = (await this.loadSpeechVoices()).find(v => v.lang && (v.lang.toLowerCase().startsWith('vi') || v.lang.toLowerCase().includes('vie') || v.name.toLowerCase().includes('vietnam')));
             if (viVoice) utterance.voice = viVoice;
+            else console.warn('No Vietnamese speechSynthesis voice installed; using the browser default voice.');
 
             let completed = false;
+            let watchdog = null;
             const finish = () => {
                 if (!completed) {
                     completed = true;
+                    clearTimeout(watchdog);
                     if (onEndCallback) onEndCallback();
                 }
             };
@@ -356,10 +468,23 @@ class VivaExamClient {
                 finish();
             };
 
+            // Chrome may drop onend (e.g. garbage-collected utterance); keep a reference and never leave the mic locked.
+            this.currentUtterance = utterance;
+            watchdog = setTimeout(() => {
+                console.warn('SpeechSynthesis did not report the end of speech in time; continuing.');
+                finish();
+            }, Math.max(10000, text.length * 150 + 5000));
+
             window.speechSynthesis.speak(utterance);
         };
 
-        if (audioEl && audioUrl) {
+        if (this.useBrowserTts) {
+            speakBrowserTts();
+            return;
+        }
+
+        const isMockAudio = !audioUrl || audioUrl.includes('mock-question.mp3');
+        if (audioEl && audioUrl && !isMockAudio) {
             // Play synthesized audio file directly
             audioEl.src = audioUrl;
             audioEl.currentTime = 0;
@@ -369,38 +494,84 @@ class VivaExamClient {
                 })
                 .catch(err => {
                     console.warn('Audio playback failed or blocked, falling back to speech synthesis:', err);
+                    this.notifyBrowserVoiceFallback('Không phát được giọng AI, đang dùng giọng trình duyệt.');
                     speakBrowserTts();
                 });
         } else {
+            // No synthesized audio: server-side TTS failed (or mock audio). Tell the candidate instead of switching silently.
+            console.warn('No AI TTS audio for this question, using browser speech synthesis.');
+            this.notifyBrowserVoiceFallback(audioUrl
+                ? 'Chế độ mô phỏng: đang dùng giọng trình duyệt.'
+                : VivaExamClient.BROWSER_VOICE_FALLBACK_MESSAGE);
             speakBrowserTts();
         }
     }
 
-    renderQuestion(question) {
+    /** getVoices() is empty until the browser has loaded its voice list; wait briefly for voiceschanged. */
+    loadSpeechVoices() {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length) return Promise.resolve(voices);
+        return new Promise(resolve => {
+            const done = () => resolve(window.speechSynthesis.getVoices());
+            window.speechSynthesis.addEventListener('voiceschanged', done, { once: true });
+            setTimeout(done, 1500);
+        });
+    }
+
+    notifyBrowserVoiceFallback(message) {
+        // One notice per page load is enough; replays would otherwise stack identical toasts.
+        if (this.browserVoiceFallbackNotified) return;
+        this.browserVoiceFallbackNotified = true;
+        this.showToast(message, 'warning');
+    }
+
+    renderQuestion(question, autoPlayTts = true) {
         if (!question) return;
         this.currentQuestionId = question.questionId;
         if (this.el.questionTitle) this.el.questionTitle.textContent = question.title || `Câu hỏi: ${question.questionId}`;
         if (this.el.questionContent) this.el.questionContent.textContent = question.content || '';
 
-        if (question.audioUrl && this.el.questionAudio) {
+        // Ensure start banner is hidden and question card is displayed
+        if (this.el.startExamBanner) this.el.startExamBanner.classList.add('d-none');
+        if (this.el.questionCard) this.el.questionCard.classList.remove('d-none');
+        if (this.el.answeringSection) this.el.answeringSection.classList.remove('d-none');
+
+        if (question.audioUrl && this.el.questionAudio && !this.useBrowserTts) {
             this.el.questionAudio.src = question.audioUrl;
         }
 
         if (this.el.btnPlayQuestionAudio) this.el.btnPlayQuestionAudio.classList.remove('d-none');
-        this.playTts(question.content, this.el.questionAudio, question.audioUrl, () => {
-            this.requestBeginAnswering();
-        });
+        if (autoPlayTts) {
+            // Mic stays locked while the question is read; BeginAnswering unlocks it.
+            this.setRecordingUiState('disabled', 'Đang đọc câu hỏi, vui lòng nghe hết câu hỏi rồi ghi âm.');
+            this.playTts(question.content, this.el.questionAudio, question.audioUrl, () => {
+                this.requestBeginAnswering('Mời bạn bắt đầu ghi âm câu trả lời.');
+            });
+        }
     }
 
-    async requestBeginAnswering() {
-        if (!this.connection || this.connection.state !== signalR.HubConnectionState.Connected) return;
+    /**
+     * Opens the answering window on the server, then unlocks the mic.
+     * Recording is only possible after this succeeds; submitting earlier is rejected
+     * with "The answering period is not active or has expired".
+     */
+    async requestBeginAnswering(readyText) {
+        if (!this.connection || this.connection.state !== signalR.HubConnectionState.Connected) {
+            this.setRecordingUiState('disabled', 'Mất kết nối phòng thi. Vui lòng tải lại trang để tiếp tục.');
+            return false;
+        }
         try {
             const timer = await this.connection.invoke('BeginAnswering', this.sessionId);
             if (timer) {
                 this.handleTimeRemainingChanged(timer);
             }
+            this.setRecordingUiState('ready', readyText || 'Mời bạn bắt đầu ghi âm câu trả lời.');
+            return true;
         } catch (e) {
             console.warn('[SignalR] BeginAnswering invocation notice:', e);
+            this.setRecordingUiState('disabled', 'Chưa mở được lượt trả lời. Vui lòng tải lại trang.');
+            this.showToast('Chưa mở được lượt trả lời. Vui lòng tải lại trang.', 'warning');
+            return false;
         }
     }
 
@@ -423,13 +594,15 @@ class VivaExamClient {
 
         if (this.el.transcriptConfidence && transcript.confidenceScore !== undefined) {
             const pct = Math.round(transcript.confidenceScore * 100);
-            this.el.transcriptConfidence.textContent = `Độ tin cậy: ${pct}%`;
+            // Gemini does not return a confidence score; the server sends a fixed estimate.
+            this.el.transcriptConfidence.textContent = `Độ tin cậy (ước lượng): ${pct}%`;
             this.el.transcriptConfidence.className = 'badge ' + (pct >= 80 ? 'bg-success' : (pct >= 50 ? 'bg-warning text-dark' : 'bg-danger'));
         }
     }
 
     handleFollowUpGenerated(followUp) {
         if (!followUp) return;
+        this.hideFollowUpError();
         this.currentQuestionId = followUp.followUpQuestionId;
         this.currentTurnId = followUp.turnId;
 
@@ -446,11 +619,11 @@ class VivaExamClient {
             this.el.followUpContent.textContent = followUp.followUpContent || '';
         }
 
-        // Follow-up TTS Playback (UI-05)
+        // Follow-up TTS Playback (UI-05); the mic unlocks only after BeginAnswering succeeds.
         if (this.el.btnPlayFollowUpAudio) this.el.btnPlayFollowUpAudio.classList.remove('d-none');
+        this.setRecordingUiState('disabled', 'Đang đọc câu hỏi phụ, vui lòng nghe hết rồi ghi âm.');
         this.playTts(followUp.followUpContent, this.el.followUpAudio, followUp.audioUrl, () => {
-            this.requestBeginAnswering();
-            this.setRecordingUiState('ready', 'Mời bạn bắt đầu ghi âm trả lời câu hỏi phụ.');
+            this.requestBeginAnswering('Mời bạn bắt đầu ghi âm trả lời câu hỏi phụ.');
         });
 
         this.showToast('AI đã tạo câu hỏi phụ cho bạn!', 'info');
@@ -484,6 +657,7 @@ class VivaExamClient {
     handleSessionCompleted(status) {
         this.sessionState = 'Completed';
         this.recorder.cancelRecording();
+        this.hideFollowUpError();
 
         if (this.el.questionCard) this.el.questionCard.classList.add('d-none');
         if (this.el.followUpCard) this.el.followUpCard.classList.add('d-none');
@@ -504,6 +678,13 @@ class VivaExamClient {
     handleVivaError(error) {
         this.canRetry = error.canRetry;
         this.showError(error.errorCode, error.errorMessage, error.canRetry);
+
+        if (error.errorCode === 'FOLLOWUP_GENERATION_FAILED') {
+            // The answer is saved; recording stays locked until a follow-up is delivered or the exam is finished.
+            this.setRecordingUiState('disabled', 'Câu trả lời đã được lưu. Chọn Thử lại hoặc Kết thúc bài thi.');
+            this.showFollowUpError(error.errorMessage);
+            return;
+        }
 
         if (error.canRetry) {
             if (this.el.btnRetryRecord) this.el.btnRetryRecord.classList.remove('d-none');
@@ -537,7 +718,7 @@ class VivaExamClient {
 
             const data = await response.json();
             if (data.question) {
-                this.renderQuestion(data.question);
+                this.renderQuestion(data.question, true);
             }
         } catch (err) {
             console.error('StartExam error:', err);

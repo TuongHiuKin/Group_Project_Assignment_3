@@ -94,8 +94,9 @@ public class StudentReportService : IStudentReportService
             GradedAttemptsCount = fullyGradedAttempts.Count,
             PendingAttemptsCount = pendingAttempts.Count,
             AverageScore = averageScore,
+            PassThresholdScore = settings.PassThresholdScore,
             PassRatePercentage = passRatePercentage,
-            Attempts = attempts.OrderBy(a => a.AttemptOrdinal).ToList()
+            Attempts = attempts.OrderByDescending(a => a.AttemptOrdinal).ToList()
         };
     }
 

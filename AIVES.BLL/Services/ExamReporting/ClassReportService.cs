@@ -309,6 +309,13 @@ public class ClassReportService : IClassReportService
             }
         }
 
+        // DEC-03: Kết luận đạt/chưa đạt của từng lượt dùng cùng ngưỡng với điểm trung bình
+        foreach (var attempt in classAttempts)
+        {
+            attempt.IsPassed = attempt.GradingState == GradingState.Graded
+                && attempt.NormalizedScore >= settings.PassThresholdScore;
+        }
+
         // Lọc các lượt thi completed & graded để tính trung bình
         var completedAttempts = classAttempts.Where(a => a.ExamState == ExamState.Completed).ToList();
         var gradedAttempts = completedAttempts.Where(a => a.GradingState == GradingState.Graded).ToList();
@@ -341,8 +348,9 @@ public class ClassReportService : IClassReportService
             GradedAttemptsCount = gradedAttempts.Count,
             PendingAttemptsCount = pendingAttempts.Count,
             AverageScore = averageScore,
+            PassThresholdScore = settings.PassThresholdScore,
             PassRatePercentage = passRate,
-            Attempts = classAttempts.OrderBy(a => a.AttemptOrdinal).ToList()
+            Attempts = classAttempts.OrderByDescending(a => a.AttemptOrdinal).ToList()
         };
     }
 

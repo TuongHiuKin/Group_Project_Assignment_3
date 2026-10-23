@@ -79,8 +79,8 @@
                 @if (report.AverageScore.HasValue)
                 {
                     <h3 class="fw-bold text-success mb-0">@report.AverageScore.Value <span class="fs-6 text-muted">/ 10</span></h3>
-                    <span class="badge @(report.AverageScore.Value >= 6.0m ? "bg-success" : "bg-danger") rounded-pill px-3 mt-1">
-                        @(report.AverageScore.Value >= 6.0m ? "ĐẠT YÊU CẦU" : "CHƯA ĐẠT")
+                    <span class="badge @(report.AverageScore.Value >= report.PassThresholdScore ? "bg-success" : "bg-danger") rounded-pill px-3 mt-1">
+                        @(report.AverageScore.Value >= report.PassThresholdScore ? "ĐẠT YÊU CẦU" : "CHƯA ĐẠT")
                     </span>
                 }
                 else
@@ -103,12 +103,17 @@
     }
     else
     {
-        <div class="d-flex gap-2 mb-3">
+        @* Bootstrap 5 tabs only switch inside .nav / [role="tablist"] and mark the selected button with .active. *@
+        <div class="d-flex flex-wrap gap-2 mb-3" role="tablist" id="attemptTabs">
             @for (int i = 0; i < report.Attempts.Count; i++)
             {
                 var att = report.Attempts[i];
                 bool isActive = (selectedAttemptOrdinal.HasValue && att.AttemptOrdinal == selectedAttemptOrdinal.Value) || (!selectedAttemptOrdinal.HasValue && i == 0);
-                <button class="btn btn-sm rounded-pill px-4 fw-bold @(isActive ? "btn-primary" : "btn-light border")"
+                <button class="btn btn-sm rounded-pill px-4 fw-bold btn-outline-primary @(isActive ? "active" : "")"
+                        id="tab-att-@att.AttemptOrdinal"
+                        role="tab"
+                        aria-controls="pane-att-@att.AttemptOrdinal"
+                        aria-selected="@(isActive ? "true" : "false")"
                         data-bs-toggle="pill"
                         data-bs-target="#pane-att-@att.AttemptOrdinal"
                         type="button">
@@ -130,7 +135,7 @@
             {
                 var att = report.Attempts[i];
                 bool isActive = (selectedAttemptOrdinal.HasValue && att.AttemptOrdinal == selectedAttemptOrdinal.Value) || (!selectedAttemptOrdinal.HasValue && i == 0);
-                <div class="tab-pane fade @(isActive ? "show active" : "")" id="pane-att-@att.AttemptOrdinal" role="tabpanel">
+                <div class="tab-pane fade @(isActive ? "show active" : "")" id="pane-att-@att.AttemptOrdinal" role="tabpanel" aria-labelledby="tab-att-@att.AttemptOrdinal">
 
                     <!-- Attempt Overview Header Card -->
                     <div class="viva-panel-card mb-4 p-4">

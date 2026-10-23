@@ -81,9 +81,14 @@ builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<ActiveAccountCookieEvents>();
 
 // Group 6 - Viva Exam Reporting Services (Scoped, backed by real SQL Server repositories)
+builder.Services.AddSingleton<AIVES.BLL.Interfaces.ExamReporting.IRubricGradingService, AIVES.BLL.Services.ExamReporting.RubricGradingService>();
 builder.Services.AddScoped<AIVES.BLL.Interfaces.ExamReporting.IExamReportRepository, AIVES.BLL.Repositories.ExamReporting.ExamReportRepository>();
 builder.Services.AddScoped<AIVES.BLL.Interfaces.ExamReporting.IStudentReportService, AIVES.BLL.Services.ExamReporting.StudentReportService>();
 builder.Services.AddScoped<AIVES.BLL.Interfaces.ExamReporting.IClassReportService, AIVES.BLL.Services.ExamReporting.ClassReportService>();
+
+// Mock data for functional groups not built in ASM2 (exam scheduling, AI grading): test accounts + graded EXAM01 attempts
+builder.Services.Configure<MockDataOptions>(builder.Configuration.GetSection(MockDataOptions.SectionName));
+builder.Services.AddScoped<AIVES.BLL.Services.MockData.MockExamDataSeeder>();
 
 builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -114,6 +119,20 @@ builder.Services.AddAuthorization(options =>
 });
 
 var app = builder.Build();
+
+// Read after Build(): only the built app sees configuration overrides (e.g. WebApplicationFactory in tests).
+if (app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<MockDataOptions>>().Value.SeedOnStartup)
+{
+    try
+    {
+        using var scope = app.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<AIVES.BLL.Services.MockData.MockExamDataSeeder>().SeedAsync();
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogWarning(ex, "Seeding mock exam data failed; the app continues without it.");
+    }
+}
 
 if (vivaEnabled)
 {

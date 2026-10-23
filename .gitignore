@@ -53,3 +53,10 @@ StudentNameMVC/wwwroot/audio/cache/
 
 ## AI credentials store (encrypted local file)
 StudentNameMVC/App_Data/
+
+# Playwright skill and tooling (local only, do not push)
+.claude/
+node_modules/
+playwright-report/
+test-results/
+playwright/.cache/

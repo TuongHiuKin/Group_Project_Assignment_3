@@ -19,13 +19,7 @@ public sealed class GeminiProviderAdapter : IAiProviderAdapter
 
     public AiCapability SupportedCapabilities => AiCapability.All;
 
-    public string GetDefaultModel(AiCapability capability) => capability switch
-    {
-        AiCapability.SpeechToText => "gemini-2.5-flash",
-        AiCapability.TextToSpeech => "gemini-2.5-flash-preview-tts",
-        AiCapability.FollowUpLlm => "gemini-2.5-flash",
-        _ => "gemini-2.5-flash"
-    };
+    public string GetDefaultModel(AiCapability capability) => GeminiModels.DefaultFor(capability);
 
     public ISpeechToTextService? CreateSpeechToTextService(IServiceProvider sp, AiProviderProfile profile, string model)
     {
@@ -37,9 +31,11 @@ public sealed class GeminiProviderAdapter : IAiProviderAdapter
         var effectiveModel = string.IsNullOrWhiteSpace(model) ? GetDefaultModel(AiCapability.SpeechToText) : model;
         var httpClient = sp.GetRequiredService<HttpClient>();
         var logger = sp.GetService<ILogger<GeminiSpeechToTextService>>();
-        var allowFallback = sp.GetService<IOptions<AiServiceOptions>>()?.Value.AllowMockFallback ?? false;
+        var aiOptions = sp.GetService<IOptions<AiServiceOptions>>()?.Value;
+        var allowFallback = aiOptions?.AllowMockFallback ?? false;
         var mock = allowFallback ? sp.GetService<MockSpeechToTextService>() : null;
-        return new GeminiSpeechToTextService(httpClient, profile, effectiveModel, timeoutSeconds: 15, logger, mock);
+        var timeout = aiOptions?.SpeechToTextTimeoutSeconds > 0 ? aiOptions.SpeechToTextTimeoutSeconds : 45;
+        return new GeminiSpeechToTextService(httpClient, profile, effectiveModel, timeoutSeconds: timeout, logger, mock);
     }
 
     public ITextToSpeechService? CreateTextToSpeechService(
@@ -58,9 +54,11 @@ public sealed class GeminiProviderAdapter : IAiProviderAdapter
         var effectiveVoice = string.IsNullOrWhiteSpace(voice) ? "Puck" : voice;
         var httpClient = sp.GetRequiredService<HttpClient>();
         var logger = sp.GetService<ILogger<GeminiTextToSpeechService>>();
-        var allowFallback = sp.GetService<IOptions<AiServiceOptions>>()?.Value.AllowMockFallback ?? false;
+        var aiOptions = sp.GetService<IOptions<AiServiceOptions>>()?.Value;
+        var allowFallback = aiOptions?.AllowMockFallback ?? false;
         var mock = allowFallback ? sp.GetService<MockTextToSpeechService>() : null;
-        return new GeminiTextToSpeechService(httpClient, profile, effectiveModel, effectiveVoice, cacheDirectory, timeoutSeconds: 10, logger, mock);
+        var timeout = aiOptions?.TextToSpeechTimeoutSeconds > 0 ? aiOptions.TextToSpeechTimeoutSeconds : 20;
+        return new GeminiTextToSpeechService(httpClient, profile, effectiveModel, effectiveVoice, cacheDirectory, timeoutSeconds: timeout, logger, mock);
     }
 
     public IFollowUpGeneratorService? CreateFollowUpGeneratorService(IServiceProvider sp, AiProviderProfile profile, string model)
@@ -74,9 +72,11 @@ public sealed class GeminiProviderAdapter : IAiProviderAdapter
         var httpClient = sp.GetRequiredService<HttpClient>();
         var validator = sp.GetService<FollowUpPolicyValidator>() ?? new FollowUpPolicyValidator();
         var logger = sp.GetService<ILogger<GeminiFollowUpGeneratorService>>();
-        var allowFallback = sp.GetService<IOptions<AiServiceOptions>>()?.Value.AllowMockFallback ?? false;
+        var aiOptions = sp.GetService<IOptions<AiServiceOptions>>()?.Value;
+        var allowFallback = aiOptions?.AllowMockFallback ?? false;
         var mock = allowFallback ? sp.GetService<MockFollowUpGeneratorService>() : null;
-        return new GeminiFollowUpGeneratorService(httpClient, profile, effectiveModel, validator, timeoutSeconds: 15, logger, mock);
+        var timeout = aiOptions?.FollowUpTimeoutSeconds > 0 ? aiOptions.FollowUpTimeoutSeconds : 35;
+        return new GeminiFollowUpGeneratorService(httpClient, profile, effectiveModel, validator, timeoutSeconds: timeout, logger, mock);
     }
 
     public async Task<(bool Ok, string Message)> TestConnectionAsync(HttpClient httpClient, AiProviderProfile profile, CancellationToken ct = default)
@@ -138,10 +138,18 @@ public sealed class GeminiProviderAdapter : IAiProviderAdapter
 
     public async Task<IReadOnlyList<string>> ListModelsAsync(HttpClient httpClient, AiProviderProfile profile, CancellationToken ct = default)
     {
-        var fallbackModels = new List<string> { "gemini-2.5-flash", "gemini-2.5-flash-preview-tts", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro" };
+        return await TryListLiveModelsAsync(httpClient, profile, ct).ConfigureAwait(false) ?? GeminiModels.KnownModels;
+    }
+
+    /// <summary>
+    /// Danh sách model thật từ Gemini <c>GET /models</c>; null khi không lấy được (thiếu key, lỗi mạng, HTTP lỗi),
+    /// để nơi kiểm tra hợp lệ không nhầm danh sách dự phòng là danh sách thật.
+    /// </summary>
+    public async Task<IReadOnlyList<string>?> TryListLiveModelsAsync(HttpClient httpClient, AiProviderProfile profile, CancellationToken ct = default)
+    {
         if (string.IsNullOrWhiteSpace(profile.ApiKey))
         {
-            return fallbackModels;
+            return null;
         }
 
         var baseUrl = string.IsNullOrWhiteSpace(profile.BaseUrl)
@@ -160,7 +168,7 @@ public sealed class GeminiProviderAdapter : IAiProviderAdapter
             var response = await httpClient.SendAsync(request, linkedCts.Token).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
-                return fallbackModels;
+                return null;
             }
 
             var body = await response.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
@@ -191,12 +199,12 @@ public sealed class GeminiProviderAdapter : IAiProviderAdapter
                 }
             }
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            // Fall back to known models
+            // Caller decides whether to fall back to known models.
         }
 
-        return fallbackModels;
+        return null;
     }
 
     private static string? ExtractErrorMessage(string? json)

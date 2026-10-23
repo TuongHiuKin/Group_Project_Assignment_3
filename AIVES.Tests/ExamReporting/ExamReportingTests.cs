@@ -493,6 +493,103 @@ public class ExamReportingTests
         Assert.Equal("Chưa chấm", row.ResultStatus);
     }
 
+    private const string Exam01Q01Content = "Hãy giải thích vì sao DbContext trong ASP.NET Core phải được đăng ký với Scoped lifetime thay vì Singleton, và điều gì sẽ xảy ra với Entity Tracker và kết nối cơ sở dữ liệu nếu một service Singleton giữ tham chiếu đến DbContext?";
+
+    private static ExamReportRepository CreateRubricRepo(string transcript, VivaSessionState state = VivaSessionState.Completed)
+    {
+        var sessionId = Guid.NewGuid();
+        var session = new VivaSession
+        {
+            SessionId = sessionId,
+            ExamId = "EXAM01",
+            StudentId = "1",
+            State = (byte)state,
+            StartedAtUtc = DateTime.UtcNow.AddMinutes(-5),
+            CompletedAtUtc = DateTime.UtcNow,
+            Turns = new List<VivaSessionTurn>
+            {
+                new() { TurnId = Guid.NewGuid(), SessionId = sessionId, QuestionId = "EXAM01-Q01", TurnOrdinal = 1, TranscriptText = transcript }
+            }
+        };
+
+        return new ExamReportRepository(
+            new StubSessionRepo([session]),
+            new StubQuestionRepo([new VivaQuestion { QuestionId = "EXAM01-Q01", ExamId = "EXAM01", Title = "DbContext Lifetime", Content = Exam01Q01Content }]),
+            new StubAccountRepo([new SystemAccount { AccountId = 1, AccountName = "Kieen", AccountEmail = "kin@gmail.com", AccountRole = 2 }]),
+            new RubricGradingService());
+    }
+
+    [Fact]
+    public async Task ExamReportRepository_TranscriptThatOnlyRepeatsQuestion_IsGradedZeroNotHardcodedScore()
+    {
+        var repo = CreateRubricRepo(Exam01Q01Content);
+
+        var attempt = Assert.Single(await repo.GetStudentAttemptsAsync("1", "EXAM01"));
+        var q = Assert.Single(attempt.QuestionResults);
+
+        Assert.Equal(GradingState.Graded, attempt.GradingState);
+        Assert.Equal(0m, q.EarnedScore);
+        Assert.False(q.IsPassed);
+        Assert.False(attempt.IsPassed);
+        Assert.All(q.CriteriaOutcomes.Values, met => Assert.False(met));
+        Assert.Equal(RubricGradingService.NoRelevantAnswerFeedback, q.AiFeedback);
+        Assert.Empty(q.Strengths);
+    }
+
+    [Fact]
+    public async Task ExamReportRepository_ScoreChangesWithAnswerContent()
+    {
+        const string full = "DbContext là Scoped vì mỗi HTTP request có một instance riêng. Nếu giữ trong Singleton thì ChangeTracker tích lũy entity gây rò rỉ bộ nhớ, và DbContext không thread-safe nên nhiều luồng dùng đồng thời sẽ lỗi.";
+        const string partial = "Vì mỗi request cần một instance riêng, tạo mới và hủy theo vòng đời của request đó.";
+
+        var fullAttempt = Assert.Single(await CreateRubricRepo(full).GetStudentAttemptsAsync("1", "EXAM01"));
+        var partialAttempt = Assert.Single(await CreateRubricRepo(partial).GetStudentAttemptsAsync("1", "EXAM01"));
+
+        Assert.Equal(10m, fullAttempt.NormalizedScore);
+        Assert.True(fullAttempt.IsPassed);
+        Assert.Equal(3.5m, partialAttempt.NormalizedScore);
+        Assert.False(partialAttempt.IsPassed);
+        Assert.NotEqual(8.5m, fullAttempt.NormalizedScore);
+        Assert.NotEqual(8.5m, partialAttempt.NormalizedScore);
+    }
+
+    [Fact]
+    public async Task ExamReportRepository_SessionNotCompleted_StaysPendingOrFailed()
+    {
+        var inProgress = Assert.Single(await CreateRubricRepo("Mỗi request một DbContext riêng biệt.", VivaSessionState.Answering).GetStudentAttemptsAsync("1", "EXAM01"));
+        var timedOut = Assert.Single(await CreateRubricRepo("Mỗi request một DbContext riêng biệt.", VivaSessionState.TimedOut).GetStudentAttemptsAsync("1", "EXAM01"));
+
+        Assert.Equal(GradingState.Pending, inProgress.GradingState);
+        Assert.Equal(GradingState.Failed, timedOut.GradingState);
+        Assert.False(inProgress.IsPassed);
+        Assert.Equal(0m, Assert.Single(inProgress.QuestionResults).EarnedScore);
+    }
+
+    [Theory]
+    [InlineData("DbContext là Scoped vì mỗi HTTP request có một instance riêng. Nếu giữ trong Singleton thì ChangeTracker tích lũy entity gây rò rỉ bộ nhớ, và DbContext không thread-safe nên nhiều luồng dùng đồng thời sẽ lỗi.", true)]
+    [InlineData("Vì mỗi request cần một instance riêng, tạo mới và hủy theo vòng đời của request đó.", false)]
+    [InlineData(Exam01Q01Content, false)]
+    public async Task StudentAndTeacherViews_AgreeOnPassResultAndThreshold(string transcript, bool expectedPassed)
+    {
+        var repo = CreateRubricRepo(transcript);
+
+        var studentReport = await new StudentReportService(repo).GetStudentReportAsync("1", "EXAM01");
+        var teacherReport = await new ClassReportService(repo).GetStudentExamDetailForTeacherAsync("GV01", "EXAM01", "EXAM01", "1");
+
+        Assert.NotNull(studentReport);
+        Assert.NotNull(teacherReport);
+        var studentAttempt = Assert.Single(studentReport.Attempts);
+        var teacherAttempt = Assert.Single(teacherReport.Attempts);
+
+        Assert.Equal(expectedPassed, studentAttempt.IsPassed);
+        Assert.Equal(expectedPassed, teacherAttempt.IsPassed);
+        Assert.Equal(studentAttempt.NormalizedScore, teacherAttempt.NormalizedScore);
+        Assert.Equal(studentReport.PassThresholdScore, teacherReport.PassThresholdScore);
+        Assert.Equal(ExamReportRepository.DefaultPassThresholdScore, teacherReport.PassThresholdScore);
+        Assert.Equal(expectedPassed, teacherReport.AverageScore >= teacherReport.PassThresholdScore);
+        Assert.Equal(expectedPassed, Assert.Single(teacherAttempt.QuestionResults).IsPassed);
+    }
+
     private sealed class StubSessionRepo(List<VivaSession> sessions) : IVivaSessionRepository
     {
         public int GetSessionsWithDetailsCallCount { get; private set; }

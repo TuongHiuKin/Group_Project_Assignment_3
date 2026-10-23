@@ -1,4 +1,4 @@
-@page
+﻿@page
 @model StudentNameMVC.Pages.Viva.IndexModel
 @{
     ViewData["Title"] = "Cổng phòng thi Vấn đáp AI";
@@ -34,6 +34,29 @@
             </span>
         </div>
     </div>
+
+    @if (User.IsInRole(AIVES.BLL.Security.ApplicationRoles.Lecturer))
+    {
+        <div class="alert alert-info border-0 rounded-4 shadow-sm mb-4 d-flex align-items-center justify-content-between flex-wrap gap-3 p-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="brand-icon-box" style="width: 44px; height: 44px; font-size: 20px; border-radius: 12px; background: #e0f2fe; color: #0284c7;">
+                    <i class="bi bi-info-circle-fill"></i>
+                </div>
+                <div>
+                    <strong class="text-dark d-block">Tài khoản Giảng viên Khảo thí</strong>
+                    <span class="text-secondary small">Phòng thi vấn đáp trực tiếp được thiết kế dành cho Thí sinh (Sinh viên). Với vai trò Giảng viên, bạn có thể giám sát tiến độ thi, xem bảng điểm và đánh giá câu trả lời theo chuẩn rubric.</span>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <a href="/Account/LecturerDashboard" class="btn btn-sm btn-outline-primary rounded-pill fw-bold px-3">
+                    <i class="bi bi-grid-fill me-1"></i> Dashboard Giảng viên
+                </a>
+                <a href="/ClassReports" class="btn btn-sm btn-primary rounded-pill fw-bold px-3">
+                    <i class="bi bi-bar-chart-steps me-1"></i> Thống kê Lớp học
+                </a>
+            </div>
+        </div>
+    }
 
     @if (!string.IsNullOrEmpty(Model.ErrorMessage))
     {
@@ -182,43 +205,19 @@
                         <small class="text-secondary">Khảo thí chuyên sâu về Transient, Scoped, Singleton và kiến trúc 3 lớp.</small>
                     </div>
 
-                    @if (Model.IsOrchestratorAvailable)
+                    @if (!Model.IsCandidate)
+                    {
+                        <div class="alert alert-secondary mb-0 rounded-4" role="note">
+                            <i class="bi bi-person-lock me-2"></i>Chỉ tài khoản Sinh viên được vào thi. Quản trị viên và Giảng viên không tham gia thi vấn đáp.
+                        </div>
+                    }
+                    else if (Model.IsOrchestratorAvailable)
                     {
                         <form method="post" asp-page-handler="Create">
                             @Html.AntiForgeryToken()
                             <input type="hidden" name="ExamIdInput" value="EXAM01" />
                             <button type="submit" class="btn btn-primary w-100 py-3 rounded-pill fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2" @(!Model.IsAiConfigured ? "disabled" : null)>
                                 <i class="bi bi-lightning-charge-fill"></i> Vào thi ngay đề EXAM01
-                            </button>
-                        </form>
-                    }
-                </div>
-            </div>
-
-            <!-- 2. Create Custom Session Form -->
-            <div class="viva-panel-card mb-4">
-                <div class="viva-panel-header">
-                    <div class="d-flex align-items-center gap-2">
-                        <i class="bi bi-plus-circle-fill text-success fs-5"></i>
-                        <h5 class="mb-0 fw-bold text-dark">Tạo bài thi với mã đề khác</h5>
-                    </div>
-                </div>
-                <div class="viva-panel-body p-4">
-                    @if (Model.IsOrchestratorAvailable)
-                    {
-                        <form method="post" asp-page-handler="Create">
-                            @Html.AntiForgeryToken()
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold text-secondary mb-1">Mã đề thi (Exam ID)</label>
-                                <div class="input-group">
-                                    <span class="input-group-text bg-light border-end-0" style="border-radius: 14px 0 0 14px;">
-                                        <i class="bi bi-journal-text text-muted"></i>
-                                    </span>
-                                    <input asp-for="ExamIdInput" class="form-control" style="border-radius: 0 14px 14px 0; padding: 12px;" placeholder="Ví dụ: EXAM01, EXAM02..." required />
-                                </div>
-                            </div>
-                            <button type="submit" class="btn btn-outline-primary w-100 py-2 rounded-pill fw-bold" @(!Model.IsAiConfigured ? "disabled" : null)>
-                                <i class="bi bi-plus-lg me-1"></i> Tạo phiên thi mới
                             </button>
                         </form>
                     }
@@ -229,6 +228,11 @@
                         </div>
                     }
                 </div>
+            </div>
+
+            <!-- 2. Exam selection: Nhóm 2 (kỳ thi & lịch thi) chưa triển khai, mọi sinh viên mặc định vào đề EXAM01 -->
+            <div class="alert alert-info rounded-4 mb-4 small" role="note">
+                <i class="bi bi-info-circle-fill me-2"></i>Chức năng quản lý kỳ thi chưa triển khai: mọi sinh viên mặc định vào phòng thi đề <strong>EXAM01</strong>.
             </div>
 
             <!-- 3. Join by Existing SessionId -->

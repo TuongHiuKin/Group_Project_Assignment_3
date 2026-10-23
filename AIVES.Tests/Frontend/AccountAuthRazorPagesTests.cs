@@ -6,6 +6,7 @@ using AIVES.BLL.Interfaces.ExamReporting;
 using AIVES.BLL.Models;
 using AIVES.BLL.Models.ExamReporting;
 using AIVES.BLL.Security;
+using AIVES.BLL.Services.ExamReporting;
 using AIVES.DAL.Entities;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -230,7 +231,7 @@ public sealed class AccountAuthRazorPagesTests
             }
         };
 
-        var model = new LecturerDashboardModel(classReportService)
+        var model = new LecturerDashboardModel(classReportService, new RubricGradingService())
         {
             PageContext = new PageContext
             {
@@ -252,6 +253,8 @@ public sealed class AccountAuthRazorPagesTests
         Assert.NotNull(model.ClassStats);
         Assert.Equal(25, model.ClassStats.TotalStudentsCount);
         Assert.Equal(7.5m, model.ClassStats.AverageClassScore);
+        Assert.Equal(new[] { "EXAM01-Q01", "EXAM01-Q02", "EXAM01-Q03" }, model.Rubrics.Select(r => r.QuestionId));
+        Assert.Same(RubricCatalog.All[0], model.Rubrics[0]);
     }
 
     [Fact]

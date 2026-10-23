@@ -55,6 +55,53 @@ public class OpenAiFollowUpGeneratorServiceTests
     }
 
     [Fact]
+    public async Task GenerateFollowUpQuestionAsync_Retries_Once_When_Json_Mode_Validation_Fails()
+    {
+        const string invalidJsonBody = """{"error":{"message":"Failed to validate JSON. Please adjust your prompt.","type":"invalid_request_error","code":"json_validate_failed"}}""";
+        const string successBody = """{"choices":[{"message":{"content":"{\"followUpQuestion\":\"Điều gì xảy ra với Change Tracker khi DbContext là Singleton?\",\"cognitiveIntent\":\"Deep-Dive\"}"}}]}""";
+        var calls = 0;
+        var handler = new DelegatingHandlerStub((req, ct) =>
+        {
+            calls++;
+            return Task.FromResult(calls == 1
+                ? new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent(invalidJsonBody, Encoding.UTF8, "application/json") }
+                : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(successBody, Encoding.UTF8, "application/json") });
+        });
+
+        using var client = new HttpClient(handler);
+        var service = new OpenAiFollowUpGeneratorService(client, CreateOptions());
+
+        var result = await service.GenerateFollowUpQuestionAsync("Vì sao DbContext phải là Scoped?", "Vì mỗi request cần một DbContext riêng.", "EXAM01");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2, calls);
+        Assert.Contains("Change Tracker", result.FollowUpQuestionText);
+    }
+
+    [Fact]
+    public async Task GenerateFollowUpQuestionAsync_Does_Not_Retry_Other_Bad_Requests()
+    {
+        var calls = 0;
+        var handler = new DelegatingHandlerStub((req, ct) =>
+        {
+            calls++;
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest)
+            {
+                Content = new StringContent("""{"error":{"message":"Invalid model","code":"model_not_found"}}""", Encoding.UTF8, "application/json")
+            });
+        });
+
+        using var client = new HttpClient(handler);
+        var service = new OpenAiFollowUpGeneratorService(client, CreateOptions());
+
+        var result = await service.GenerateFollowUpQuestionAsync("Q", "A", "EXAM01");
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(1, calls);
+        Assert.Contains("Invalid model", result.ErrorMessage);
+    }
+
+    [Fact]
     public async Task GenerateFollowUpQuestionAsync_Returns_Question_And_Intent_On_Success()
     {
         var responseJson = """

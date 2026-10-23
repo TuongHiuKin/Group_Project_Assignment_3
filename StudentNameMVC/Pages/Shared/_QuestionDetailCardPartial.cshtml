@@ -114,7 +114,8 @@
         <div class="mb-4">
             <div class="aives-block-heading">
                 <span class="aives-block-badge-num">4</span>
-                <span>Đánh giá chi tiết của AI & Điểm số đạt được</span>
+                <span>Đánh giá chi tiết & Điểm số đạt được</span>
+                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-2 fw-normal" title="Nhóm 4 (AI chấm điểm) chưa triển khai: điểm và nhận xét AI được mô phỏng từ Rubric giảng viên thiết lập">AI chấm gợi ý (mô phỏng)</span>
             </div>
 
             <!-- Thanh Huy hiệu Điểm số & Trạng thái -->
@@ -161,12 +162,15 @@
                 else if (!isPassFailMode)
                 {
                     <div class="d-flex flex-wrap align-items-center gap-2">
-                        <span class="badge tag-purple rounded-pill px-3 py-2" title="Điểm do AI đề xuất">
-                            <i class="bi bi-robot me-1"></i>AI đề xuất: <strong>@Model.AiSuggestedScore / @Model.MaxScore</strong>
+                        <span class="badge tag-purple rounded-pill px-3 py-2" title="Điểm AI gợi ý (mô phỏng theo Rubric giảng viên)">
+                            <i class="bi bi-card-checklist me-1"></i>AI gợi ý: <strong>@Model.AiSuggestedScore / @Model.MaxScore</strong>
                         </span>
-                        <span class="badge tag-cyan rounded-pill px-3 py-2" title="Điểm do Giảng viên chốt cuối cùng">
-                            <i class="bi bi-person-check-fill me-1"></i>GV chốt: <strong>@Model.TeacherFinalScore / @Model.MaxScore</strong>
-                        </span>
+                        @if (Model.TeacherFinalScore > 0)
+                        {
+                            <span class="badge tag-cyan rounded-pill px-3 py-2" title="Điểm do Giảng viên chốt cuối cùng">
+                                <i class="bi bi-person-check-fill me-1"></i>GV chốt: <strong>@Model.TeacherFinalScore / @Model.MaxScore</strong>
+                            </span>
+                        }
                         <span class="badge bg-primary text-white rounded-pill px-3 py-2 fs-6 fw-bold" title="Điểm chính thức đạt được">
                             <i class="bi bi-award-fill me-1"></i>Điểm: @Model.EarnedScore / @Model.MaxScore
                         </span>
@@ -179,7 +183,7 @@
             {
                 <div class="aives-feedback-box mb-3">
                     <div class="fw-bold text-dark mb-1 d-flex align-items-center gap-1">
-                        <i class="bi bi-chat-square-dots-fill text-primary"></i> Nhận xét phân tích của AI:
+                        <i class="bi bi-chat-square-dots-fill text-primary"></i> Nhận xét của AI:
                     </div>
                     <p class="mb-0 text-dark lh-base">@Model.AiFeedback</p>
                 </div>
@@ -241,7 +245,7 @@
                         </div>
                         <div>
                             <span class="text-secondary small fw-semibold">Ngưỡng đạt Rubric:</span>
-                            <span class="badge tag-cyan ms-1">Giảng viên cấu hình (DEC-03)</span>
+                            <span class="badge tag-cyan ms-1">@Model.PassThresholdScore.ToString("0.#") điểm (DEC-03)</span>
                         </div>
                     }
                 </div>

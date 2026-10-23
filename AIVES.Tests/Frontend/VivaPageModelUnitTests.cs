@@ -193,6 +193,26 @@ public sealed class VivaPageModelUnitTests
         Assert.Equal("SV_TEST_01", stub.CapturedStudentId);
     }
 
+    [Theory]
+    [InlineData(ApplicationRoles.Admin, "Quản trị viên")]
+    [InlineData(ApplicationRoles.Lecturer, "Giảng viên")]
+    public async Task IndexModel_OnPostCreateAsync_WhenUserIsNotStudent_DoesNotCreateSession(string role, string expectedRoleName)
+    {
+        var stub = new StubOrchestrator();
+        var model = new IndexModel(NullLogger<IndexModel>.Instance, stub)
+        {
+            PageContext = CreatePageContext(userId: ApplicationRoles.AdminSubjectId, role: role),
+            ExamIdInput = "EXAM01"
+        };
+
+        var result = await model.OnPostCreateAsync();
+
+        Assert.IsType<PageResult>(result);
+        Assert.False(model.IsCandidate);
+        Assert.Contains(expectedRoleName, model.ErrorMessage);
+        Assert.Null(stub.CapturedStudentId);
+    }
+
     private sealed class UnconfiguredAiStore : AIVES.BLL.Interfaces.Ai.IAiCredentialStore
     {
         public AIVES.BLL.Interfaces.Ai.AiCredentialStatus GetStatus() => new(false, false, null, null);
@@ -321,6 +341,73 @@ public sealed class VivaPageModelUnitTests
         Assert.Equal("Q1", model.InitialQuestionId);
         Assert.Equal("Lifetime", model.InitialQuestionTitle);
         Assert.Equal("Explain scoped lifetime.", model.InitialQuestionContent);
+    }
+
+    private (ExamModel Model, Guid SessionId, Guid TurnId) CreateFollowUpRecoveryModel(VivaSessionState state, string userId = "SV01")
+    {
+        var sessionId = _data.AddSession("SV01", state);
+        var turnId = Guid.NewGuid();
+        _data.Turns[turnId] = new VivaSessionTurn
+        {
+            TurnId = turnId, SessionId = sessionId, QuestionId = "Q1", TurnOrdinal = 1, TranscriptText = "Mỗi request một DbContext."
+        };
+
+        var orchestrator = new AIVES.BLL.Services.VivaInterview.VivaSessionOrchestrator(
+            _data, _data, _data, _ai, _ai, _ai, _publisher, NullLogger<AIVES.BLL.Services.VivaInterview.VivaSessionOrchestrator>.Instance);
+        var realtimeService = new AIVES.BLL.Services.VivaInterview.VivaRealtimeSessionService(
+            _data, _data, new AIVES.BLL.Services.VivaInterview.VivaTimerManager(TimeProvider.System), TimeProvider.System);
+
+        var model = new ExamModel(NullLogger<ExamModel>.Instance, orchestrator, realtimeService)
+        {
+            PageContext = CreatePageContext(userId: userId)
+        };
+        return (model, sessionId, turnId);
+    }
+
+    [Fact]
+    public async Task ExamModel_OnPostRetryFollowUpAsync_WhenTranscriptReady_DeliversFollowUp()
+    {
+        var (model, sessionId, turnId) = CreateFollowUpRecoveryModel(VivaSessionState.TranscriptReady);
+
+        var result = await model.OnPostRetryFollowUpAsync(sessionId, turnId);
+
+        Assert.IsType<JsonResult>(result);
+        Assert.Equal((byte)VivaSessionState.FollowUpDelivered, _data.Sessions[sessionId].State);
+        Assert.Equal("Why not singleton?", _data.Turns[turnId].FollowUpQuestionText);
+    }
+
+    [Fact]
+    public async Task ExamModel_OnPostFinishSessionAsync_WhenTranscriptReady_CompletesSession()
+    {
+        var (model, sessionId, _) = CreateFollowUpRecoveryModel(VivaSessionState.TranscriptReady);
+
+        var result = await model.OnPostFinishSessionAsync(sessionId);
+
+        Assert.IsType<JsonResult>(result);
+        Assert.Equal((byte)VivaSessionState.Completed, _data.Sessions[sessionId].State);
+    }
+
+    [Theory]
+    [InlineData(VivaSessionState.Answering)]
+    [InlineData(VivaSessionState.FollowUpDelivered)]
+    [InlineData(VivaSessionState.Completed)]
+    public async Task ExamModel_FollowUpRecoveryHandlers_RejectOtherStates(VivaSessionState state)
+    {
+        var (model, sessionId, turnId) = CreateFollowUpRecoveryModel(state);
+
+        Assert.IsType<BadRequestObjectResult>(await model.OnPostRetryFollowUpAsync(sessionId, turnId));
+        Assert.IsType<BadRequestObjectResult>(await model.OnPostFinishSessionAsync(sessionId));
+        Assert.Equal((byte)state, _data.Sessions[sessionId].State);
+    }
+
+    [Fact]
+    public async Task ExamModel_FollowUpRecoveryHandlers_ForbidOtherStudents()
+    {
+        var (model, sessionId, turnId) = CreateFollowUpRecoveryModel(VivaSessionState.TranscriptReady, userId: "SV_OTHER");
+
+        Assert.IsType<ForbidResult>(await model.OnPostRetryFollowUpAsync(sessionId, turnId));
+        Assert.IsType<ForbidResult>(await model.OnPostFinishSessionAsync(sessionId));
+        Assert.Equal((byte)VivaSessionState.TranscriptReady, _data.Sessions[sessionId].State);
     }
 
     [Fact]

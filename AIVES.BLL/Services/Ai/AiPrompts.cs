@@ -13,7 +13,8 @@ public static class AiPrompts
     1. STRICTLY FORBIDDEN: Do NOT provide grades, numerical scores, evaluation points, or pass/fail decisions.
     2. The follow-up question must directly challenge or probe deeper into what the student stated or omitted.
     3. Determine the cognitive intent: 'Clarification', 'Deep-Dive', 'Edge-Case', or 'Counter-Example'.
-    4. Respond strictly in valid JSON format:
+    4. Write "followUpQuestion" in the same language as the original question (Vietnamese when the question is Vietnamese); keep technical terms such as DbContext or Singleton as they are.
+    5. Respond strictly in valid JSON format:
     {
       "followUpQuestion": "<1-2 sentence question>",
       "cognitiveIntent": "<Clarification|Deep-Dive|Edge-Case|Counter-Example>"

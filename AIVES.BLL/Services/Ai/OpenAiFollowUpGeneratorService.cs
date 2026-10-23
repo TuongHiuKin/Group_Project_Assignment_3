@@ -16,6 +16,7 @@ namespace AIVES.BLL.Services.Ai;
 public class OpenAiFollowUpGeneratorService : IFollowUpGeneratorService
 {
     private const string DefaultEndpoint = "https://api.openai.com/v1/chat/completions";
+    private const string JsonValidateFailedCode = "json_validate_failed";
     private readonly HttpClient _httpClient;
     private readonly IOptions<AiServiceOptions> _options;
     private readonly IFollowUpGeneratorService? _fallbackService;
@@ -77,16 +78,6 @@ public class OpenAiFollowUpGeneratorService : IFollowUpGeneratorService
             ? DefaultEndpoint
             : $"{config.OpenAI.BaseUrl.TrimEnd('/')}/chat/completions";
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
-        if (!string.IsNullOrWhiteSpace(config.OpenAI.ApiKey))
-        {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", config.OpenAI.ApiKey);
-        }
-        if (!string.IsNullOrWhiteSpace(config.OpenAI.OrganizationId))
-        {
-            request.Headers.Add("OpenAI-Organization", config.OpenAI.OrganizationId);
-        }
-
         var userContent = $"""
         Subject Context: {subjectContext}
         Original Question: {originalQuestion}
@@ -103,48 +94,61 @@ public class OpenAiFollowUpGeneratorService : IFollowUpGeneratorService
             },
             response_format = new { type = "json_object" },
             temperature = 0.4,
-            max_tokens = 250
+            // Reasoning models (e.g. Groq openai/gpt-oss-*) spend completion tokens on reasoning before the JSON.
+            max_tokens = 1024
         };
-
-        request.Content = new StringContent(
-            JsonSerializer.Serialize(payload),
-            Encoding.UTF8,
-            "application/json");
+        var payloadJson = JsonSerializer.Serialize(payload);
 
         var sw = Stopwatch.StartNew();
         HttpResponseMessage response;
-        try
+        string responseBody;
+        for (var attempt = 1; ; attempt++)
         {
-            response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            _logger?.LogInformation("Follow-up generation canceled by caller.");
-            throw;
-        }
-        catch (OperationCanceledException)
-        {
-            _logger?.LogWarning("Follow-up generation timed out after {Timeout} seconds.", timeoutSeconds);
-            if (_fallbackService != null)
+            using var request = CreateRequest(endpoint, config.OpenAI, payloadJson);
+            try
             {
-                return await _fallbackService.GenerateFollowUpQuestionAsync(originalQuestion, studentAnswerTranscript, subjectContext, ct);
+                response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token);
             }
-            return new FollowUpResult(false, string.Empty, string.Empty, $"Follow-up generation timed out after {timeoutSeconds} seconds.");
-        }
-        catch (HttpRequestException ex)
-        {
-            var sanitizedErr = AiKeySanitizer.Sanitize(ex.Message, config.OpenAI.ApiKey);
-            _logger?.LogError(ex, "HTTP exception during follow-up generation: {Error}", sanitizedErr);
-            if (_fallbackService != null)
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                return await _fallbackService.GenerateFollowUpQuestionAsync(originalQuestion, studentAnswerTranscript, subjectContext, ct);
+                _logger?.LogInformation("Follow-up generation canceled by caller.");
+                throw;
             }
-            return new FollowUpResult(false, string.Empty, string.Empty, $"Network error contacting LLM service: {sanitizedErr}");
+            catch (OperationCanceledException)
+            {
+                _logger?.LogWarning("Follow-up generation timed out after {Timeout} seconds.", timeoutSeconds);
+                if (_fallbackService != null)
+                {
+                    return await _fallbackService.GenerateFollowUpQuestionAsync(originalQuestion, studentAnswerTranscript, subjectContext, ct);
+                }
+                return new FollowUpResult(false, string.Empty, string.Empty, $"Follow-up generation timed out after {timeoutSeconds} seconds.");
+            }
+            catch (HttpRequestException ex)
+            {
+                var sanitizedErr = AiKeySanitizer.Sanitize(ex.Message, config.OpenAI.ApiKey);
+                _logger?.LogError(ex, "HTTP exception during follow-up generation: {Error}", sanitizedErr);
+                if (_fallbackService != null)
+                {
+                    return await _fallbackService.GenerateFollowUpQuestionAsync(originalQuestion, studentAnswerTranscript, subjectContext, ct);
+                }
+                return new FollowUpResult(false, string.Empty, string.Empty, $"Network error contacting LLM service: {sanitizedErr}");
+            }
+
+            responseBody = await response.Content.ReadAsStringAsync(ct);
+
+            // JSON mode (Groq) rejects a malformed sample with 400 json_validate_failed; a second sample usually succeeds.
+            if (attempt == 1 && (int)response.StatusCode == 400 &&
+                responseBody.Contains(JsonValidateFailedCode, StringComparison.Ordinal))
+            {
+                _logger?.LogWarning("LLM returned invalid JSON ({Code}); retrying once.", JsonValidateFailedCode);
+                response.Dispose();
+                continue;
+            }
+
+            break;
         }
 
         sw.Stop();
-
-        var responseBody = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -161,6 +165,23 @@ public class OpenAiFollowUpGeneratorService : IFollowUpGeneratorService
         }
 
         return ParseSuccessResponse(responseBody, sw.ElapsedMilliseconds);
+    }
+
+    private static HttpRequestMessage CreateRequest(string endpoint, OpenAiOptions openAi, string payloadJson)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, endpoint)
+        {
+            Content = new StringContent(payloadJson, Encoding.UTF8, "application/json")
+        };
+        if (!string.IsNullOrWhiteSpace(openAi.ApiKey))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", openAi.ApiKey);
+        }
+        if (!string.IsNullOrWhiteSpace(openAi.OrganizationId))
+        {
+            request.Headers.Add("OpenAI-Organization", openAi.OrganizationId);
+        }
+        return request;
     }
 
     private FollowUpResult ParseSuccessResponse(string json, long elapsedMs)

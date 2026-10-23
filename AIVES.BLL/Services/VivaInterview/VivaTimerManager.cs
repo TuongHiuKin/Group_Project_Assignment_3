@@ -41,6 +41,18 @@ public sealed class VivaTimerManager(TimeProvider clock)
         if (!_deadlines.TryAdd(deadline.SessionId, deadline))
             throw new InvalidOperationException("An answering timer already exists for this session.");
     }
+
+    /// <summary>
+    /// Restarts a paused deadline with the seconds that were left when it was paused (e.g. while STT was running),
+    /// so server-side processing time is not charged to the student. Never adds time beyond what was left.
+    /// </summary>
+    public Deadline Resume(Deadline paused, int secondsRemaining)
+    {
+        var seconds = Math.Clamp(secondsRemaining, 0, paused.TotalSecondsAllowed);
+        var resumed = paused with { EndsAtUtc = clock.GetUtcNow().AddSeconds(seconds) };
+        Restore(resumed);
+        return resumed;
+    }
     public Guid[] GetActiveSessionIds() => _deadlines.Keys.ToArray();
     public void Stop(Guid sessionId) => _deadlines.TryRemove(sessionId, out _);
 
