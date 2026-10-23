@@ -208,7 +208,9 @@
 
                     <!-- Recording Action Buttons -->
                     <div class="viva-record-btn-group">
-                        <button type="button" id="btnStartRecord" class="viva-btn-record viva-btn-record-danger">
+                        @* Locked until the answering window is open (client calls BeginAnswering after the question is read). *@
+                        <button type="button" id="btnStartRecord" class="viva-btn-record viva-btn-record-danger"
+                                disabled="@(Model.SessionState == VivaSessionState.Answering ? null : "disabled")">
                             <i class="bi bi-mic-fill fs-5"></i>
                             <span>Bắt đầu ghi âm câu trả lời</span>
                         </button>

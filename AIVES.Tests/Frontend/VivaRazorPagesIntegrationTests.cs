@@ -164,6 +164,59 @@ public sealed class VivaRazorPagesIntegrationTests : IClassFixture<VivaRazorPage
         Assert.Contains("transcriptCard", html);
     }
 
+    [Theory]
+    [InlineData(VivaSessionState.Ready, true)]
+    [InlineData(VivaSessionState.QuestionDelivered, true)]
+    [InlineData(VivaSessionState.TranscriptReady, true)]
+    [InlineData(VivaSessionState.FollowUpDelivered, true)]
+    [InlineData(VivaSessionState.Answering, false)]
+    public async Task Get_VivaExam_RecordButtonLockedUntilAnsweringWindowIsOpen(VivaSessionState state, bool expectDisabled)
+    {
+        var sessionId = _factory.Data.AddSession("SV01", state);
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-User", "SV01");
+
+        var response = await client.GetAsync($"/Viva/Exam/{sessionId}");
+
+        response.EnsureSuccessStatusCode();
+        var html = await response.Content.ReadAsStringAsync();
+        var button = System.Text.RegularExpressions.Regex.Match(html, "<button[^>]*id=\"btnStartRecord\"[^>]*>").Value;
+        Assert.NotEmpty(button);
+        Assert.Equal(expectDisabled, button.Contains("disabled=\"disabled\""));
+    }
+
+    [Fact]
+    public void ExamClientScript_UnlocksMicOnlyAfterBeginAnswering_AndAnnouncesBrowserVoiceFallback()
+    {
+        // Static checks of the browser client (no JS test runner in this solution).
+        var scriptPath = System.IO.Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "StudentNameMVC", "wwwroot", "js", "viva-signalr-client.js");
+        var script = System.IO.File.ReadAllText(scriptPath);
+
+        static string MethodBody(string source, string signature)
+        {
+            var start = source.IndexOf(signature, StringComparison.Ordinal);
+            Assert.True(start >= 0, $"Missing {signature}");
+            var next = System.Text.RegularExpressions.Regex.Match(source[(start + signature.Length)..], @"\n    (async )?[a-zA-Z]+\(.*\) \{\r?\n");
+            return next.Success ? source.Substring(start, signature.Length + next.Index) : source[start..];
+        }
+
+        var begin = MethodBody(script, "async requestBeginAnswering(");
+        var invokeAt = begin.IndexOf("invoke('BeginAnswering'", StringComparison.Ordinal);
+        var readyAt = begin.IndexOf("setRecordingUiState('ready'", StringComparison.Ordinal);
+        Assert.True(invokeAt > 0 && readyAt > invokeAt, "Mic must be unlocked only after BeginAnswering succeeds.");
+
+        var followUp = MethodBody(script, "handleFollowUpGenerated(followUp) {");
+        Assert.DoesNotContain("setRecordingUiState('ready'", followUp);
+        Assert.Contains("setRecordingUiState('disabled'", followUp);
+
+        var render = MethodBody(script, "renderQuestion(question, autoPlayTts = true) {");
+        Assert.Contains("setRecordingUiState('disabled'", render);
+
+        Assert.Contains("Giọng AI lỗi, đang dùng giọng trình duyệt.", script);
+        var playTts = MethodBody(script, "playTts(text, audioEl, audioUrl, onEndCallback) {");
+        Assert.Contains("notifyBrowserVoiceFallback(", playTts);
+    }
+
     [Fact]
     public async Task Get_VivaExam_WithUnauthorizedStudent_RedirectsToAccessDenied()
     {

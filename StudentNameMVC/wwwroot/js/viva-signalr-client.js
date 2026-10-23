@@ -3,6 +3,8 @@
  * Integrates VivaHub, MediaRecorder, TTS playback, and UX error handling.
  */
 class VivaExamClient {
+    static BROWSER_VOICE_FALLBACK_MESSAGE = 'Giọng AI lỗi, đang dùng giọng trình duyệt.';
+
     constructor(config) {
         this.sessionId = config.sessionId;
         this.examId = config.examId || '';
@@ -401,6 +403,12 @@ class VivaExamClient {
             if (this.el.btnStartExam) this.el.btnStartExam.classList.add('d-none');
             if (this.el.questionCard) this.el.questionCard.classList.remove('d-none');
             if (this.el.answeringSection) this.el.answeringSection.classList.remove('d-none');
+            if (stateName === 'Answering') {
+                // Answering window is open on the server (also after a reload or an STT retry).
+                if (!this.recorder.isRecording) this.setRecordingUiState('ready', 'Mời bạn bắt đầu ghi âm câu trả lời.');
+            } else {
+                this.setRecordingUiState('disabled', 'Đang đọc câu hỏi, vui lòng nghe hết câu hỏi rồi ghi âm.');
+            }
         } else if (stateName === 'Transcribing') {
             if (this.el.startExamBanner) this.el.startExamBanner.classList.add('d-none');
             if (this.el.questionCard) this.el.questionCard.classList.remove('d-none');
@@ -411,6 +419,9 @@ class VivaExamClient {
             if (this.el.questionCard) this.el.questionCard.classList.remove('d-none');
             if (this.el.answeringSection) this.el.answeringSection.classList.remove('d-none');
             if (this.el.transcriptionSpinner) this.el.transcriptionSpinner.classList.add('d-none');
+            this.setRecordingUiState('disabled', stateName === 'TranscriptReady'
+                ? 'Câu trả lời đã được lưu. Đang chờ giám khảo AI...'
+                : 'Đang đọc câu hỏi phụ, vui lòng nghe hết rồi ghi âm.');
         } else if (stateName === 'Completed') {
             this.handleSessionCompleted(status);
         } else if (stateName === 'TimedOut') {
@@ -464,11 +475,24 @@ class VivaExamClient {
                 })
                 .catch(err => {
                     console.warn('Audio playback failed or blocked, falling back to speech synthesis:', err);
+                    this.notifyBrowserVoiceFallback('Không phát được giọng AI, đang dùng giọng trình duyệt.');
                     speakBrowserTts();
                 });
         } else {
+            // No synthesized audio: server-side TTS failed (or mock audio). Tell the candidate instead of switching silently.
+            console.warn('No AI TTS audio for this question, using browser speech synthesis.');
+            this.notifyBrowserVoiceFallback(audioUrl
+                ? 'Chế độ mô phỏng: đang dùng giọng trình duyệt.'
+                : VivaExamClient.BROWSER_VOICE_FALLBACK_MESSAGE);
             speakBrowserTts();
         }
+    }
+
+    notifyBrowserVoiceFallback(message) {
+        // One notice per page load is enough; replays would otherwise stack identical toasts.
+        if (this.browserVoiceFallbackNotified) return;
+        this.browserVoiceFallbackNotified = true;
+        this.showToast(message, 'warning');
     }
 
     renderQuestion(question, autoPlayTts = true) {
@@ -488,21 +512,36 @@ class VivaExamClient {
 
         if (this.el.btnPlayQuestionAudio) this.el.btnPlayQuestionAudio.classList.remove('d-none');
         if (autoPlayTts) {
+            // Mic stays locked while the question is read; BeginAnswering unlocks it.
+            this.setRecordingUiState('disabled', 'Đang đọc câu hỏi, vui lòng nghe hết câu hỏi rồi ghi âm.');
             this.playTts(question.content, this.el.questionAudio, question.audioUrl, () => {
-                this.requestBeginAnswering();
+                this.requestBeginAnswering('Mời bạn bắt đầu ghi âm câu trả lời.');
             });
         }
     }
 
-    async requestBeginAnswering() {
-        if (!this.connection || this.connection.state !== signalR.HubConnectionState.Connected) return;
+    /**
+     * Opens the answering window on the server, then unlocks the mic.
+     * Recording is only possible after this succeeds; submitting earlier is rejected
+     * with "The answering period is not active or has expired".
+     */
+    async requestBeginAnswering(readyText) {
+        if (!this.connection || this.connection.state !== signalR.HubConnectionState.Connected) {
+            this.setRecordingUiState('disabled', 'Mất kết nối phòng thi. Vui lòng tải lại trang để tiếp tục.');
+            return false;
+        }
         try {
             const timer = await this.connection.invoke('BeginAnswering', this.sessionId);
             if (timer) {
                 this.handleTimeRemainingChanged(timer);
             }
+            this.setRecordingUiState('ready', readyText || 'Mời bạn bắt đầu ghi âm câu trả lời.');
+            return true;
         } catch (e) {
             console.warn('[SignalR] BeginAnswering invocation notice:', e);
+            this.setRecordingUiState('disabled', 'Chưa mở được lượt trả lời. Vui lòng tải lại trang.');
+            this.showToast('Chưa mở được lượt trả lời. Vui lòng tải lại trang.', 'warning');
+            return false;
         }
     }
 
@@ -550,11 +589,11 @@ class VivaExamClient {
             this.el.followUpContent.textContent = followUp.followUpContent || '';
         }
 
-        // Follow-up TTS Playback (UI-05)
+        // Follow-up TTS Playback (UI-05); the mic unlocks only after BeginAnswering succeeds.
         if (this.el.btnPlayFollowUpAudio) this.el.btnPlayFollowUpAudio.classList.remove('d-none');
+        this.setRecordingUiState('disabled', 'Đang đọc câu hỏi phụ, vui lòng nghe hết rồi ghi âm.');
         this.playTts(followUp.followUpContent, this.el.followUpAudio, followUp.audioUrl, () => {
-            this.requestBeginAnswering();
-            this.setRecordingUiState('ready', 'Mời bạn bắt đầu ghi âm trả lời câu hỏi phụ.');
+            this.requestBeginAnswering('Mời bạn bắt đầu ghi âm trả lời câu hỏi phụ.');
         });
 
         this.showToast('AI đã tạo câu hỏi phụ cho bạn!', 'info');
