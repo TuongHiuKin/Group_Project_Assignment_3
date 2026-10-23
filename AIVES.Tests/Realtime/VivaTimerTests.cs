@@ -176,6 +176,40 @@ public sealed class VivaTimerTests
     }
 
     [Fact]
+    public async Task Slow_STT_failure_does_not_consume_answering_time_and_keeps_retry_possible()
+    {
+        var id = _data.AddSession("student-a");
+        await _service.BeginAnsweringAsync(id, "student-a", _publisher);
+        _clock.Advance(TimeSpan.FromSeconds(40)); // 20 of 60 seconds left at submission
+        _ai.TranscriptionSucceeds = false;
+        _ai.DuringTranscription = () => _clock.Advance(TimeSpan.FromSeconds(120)); // 503 retries + provider timeout
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Orchestrator().SubmitAnswerAudioAsync(Answer(id)));
+
+        Assert.Equal(VivaSessionState.Answering, (VivaSessionState)_data.Sessions[id].State);
+        Assert.Equal(20, _timer.GetRemaining(id)!.SecondsRemaining);
+        Assert.True(_publisher.Events.OfType<VivaErrorDto>().Last().CanRetry);
+        Assert.Equal(0, _data.TimeoutSaves);
+
+        _ai.DuringTranscription = null;
+        _ai.TranscriptionSucceeds = true;
+        await Orchestrator().SubmitAnswerAudioAsync(Answer(id));
+        Assert.Equal(VivaSessionState.TranscriptReady, (VivaSessionState)_data.Sessions[id].State);
+    }
+
+    [Fact]
+    public void Resume_never_grants_more_than_the_question_time_limit()
+    {
+        var id = Guid.NewGuid();
+        var paused = _timer.Start(id, "Q1", 60);
+        _timer.Stop(id);
+
+        var resumed = _timer.Resume(paused, 500);
+
+        Assert.Equal(60, _timer.SecondsRemaining(resumed));
+    }
+
+    [Fact]
     public async Task Cancellation_before_begin_never_changes_persisted_state()
     {
         var id = _data.AddSession("student-a");

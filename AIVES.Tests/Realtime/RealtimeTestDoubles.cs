@@ -127,10 +127,13 @@ internal sealed class RealtimeAi : ISpeechToTextService, ITextToSpeechService, I
 {
     public int Transcriptions;
     public bool TranscriptionSucceeds { get; set; } = true;
+    /// <summary>Runs inside TranscribeAsync, e.g. to advance a ManualClock and simulate a slow provider.</summary>
+    public Action? DuringTranscription { get; set; }
     public Task<SpeechToTextResult> TranscribeAsync(Stream audioStream, string contentType, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
         Interlocked.Increment(ref Transcriptions);
+        DuringTranscription?.Invoke();
         return Task.FromResult(TranscriptionSucceeds
             ? new SpeechToTextResult(true, "Scoped per request.", .95m)
             : new SpeechToTextResult(false, "", 0, "Fixture STT failure"));

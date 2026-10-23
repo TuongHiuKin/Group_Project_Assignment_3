@@ -193,6 +193,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
 
         VivaSession session;
         VivaTimerManager.Deadline? acceptedDeadline = null;
+        var secondsLeftAtSubmit = 0;
         var persistedQuestionId = submission.QuestionId;
         // Serialize the accepting transition with timeout. Release before the slow STT call.
         using (var lease = _timers is null ? null : await _timers.LockSessionAsync(submission.SessionId, ct))
@@ -208,6 +209,8 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
                     throw new InvalidOperationException("The answering period is not active or has expired.");
                 if (!string.Equals(deadline.QuestionId, submission.QuestionId, StringComparison.Ordinal))
                     throw new ArgumentException("The answer does not match the active question.", nameof(submission));
+                // The clock is paused while STT runs; a retry gets back exactly the time left at submission.
+                secondsLeftAtSubmit = _timers.SecondsRemaining(deadline);
                 // Follow-ups are stored on a turn; preserve the FK to the primary question.
                 var details = await _sessionRepo.GetWithDetailsAsync(submission.SessionId, ct)
                     ?? throw new KeyNotFoundException("Examination session was not found.");
@@ -244,12 +247,12 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
                 using var lease = await _timers.LockSessionAsync(submission.SessionId, ct);
                 var current = await _sessionRepo.GetByIdAsync(submission.SessionId, ct)
                     ?? throw new KeyNotFoundException("Examination session was not found.");
-                canRetry = current.State == (byte)VivaSessionState.Transcribing && _timers.SecondsRemaining(acceptedDeadline) > 0;
+                canRetry = current.State == (byte)VivaSessionState.Transcribing && secondsLeftAtSubmit > 0;
                 var retryState = canRetry ? VivaSessionState.Answering : VivaSessionState.TimedOut;
                 if (current.State == (byte)VivaSessionState.Transcribing)
                 {
                     await _sessionRepo.UpdateStateAsync(submission.SessionId, (byte)retryState, ct);
-                    if (canRetry) _timers.Restore(acceptedDeadline);
+                    if (canRetry) _timers.Resume(acceptedDeadline, secondsLeftAtSubmit);
                     await _publisher.PublishStatusChangedAsync(new(submission.SessionId, session.ExamId, session.StudentId,
                         retryState, 1, DefaultMaxTurnsAllowed, DateTime.UtcNow), ct);
                 }
