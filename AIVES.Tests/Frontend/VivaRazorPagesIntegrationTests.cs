@@ -357,6 +357,20 @@ public sealed class VivaRazorPagesIntegrationTests : IClassFixture<VivaRazorPage
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var html = await response.Content.ReadAsStringAsync();
         Assert.Matches("class=\"tab-pane fade show active\" id=\"pane-att-3\"", html);
+
+        // B9: Bootstrap 5 only switches tabs inside [role="tablist"] and tracks the selection with .active.
+        var tabList = System.Text.RegularExpressions.Regex.Match(html, "<div[^>]*role=\"tablist\"[^>]*>([\\s\\S]*?)</div>\\s*<div class=\"tab-content\"");
+        Assert.True(tabList.Success, "Attempt buttons must be wrapped in a role=\"tablist\" container.");
+        var tabs = System.Text.RegularExpressions.Regex.Matches(tabList.Groups[1].Value, "<button[^>]*>")
+            .Select(m => m.Value).ToList();
+        Assert.Equal(3, tabs.Count);
+        Assert.All(tabs, t =>
+        {
+            Assert.Contains("role=\"tab\"", t);
+            Assert.Contains("data-bs-toggle=\"pill\"", t);
+        });
+        var selected = Assert.Single(tabs, t => t.Contains(" active") && t.Contains("aria-selected=\"true\""));
+        Assert.Contains("data-bs-target=\"#pane-att-3\"", selected);
         Assert.DoesNotMatch("show active\" id=\"pane-att-1\"", html);
         Assert.True(html.IndexOf("Lượt thi số 3", StringComparison.Ordinal) < html.IndexOf("Lượt thi số 1", StringComparison.Ordinal));
     }
