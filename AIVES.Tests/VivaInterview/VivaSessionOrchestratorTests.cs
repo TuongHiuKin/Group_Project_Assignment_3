@@ -175,13 +175,19 @@ public class VivaSessionOrchestratorTests
     private sealed class FakeFollowUpGeneratorService : IFollowUpGeneratorService
     {
         public bool ShouldSucceed { get; set; } = true;
+        public bool ShouldThrow { get; set; }
+        public string ErrorMessage { get; set; } = "LLM failed";
         public string FollowUpText { get; set; } = "Can you elaborate on how DbContext behaves inside a singleton?";
 
         public Task<FollowUpResult> GenerateFollowUpQuestionAsync(string originalQuestion, string studentAnswerTranscript, string subjectContext, CancellationToken ct = default)
         {
+            if (ShouldThrow)
+            {
+                throw new HttpRequestException("socket closed");
+            }
             if (!ShouldSucceed)
             {
-                return Task.FromResult(new FollowUpResult(false, string.Empty, string.Empty, "LLM failed"));
+                return Task.FromResult(new FollowUpResult(false, string.Empty, string.Empty, ErrorMessage));
             }
             return Task.FromResult(new FollowUpResult(true, FollowUpText, "Deep-Dive"));
         }
@@ -473,6 +479,81 @@ public class VivaSessionOrchestratorTests
         Assert.Equal((byte)VivaSessionState.Completed, _sessionRepo.Sessions[session.SessionId].State);
         Assert.Single(_publisher.PublishedCompleted);
         Assert.Equal(session.SessionId, _publisher.PublishedCompleted[0].SessionId);
+    }
+
+    private async Task<(VivaSessionOrchestrator Orchestrator, Guid SessionId, Guid TurnId)> ArrangeFirstTurnAsync()
+    {
+        var orchestrator = CreateOrchestrator();
+        var session = await orchestrator.InitializeSessionAsync("EXAM01", "STUDENT_42");
+        _questionRepo.Questions.Add(new VivaQuestion { QuestionId = "Q1", ExamId = "EXAM01", Title = "DI", Content = "Explain Scoped lifetime." });
+        var transcript = await orchestrator.SubmitAnswerAudioAsync(new VivaAnswerSubmissionDto(
+            SessionId: session.SessionId, QuestionId: "Q1", AudioData: new byte[] { 1, 2, 3 }, ContentType: "audio/webm", DurationSeconds: 30));
+        return (orchestrator, session.SessionId, transcript.TurnId);
+    }
+
+    [Theory]
+    [InlineData(false, "Gemini LLM error: This model is currently experiencing high demand (503)")]
+    [InlineData(true, "")]
+    public async Task GenerateFollowUpAsync_LlmFailure_KeepsSessionOpenAndPublishesRetryableVivaError(bool throws, string providerError)
+    {
+        var (orchestrator, sessionId, turnId) = await ArrangeFirstTurnAsync();
+        _followUpService.ShouldSucceed = false;
+        _followUpService.ShouldThrow = throws;
+        _followUpService.ErrorMessage = providerError;
+
+        var followUp = await orchestrator.GenerateFollowUpAsync(sessionId, turnId);
+
+        Assert.Null(followUp);
+        Assert.Equal((byte)VivaSessionState.TranscriptReady, _sessionRepo.Sessions[sessionId].State);
+        Assert.Null(_sessionRepo.Sessions[sessionId].CompletedAtUtc);
+        Assert.Empty(_publisher.PublishedCompleted);
+        Assert.Equal(VivaSessionState.TranscriptReady, _publisher.PublishedStatuses.Last().State);
+
+        var error = Assert.Single(_publisher.PublishedErrors);
+        Assert.Equal(VivaSessionOrchestrator.FollowUpFailedErrorCode, error.ErrorCode);
+        Assert.True(error.CanRetry);
+        Assert.StartsWith("Giám khảo AI chưa tạo được câu hỏi phụ", error.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task GenerateFollowUpAsync_RetryAfterFailure_DeliversFollowUp()
+    {
+        var (orchestrator, sessionId, turnId) = await ArrangeFirstTurnAsync();
+        _followUpService.ShouldSucceed = false;
+        Assert.Null(await orchestrator.GenerateFollowUpAsync(sessionId, turnId));
+
+        _followUpService.ShouldSucceed = true;
+        var followUp = await orchestrator.GenerateFollowUpAsync(sessionId, turnId);
+
+        Assert.NotNull(followUp);
+        Assert.Equal((byte)VivaSessionState.FollowUpDelivered, _sessionRepo.Sessions[sessionId].State);
+        Assert.Single(_publisher.PublishedFollowUps);
+        Assert.Empty(_publisher.PublishedCompleted);
+    }
+
+    [Fact]
+    public async Task GenerateFollowUpAsync_SuccessWithEmptyQuestion_StillCompletesSession()
+    {
+        var (orchestrator, sessionId, turnId) = await ArrangeFirstTurnAsync();
+        _followUpService.FollowUpText = "  ";
+
+        Assert.Null(await orchestrator.GenerateFollowUpAsync(sessionId, turnId));
+        Assert.Equal((byte)VivaSessionState.Completed, _sessionRepo.Sessions[sessionId].State);
+        Assert.Empty(_publisher.PublishedErrors);
+    }
+
+    [Theory]
+    [InlineData("Gemini LLM error: This model is currently experiencing high demand.", "máy chủ AI đang quá tải")]
+    [InlineData("HTTP 429 Too Many Requests", "máy chủ AI đang quá tải")]
+    [InlineData("Gemini Follow-up timed out after 35 seconds.", "quá thời gian chờ")]
+    [InlineData("Câu hỏi phụ (LLM) chưa sẵn sàng: chưa bật AI thật", "Câu hỏi phụ (LLM) chưa sẵn sàng")]
+    [InlineData(null, "không phản hồi")]
+    public void BuildFollowUpFailureMessage_IsVietnameseAndExplainsReason(string? providerError, string expectedFragment)
+    {
+        var message = VivaSessionOrchestrator.BuildFollowUpFailureMessage(providerError);
+
+        Assert.Contains(expectedFragment, message);
+        Assert.Contains("Thử lại", message);
     }
 
     [Fact]

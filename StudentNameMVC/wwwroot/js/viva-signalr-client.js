@@ -12,6 +12,8 @@ class VivaExamClient {
         this.antiForgeryToken = config.antiForgeryToken || '';
         this.submitAudioUrl = config.submitAudioUrl || '/Viva/Exam?handler=SubmitAudio';
         this.startSessionUrl = config.startSessionUrl || '/Viva/Exam?handler=StartSession';
+        this.retryFollowUpUrl = config.retryFollowUpUrl || '/Viva/Exam?handler=RetryFollowUp';
+        this.finishSessionUrl = config.finishSessionUrl || '/Viva/Exam?handler=FinishSession';
 
         this.recorder = new VivaAudioRecorder();
         this.connection = null;
@@ -65,6 +67,12 @@ class VivaExamClient {
             transcriptConfidence: document.getElementById('transcriptConfidence'),
             transcriptionSpinner: document.getElementById('transcriptionSpinner'),
 
+            // Follow-up failure Section
+            followUpErrorCard: document.getElementById('followUpErrorCard'),
+            followUpErrorText: document.getElementById('followUpErrorText'),
+            btnRetryFollowUp: document.getElementById('btnRetryFollowUp'),
+            btnFinishSession: document.getElementById('btnFinishSession'),
+
             // Completed Section
             completedCard: document.getElementById('completedCard'),
 
@@ -106,6 +114,64 @@ class VivaExamClient {
                 const text = this.el.followUpContent ? this.el.followUpContent.textContent : '';
                 this.playTts(text, this.el.followUpAudio, this.el.followUpAudio?.src, null);
             });
+        }
+
+        if (this.el.btnRetryFollowUp) {
+            this.el.btnRetryFollowUp.addEventListener('click', () =>
+                this.postFollowUpAction(this.retryFollowUpUrl, { turnId: this.currentTurnId }, 'Đang thử tạo lại câu hỏi phụ...'));
+        }
+
+        if (this.el.btnFinishSession) {
+            this.el.btnFinishSession.addEventListener('click', () =>
+                this.postFollowUpAction(this.finishSessionUrl, {}, 'Đang kết thúc bài thi...'));
+        }
+    }
+
+    showFollowUpError(message) {
+        if (this.el.followUpErrorText) this.el.followUpErrorText.textContent = message;
+        if (this.el.followUpErrorCard) this.el.followUpErrorCard.classList.remove('d-none');
+        this.setFollowUpActionsDisabled(false);
+    }
+
+    hideFollowUpError() {
+        if (this.el.followUpErrorCard) this.el.followUpErrorCard.classList.add('d-none');
+    }
+
+    setFollowUpActionsDisabled(disabled) {
+        if (this.el.btnRetryFollowUp) this.el.btnRetryFollowUp.disabled = disabled;
+        if (this.el.btnFinishSession) this.el.btnFinishSession.disabled = disabled;
+    }
+
+    async postFollowUpAction(url, fields, pendingText) {
+        this.setFollowUpActionsDisabled(true);
+        if (this.el.followUpErrorText) this.el.followUpErrorText.textContent = pendingText;
+
+        try {
+            const formData = new FormData();
+            formData.append('sessionId', this.sessionId);
+            Object.entries(fields).forEach(([key, value]) => formData.append(key, value ?? ''));
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'RequestVerificationToken': this.antiForgeryToken },
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errJson = await response.json().catch(() => ({}));
+                throw new Error(errJson.message || `Lỗi máy chủ (${response.status})`);
+            }
+
+            // The server broadcasts FollowUpGenerated / SessionCompleted, or a new VivaError when the retry fails again.
+            const data = await response.json().catch(() => ({}));
+            if (url === this.finishSessionUrl || data.followUpGenerated) {
+                this.hideFollowUpError();
+            } else {
+                this.setFollowUpActionsDisabled(false);
+            }
+        } catch (err) {
+            console.error('Follow-up action error:', err);
+            this.showFollowUpError(err.message || 'Không thể thực hiện yêu cầu.');
         }
     }
 
@@ -286,6 +352,12 @@ class VivaExamClient {
         if (snapshot.timer) {
             this.handleTimeRemainingChanged(snapshot.timer);
         }
+
+        // Reloaded after a follow-up failure: the answer is saved but no follow-up exists yet.
+        if (stateName === 'TranscriptReady' && snapshot.latestTranscript && !snapshot.currentFollowUp) {
+            this.setRecordingUiState('disabled', 'Câu trả lời đã được lưu. Chọn Thử lại hoặc Kết thúc bài thi.');
+            this.showFollowUpError('Câu hỏi phụ chưa được tạo. Bạn có thể bấm Thử lại hoặc Kết thúc bài thi.');
+        }
     }
 
     setConnectionStatus(status, text) {
@@ -461,6 +533,7 @@ class VivaExamClient {
 
     handleFollowUpGenerated(followUp) {
         if (!followUp) return;
+        this.hideFollowUpError();
         this.currentQuestionId = followUp.followUpQuestionId;
         this.currentTurnId = followUp.turnId;
 
@@ -515,6 +588,7 @@ class VivaExamClient {
     handleSessionCompleted(status) {
         this.sessionState = 'Completed';
         this.recorder.cancelRecording();
+        this.hideFollowUpError();
 
         if (this.el.questionCard) this.el.questionCard.classList.add('d-none');
         if (this.el.followUpCard) this.el.followUpCard.classList.add('d-none');
@@ -535,6 +609,13 @@ class VivaExamClient {
     handleVivaError(error) {
         this.canRetry = error.canRetry;
         this.showError(error.errorCode, error.errorMessage, error.canRetry);
+
+        if (error.errorCode === 'FOLLOWUP_GENERATION_FAILED') {
+            // The answer is saved; recording stays locked until a follow-up is delivered or the exam is finished.
+            this.setRecordingUiState('disabled', 'Câu trả lời đã được lưu. Chọn Thử lại hoặc Kết thúc bài thi.');
+            this.showFollowUpError(error.errorMessage);
+            return;
+        }
 
         if (error.canRetry) {
             if (this.el.btnRetryRecord) this.el.btnRetryRecord.classList.remove('d-none');

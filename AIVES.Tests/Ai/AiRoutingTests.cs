@@ -7,6 +7,7 @@ using AIVES.BLL.Options;
 using AIVES.BLL.Services.Ai;
 using AIVES.BLL.Services.Ai.Gemini;
 using AIVES.BLL.Services.Ai.Mocks;
+using AIVES.BLL.Services.Ai.Unavailable;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Xunit;
@@ -172,8 +173,10 @@ public sealed class AiRoutingTests
         Assert.IsType<OpenAiFollowUpGeneratorService>(llm);
     }
 
-    [Fact]
-    public void Routing_Falls_Back_To_Mock_When_Adapter_Throws_Exception()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Routing_When_Adapter_Throws_Uses_Mock_Only_If_Fallback_Allowed(bool allowMockFallback)
     {
         var config = new AiConfigurationModel
         {
@@ -196,21 +199,101 @@ public sealed class AiRoutingTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton<HttpClient>();
-        services.AddSingleton<IOptions<AiServiceOptions>>(Microsoft.Extensions.Options.Options.Create(new AiServiceOptions { UseMock = false }));
+        services.AddSingleton<IOptions<AiServiceOptions>>(Microsoft.Extensions.Options.Options.Create(
+            new AiServiceOptions { UseMock = false, AllowMockFallback = allowMockFallback }));
         services.AddSingleton<IAiCredentialStore>(new MockCredentialStore(config));
         services.AddSingleton<IAiProviderRegistry>(registry);
         services.AddAiServices();
 
         var sp = services.BuildServiceProvider();
 
-        // Resolving services should NOT throw, but fall back to mocks
+        // Resolving services should NOT throw
         var stt = sp.GetRequiredService<ISpeechToTextService>();
         var tts = sp.GetRequiredService<ITextToSpeechService>();
         var llm = sp.GetRequiredService<IFollowUpGeneratorService>();
 
-        Assert.IsType<MockSpeechToTextService>(stt);
-        Assert.IsType<MockTextToSpeechService>(tts);
-        Assert.IsType<MockFollowUpGeneratorService>(llm);
+        if (allowMockFallback)
+        {
+            Assert.IsType<MockSpeechToTextService>(stt);
+            Assert.IsType<MockTextToSpeechService>(tts);
+            Assert.IsType<MockFollowUpGeneratorService>(llm);
+        }
+        else
+        {
+            Assert.IsType<UnavailableSpeechToTextService>(stt);
+            Assert.IsType<UnavailableTextToSpeechService>(tts);
+            Assert.IsType<UnavailableFollowUpGeneratorService>(llm);
+            Assert.DoesNotContain("sk-super-secret", ((UnavailableSpeechToTextService)stt).ErrorMessage);
+        }
+    }
+
+    private static ServiceProvider BuildStrictProvider(AiConfigurationModel config)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<HttpClient>();
+        services.AddSingleton<IOptions<AiServiceOptions>>(Microsoft.Extensions.Options.Options.Create(
+            new AiServiceOptions { UseMock = false, AllowMockFallback = false }));
+        services.AddSingleton<IAiCredentialStore>(new MockCredentialStore(config));
+        services.AddAiServices();
+        return services.BuildServiceProvider();
+    }
+
+    [Fact]
+    public async Task Routing_StrictMode_RealAiDisabled_ReturnsUnavailableServicesWithVietnameseReason()
+    {
+        using var sp = BuildStrictProvider(new AiConfigurationModel { UseRealAi = false });
+
+        var stt = await sp.GetRequiredService<ISpeechToTextService>().TranscribeAsync(new MemoryStream(new byte[] { 1 }), "audio/webm");
+        var tts = await sp.GetRequiredService<ITextToSpeechService>().SynthesizeAsync("Câu hỏi");
+        var llm = await sp.GetRequiredService<IFollowUpGeneratorService>().GenerateFollowUpQuestionAsync("Q", "A", "EXAM01");
+
+        Assert.False(stt.IsSuccess);
+        Assert.Empty(stt.TranscriptText);
+        Assert.Equal("Nhận diện giọng nói (STT) chưa sẵn sàng: chưa bật AI thật trên trang Cấu hình AI. Vui lòng nhờ Admin kiểm tra Cấu hình AI.", stt.ErrorMessage);
+        Assert.False(tts.IsSuccess);
+        Assert.Null(tts.AudioUrl);
+        Assert.Contains("Đọc câu hỏi (TTS) chưa sẵn sàng", tts.ErrorMessage);
+        Assert.False(llm.IsSuccess);
+        Assert.Contains("Câu hỏi phụ (LLM) chưa sẵn sàng", llm.ErrorMessage);
+    }
+
+    [Fact]
+    public void Routing_StrictMode_MissingProfile_ReturnsUnavailableNotMock()
+    {
+        using var sp = BuildStrictProvider(new AiConfigurationModel
+        {
+            UseRealAi = true,
+            Profiles = [new AiProviderProfile { Id = "p-gem", Name = "Gemini", Kind = AiProviderKinds.Gemini, ApiKey = "AIzaSyTest123" }],
+            Routing = new AiCapabilityRouting
+            {
+                Stt = new AiCapabilityTarget { ProfileId = "deleted-profile" },
+                Tts = new AiTtsCapabilityTarget { ProfileId = null },
+                Llm = new AiCapabilityTarget { ProfileId = "p-gem", Model = "gemini-3.8-flash" }
+            }
+        });
+
+        var stt = Assert.IsType<UnavailableSpeechToTextService>(sp.GetRequiredService<ISpeechToTextService>());
+        Assert.Contains(AiUnavailableMessages.NoProfileSelected, stt.ErrorMessage);
+        Assert.IsType<UnavailableTextToSpeechService>(sp.GetRequiredService<ITextToSpeechService>());
+        Assert.IsType<GeminiFollowUpGeneratorService>(sp.GetRequiredService<IFollowUpGeneratorService>());
+    }
+
+    [Fact]
+    public void Routing_ExplicitMockMode_StillUsesMocksWhenRealAiDisabled()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<HttpClient>();
+        services.AddSingleton<IOptions<AiServiceOptions>>(Microsoft.Extensions.Options.Options.Create(
+            new AiServiceOptions { UseMock = true, AllowMockFallback = false }));
+        services.AddSingleton<IAiCredentialStore>(new MockCredentialStore(new AiConfigurationModel { UseRealAi = false }));
+        services.AddAiServices();
+        using var sp = services.BuildServiceProvider();
+
+        Assert.IsType<MockSpeechToTextService>(sp.GetRequiredService<ISpeechToTextService>());
+        Assert.IsType<MockTextToSpeechService>(sp.GetRequiredService<ITextToSpeechService>());
+        Assert.IsType<MockFollowUpGeneratorService>(sp.GetRequiredService<IFollowUpGeneratorService>());
     }
 
     [Fact]

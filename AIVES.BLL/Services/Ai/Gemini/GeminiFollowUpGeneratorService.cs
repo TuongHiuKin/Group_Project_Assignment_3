@@ -20,6 +20,7 @@ public sealed class GeminiFollowUpGeneratorService : IFollowUpGeneratorService
     private readonly int _timeoutSeconds;
     private readonly IFollowUpGeneratorService? _fallbackService;
     private readonly ILogger<GeminiFollowUpGeneratorService>? _logger;
+    private readonly IReadOnlyList<TimeSpan> _retryDelays;
 
     public GeminiFollowUpGeneratorService(
         HttpClient httpClient,
@@ -28,8 +29,10 @@ public sealed class GeminiFollowUpGeneratorService : IFollowUpGeneratorService
         FollowUpPolicyValidator? validator = null,
         int timeoutSeconds = 30,
         ILogger<GeminiFollowUpGeneratorService>? logger = null,
-        IFollowUpGeneratorService? fallbackService = null)
+        IFollowUpGeneratorService? fallbackService = null,
+        IReadOnlyList<TimeSpan>? retryDelays = null)
     {
+        _retryDelays = retryDelays ?? GeminiRetryPolicy.DefaultDelays;
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
         _model = string.IsNullOrWhiteSpace(model) ? "gemini-1.5-flash" : model;
@@ -122,7 +125,7 @@ public sealed class GeminiFollowUpGeneratorService : IFollowUpGeneratorService
         HttpResponseMessage response;
         try
         {
-            response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token).ConfigureAwait(false);
+            response = await GeminiRetryPolicy.SendAsync(_httpClient, request, _retryDelays, _logger, "Gemini Follow-up", linkedCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

@@ -284,4 +284,74 @@ public class ExamModel : PageModel
             });
         }
     }
+
+    /// <summary>Thử tạo lại câu hỏi phụ sau khi LLM lỗi (phiên đang ở TranscriptReady).</summary>
+    public async Task<IActionResult> OnPostRetryFollowUpAsync([FromForm] Guid sessionId, [FromForm] Guid turnId, CancellationToken ct = default)
+    {
+        var guard = await EnsureTranscriptReadyAsync(sessionId, ct);
+        if (guard != null) return guard;
+        if (turnId == Guid.Empty)
+        {
+            return BadRequest(new { message = "Mã lượt trả lời không hợp lệ." });
+        }
+
+        try
+        {
+            var followUp = await _orchestrator!.GenerateFollowUpAsync(sessionId, turnId, ct);
+            return new JsonResult(new { success = true, followUpGenerated = followUp != null });
+        }
+        catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
+        {
+            _logger.LogWarning(ex, "RetryFollowUp rejected for {SessionId}", sessionId);
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>Kết thúc bài thi khi sinh viên không muốn chờ câu hỏi phụ nữa (phiên đang ở TranscriptReady).</summary>
+    public async Task<IActionResult> OnPostFinishSessionAsync([FromForm] Guid sessionId, CancellationToken ct = default)
+    {
+        var guard = await EnsureTranscriptReadyAsync(sessionId, ct);
+        if (guard != null) return guard;
+
+        try
+        {
+            await _orchestrator!.CompleteSessionAsync(sessionId, ct);
+            return new JsonResult(new { success = true });
+        }
+        catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
+        {
+            _logger.LogWarning(ex, "FinishSession rejected for {SessionId}", sessionId);
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    private async Task<IActionResult?> EnsureTranscriptReadyAsync(Guid sessionId, CancellationToken ct)
+    {
+        if (sessionId == Guid.Empty)
+        {
+            return BadRequest(new { message = "Mã phiên thi không hợp lệ." });
+        }
+
+        if (_orchestrator == null || _realtimeService == null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                message = "Hệ thống Viva Interview Orchestrator chưa được kích hoạt."
+            });
+        }
+
+        var studentId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? string.Empty;
+        if (!await _orchestrator.AuthorizeUserForSessionAsync(sessionId, studentId, ct))
+        {
+            return Forbid();
+        }
+
+        var snapshot = await _realtimeService.GetSnapshotAsync(sessionId, ct);
+        if (snapshot?.Status.State != VivaSessionState.TranscriptReady)
+        {
+            return BadRequest(new { message = "Phiên thi không ở trạng thái chờ câu hỏi phụ." });
+        }
+
+        return null;
+    }
 }

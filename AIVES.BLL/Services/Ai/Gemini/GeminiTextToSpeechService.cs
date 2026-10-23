@@ -22,6 +22,7 @@ public sealed class GeminiTextToSpeechService : ITextToSpeechService
     private readonly int _timeoutSeconds;
     private readonly ITextToSpeechService? _fallbackService;
     private readonly ILogger<GeminiTextToSpeechService>? _logger;
+    private readonly IReadOnlyList<TimeSpan> _retryDelays;
 
     public GeminiTextToSpeechService(
         HttpClient httpClient,
@@ -31,8 +32,10 @@ public sealed class GeminiTextToSpeechService : ITextToSpeechService
         string? cacheDirectory = null,
         int timeoutSeconds = 15,
         ILogger<GeminiTextToSpeechService>? logger = null,
-        ITextToSpeechService? fallbackService = null)
+        ITextToSpeechService? fallbackService = null,
+        IReadOnlyList<TimeSpan>? retryDelays = null)
     {
+        _retryDelays = retryDelays ?? GeminiRetryPolicy.DefaultDelays;
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
         _model = string.IsNullOrWhiteSpace(model) ? "gemini-2.0-flash" : model;
@@ -138,7 +141,7 @@ public sealed class GeminiTextToSpeechService : ITextToSpeechService
         HttpResponseMessage response;
         try
         {
-            response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linkedCts.Token).ConfigureAwait(false);
+            response = await GeminiRetryPolicy.SendAsync(_httpClient, request, _retryDelays, _logger, "Gemini TTS", linkedCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

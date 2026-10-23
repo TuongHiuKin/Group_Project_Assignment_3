@@ -146,6 +146,22 @@
                 </div>
             </div>
 
+            <!-- Follow-up generation failure (LLM 429/503/timeout): retry or finish -->
+            <div id="followUpErrorCard" class="viva-panel-card mb-4 p-4 d-none" style="border: 2px solid #fecaca; background: #fef2f2;" role="alert">
+                <div class="d-flex align-items-start gap-2 mb-3">
+                    <i class="bi bi-exclamation-triangle-fill text-danger fs-5"></i>
+                    <span id="followUpErrorText" class="text-dark fw-semibold">Giám khảo AI chưa tạo được câu hỏi phụ.</span>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <button type="button" id="btnRetryFollowUp" class="btn btn-danger rounded-pill px-4 fw-bold">
+                        <i class="bi bi-arrow-clockwise me-1"></i> Thử lại
+                    </button>
+                    <button type="button" id="btnFinishSession" class="btn btn-outline-secondary rounded-pill px-4 fw-bold">
+                        <i class="bi bi-flag me-1"></i> Kết thúc bài thi
+                    </button>
+                </div>
+            </div>
+
             <!-- Session Completed Summary Card -->
             <div id="completedCard" class="viva-panel-card p-5 text-center d-none" style="border: 2px solid #a7f3d0; background: #f0fdf4;">
                 <div class="mb-3">
@@ -249,6 +265,8 @@
                 antiForgeryToken: '@tokens.RequestToken',
                 submitAudioUrl: '@Url.Page("/Viva/Exam", "SubmitAudio")',
                 startSessionUrl: '@Url.Page("/Viva/Exam", "StartSession")',
+                retryFollowUpUrl: '@Url.Page("/Viva/Exam", "RetryFollowUp")',
+                finishSessionUrl: '@Url.Page("/Viva/Exam", "FinishSession")',
                 initialState: '@Model.SessionState'
             });
             window.vivaExamClient = client;
