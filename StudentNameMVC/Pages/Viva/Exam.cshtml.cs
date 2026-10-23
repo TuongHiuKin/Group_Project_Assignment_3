@@ -1,10 +1,12 @@
 using System.Security.Claims;
 using AIVES.BLL.Interfaces.VivaInterview;
 using AIVES.BLL.Models.VivaInterview;
+using AIVES.BLL.Options;
 using AIVES.BLL.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Options;
 
 namespace StudentNameMVC.Pages.Viva;
 
@@ -19,12 +21,17 @@ public class ExamModel : PageModel
     public ExamModel(
         ILogger<ExamModel> logger,
         IVivaSessionOrchestrator? orchestrator = null,
-        IVivaRealtimeSessionService? realtimeService = null)
+        IVivaRealtimeSessionService? realtimeService = null,
+        IOptions<AiServiceOptions>? aiOptions = null)
     {
         _logger = logger;
         _orchestrator = orchestrator;
         _realtimeService = realtimeService;
+        UseBrowserSpeechSynthesis = aiOptions?.Value.UseBrowserSpeechSynthesis ?? false;
     }
+
+    /// <summary>True when the page reads questions with the browser speechSynthesis API instead of AI audio files.</summary>
+    public bool UseBrowserSpeechSynthesis { get; }
 
     [BindProperty(SupportsGet = true)]
     public Guid? SessionId { get; set; }

@@ -80,20 +80,29 @@ public static class DependencyInjection
             () => sp.GetRequiredService<MockSpeechToTextService>(),
             reason => new UnavailableSpeechToTextService(reason)));
 
-        services.AddScoped<ITextToSpeechService>(sp => ResolveCapability<ITextToSpeechService>(
-            sp,
-            AiCapability.TextToSpeech,
-            config => (config.Routing.Tts.ProfileId, config.Routing.Tts.Model),
-            (adapter, profile, model, config) =>
+        services.AddScoped<ITextToSpeechService>(sp =>
+        {
+            // Browser speechSynthesis reads the question on the client, so no cloud TTS is resolved.
+            if (sp.GetService<IOptions<AiServiceOptions>>()?.Value.UseBrowserSpeechSynthesis == true)
             {
-                var cacheDir = sp.GetService<IOptions<AiServiceOptions>>()?.Value.TtsCacheDirectory;
-                var voice = !string.IsNullOrWhiteSpace(config.Routing.Tts.Voice)
-                    ? config.Routing.Tts.Voice
-                    : (string.Equals(profile.Kind, AiProviderKinds.Gemini, StringComparison.OrdinalIgnoreCase) ? "Puck" : "alloy");
-                return adapter.CreateTextToSpeechService(sp, profile, model, voice, cacheDir);
-            },
-            () => sp.GetRequiredService<MockTextToSpeechService>(),
-            reason => new UnavailableTextToSpeechService(reason)));
+                return new BrowserSpeechSynthesisTextToSpeechService();
+            }
+
+            return ResolveCapability<ITextToSpeechService>(
+                sp,
+                AiCapability.TextToSpeech,
+                config => (config.Routing.Tts.ProfileId, config.Routing.Tts.Model),
+                (adapter, profile, model, config) =>
+                {
+                    var cacheDir = sp.GetService<IOptions<AiServiceOptions>>()?.Value.TtsCacheDirectory;
+                    var voice = !string.IsNullOrWhiteSpace(config.Routing.Tts.Voice)
+                        ? config.Routing.Tts.Voice
+                        : (string.Equals(profile.Kind, AiProviderKinds.Gemini, StringComparison.OrdinalIgnoreCase) ? "Puck" : "alloy");
+                    return adapter.CreateTextToSpeechService(sp, profile, model, voice, cacheDir);
+                },
+                () => sp.GetRequiredService<MockTextToSpeechService>(),
+                reason => new UnavailableTextToSpeechService(reason));
+        });
 
         services.AddScoped<IFollowUpGeneratorService>(sp => ResolveCapability<IFollowUpGeneratorService>(
             sp,

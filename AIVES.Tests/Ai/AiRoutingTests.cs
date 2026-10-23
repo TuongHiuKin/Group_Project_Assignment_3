@@ -297,6 +297,37 @@ public sealed class AiRoutingTests
     }
 
     [Fact]
+    public async Task Routing_BrowserSpeechSynthesis_SkipsCloudTtsEvenWhenGeminiTtsIsRouted()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<HttpClient>();
+        services.AddSingleton<IOptions<AiServiceOptions>>(Microsoft.Extensions.Options.Options.Create(
+            new AiServiceOptions { UseMock = false, AllowMockFallback = false, UseBrowserSpeechSynthesis = true }));
+        services.AddSingleton<IAiCredentialStore>(new MockCredentialStore(new AiConfigurationModel
+        {
+            UseRealAi = true,
+            Profiles = [new AiProviderProfile { Id = "p-gem", Name = "Gemini", Kind = AiProviderKinds.Gemini, ApiKey = "AIzaSyTest123" }],
+            Routing = new AiCapabilityRouting
+            {
+                Stt = new AiCapabilityTarget { ProfileId = "p-gem", Model = "gemini-3.8-flash" },
+                Tts = new AiTtsCapabilityTarget { ProfileId = "p-gem", Model = "gemini-3.8-flash-tts", Voice = "Puck" },
+                Llm = new AiCapabilityTarget { ProfileId = "p-gem", Model = "gemini-3.8-flash" }
+            }
+        }));
+        services.AddAiServices();
+        using var sp = services.BuildServiceProvider();
+
+        var tts = Assert.IsType<BrowserSpeechSynthesisTextToSpeechService>(sp.GetRequiredService<ITextToSpeechService>());
+        var result = await tts.SynthesizeAsync("Câu hỏi");
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(result.AudioUrl);
+        Assert.IsType<GeminiSpeechToTextService>(sp.GetRequiredService<ISpeechToTextService>());
+        Assert.IsType<GeminiFollowUpGeneratorService>(sp.GetRequiredService<IFollowUpGeneratorService>());
+    }
+
+    [Fact]
     public async Task Adapter_WhenAllowMockFallbackIsFalse_DoesNotFallbackToMockAndReturnsVietnameseError()
     {
         var config = new AiConfigurationModel

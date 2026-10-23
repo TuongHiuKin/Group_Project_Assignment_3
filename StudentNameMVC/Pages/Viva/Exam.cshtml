@@ -269,6 +269,7 @@
                 startSessionUrl: '@Url.Page("/Viva/Exam", "StartSession")',
                 retryFollowUpUrl: '@Url.Page("/Viva/Exam", "RetryFollowUp")',
                 finishSessionUrl: '@Url.Page("/Viva/Exam", "FinishSession")',
+                useBrowserTts: @(Model.UseBrowserSpeechSynthesis ? "true" : "false"),
                 initialState: '@Model.SessionState'
             });
             window.vivaExamClient = client;

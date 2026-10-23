@@ -16,6 +16,8 @@ class VivaExamClient {
         this.startSessionUrl = config.startSessionUrl || '/Viva/Exam?handler=StartSession';
         this.retryFollowUpUrl = config.retryFollowUpUrl || '/Viva/Exam?handler=RetryFollowUp';
         this.finishSessionUrl = config.finishSessionUrl || '/Viva/Exam?handler=FinishSession';
+        // AiServices:UseBrowserSpeechSynthesis: questions are always read by speechSynthesis, never by AI audio files.
+        this.useBrowserTts = config.useBrowserTts === true;
 
         this.recorder = new VivaAudioRecorder();
         this.connection = null;
@@ -296,6 +298,9 @@ class VivaExamClient {
                 this.audioPlayer.src = '';
             } catch (e) { }
         }
+        if ('speechSynthesis' in window) {
+            try { window.speechSynthesis.cancel(); } catch (e) { }
+        }
 
         // 3. Clear timers
         if (this.timerInterval) {
@@ -432,7 +437,7 @@ class VivaExamClient {
 
     playTts(text, audioEl, audioUrl, onEndCallback) {
         // Playback via browser Web Speech API (Vietnamese voice)
-        const speakBrowserTts = () => {
+        const speakBrowserTts = async () => {
             if (!('speechSynthesis' in window) || !text) {
                 if (onEndCallback) onEndCallback();
                 return;
@@ -443,14 +448,16 @@ class VivaExamClient {
             utterance.lang = 'vi-VN';
             utterance.rate = 1.0;
 
-            const voices = window.speechSynthesis.getVoices();
-            const viVoice = voices.find(v => v.lang && (v.lang.toLowerCase().startsWith('vi') || v.lang.toLowerCase().includes('vie') || v.name.toLowerCase().includes('vietnam')));
+            const viVoice = (await this.loadSpeechVoices()).find(v => v.lang && (v.lang.toLowerCase().startsWith('vi') || v.lang.toLowerCase().includes('vie') || v.name.toLowerCase().includes('vietnam')));
             if (viVoice) utterance.voice = viVoice;
+            else console.warn('No Vietnamese speechSynthesis voice installed; using the browser default voice.');
 
             let completed = false;
+            let watchdog = null;
             const finish = () => {
                 if (!completed) {
                     completed = true;
+                    clearTimeout(watchdog);
                     if (onEndCallback) onEndCallback();
                 }
             };
@@ -461,8 +468,20 @@ class VivaExamClient {
                 finish();
             };
 
+            // Chrome may drop onend (e.g. garbage-collected utterance); keep a reference and never leave the mic locked.
+            this.currentUtterance = utterance;
+            watchdog = setTimeout(() => {
+                console.warn('SpeechSynthesis did not report the end of speech in time; continuing.');
+                finish();
+            }, Math.max(10000, text.length * 150 + 5000));
+
             window.speechSynthesis.speak(utterance);
         };
+
+        if (this.useBrowserTts) {
+            speakBrowserTts();
+            return;
+        }
 
         const isMockAudio = !audioUrl || audioUrl.includes('mock-question.mp3');
         if (audioEl && audioUrl && !isMockAudio) {
@@ -488,6 +507,17 @@ class VivaExamClient {
         }
     }
 
+    /** getVoices() is empty until the browser has loaded its voice list; wait briefly for voiceschanged. */
+    loadSpeechVoices() {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length) return Promise.resolve(voices);
+        return new Promise(resolve => {
+            const done = () => resolve(window.speechSynthesis.getVoices());
+            window.speechSynthesis.addEventListener('voiceschanged', done, { once: true });
+            setTimeout(done, 1500);
+        });
+    }
+
     notifyBrowserVoiceFallback(message) {
         // One notice per page load is enough; replays would otherwise stack identical toasts.
         if (this.browserVoiceFallbackNotified) return;
@@ -506,7 +536,7 @@ class VivaExamClient {
         if (this.el.questionCard) this.el.questionCard.classList.remove('d-none');
         if (this.el.answeringSection) this.el.answeringSection.classList.remove('d-none');
 
-        if (question.audioUrl && this.el.questionAudio) {
+        if (question.audioUrl && this.el.questionAudio && !this.useBrowserTts) {
             this.el.questionAudio.src = question.audioUrl;
         }
 
