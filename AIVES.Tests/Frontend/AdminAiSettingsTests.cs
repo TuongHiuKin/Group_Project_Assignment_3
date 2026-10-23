@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
@@ -312,10 +312,10 @@ public sealed class AdminAiSettingsTests : IClassFixture<AdminAiSettingsTests.Ad
 
         Assert.IsType<RedirectToPageResult>(result);
         var updated = fakeStore.GetConfiguration();
-        Assert.Equal("gemini-2.5-flash", updated.Routing.Stt.Model);
-        Assert.Equal("gemini-2.5-flash-preview-tts", updated.Routing.Tts.Model);
+        Assert.Equal("gemini-1.5-flash", updated.Routing.Stt.Model);
+        Assert.Equal("gemini-2.0-flash", updated.Routing.Tts.Model);
         Assert.Equal("Puck", updated.Routing.Tts.Voice);
-        Assert.Equal("gemini-2.5-flash", updated.Routing.Llm.Model);
+        Assert.Equal("gemini-1.5-flash", updated.Routing.Llm.Model);
     }
 
     [Fact]
@@ -383,10 +383,10 @@ public sealed class AdminAiSettingsTests : IClassFixture<AdminAiSettingsTests.Ad
         Assert.True(model.ModelState.IsValid);
 
         var saved = fakeStore.GetConfiguration();
-        Assert.Equal("gemini-2.5-flash", saved.Routing.Stt.Model);
-        Assert.Equal("gemini-2.5-flash-preview-tts", saved.Routing.Tts.Model);
+        Assert.Equal("gemini-1.5-flash", saved.Routing.Stt.Model);
+        Assert.Equal("gemini-2.0-flash", saved.Routing.Tts.Model);
         Assert.Equal("Puck", saved.Routing.Tts.Voice);
-        Assert.Equal("gemini-2.5-flash", saved.Routing.Llm.Model);
+        Assert.Equal("gemini-1.5-flash", saved.Routing.Llm.Model);
     }
 
     [Fact]

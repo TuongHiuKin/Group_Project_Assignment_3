@@ -17,6 +17,21 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     private AiConfigurationModel _configuration = CreateDefaultConfiguration();
+    private DateTime _lastFileWriteUtc = DateTime.MinValue;
+
+    private void EnsureLatestCredentials()
+    {
+        if (string.IsNullOrWhiteSpace(_storePath) || !File.Exists(_storePath)) return;
+        try
+        {
+            var lastWrite = File.GetLastWriteTimeUtc(_storePath);
+            if (lastWrite > _lastFileWriteUtc)
+            {
+                LoadInitialCredentials();
+            }
+        }
+        catch { }
+    }
 
     public ProtectedAiCredentialStore(
         IDataProtectionProvider protectionProvider,
@@ -36,9 +51,11 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
 
     public AiCredentialStatus GetStatus()
     {
+        EnsureLatestCredentials();
         var hasKey = _configuration.Profiles.Any(p => !string.IsNullOrWhiteSpace(p.ApiKey));
         string? keyHint = null;
 
+        EnsureLatestCredentials();
         var primaryProfile = _configuration.FindProfile(_configuration.Routing.Llm.ProfileId)
             ?? _configuration.Profiles.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p.ApiKey));
 
@@ -52,6 +69,7 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
 
     public string? GetApiKey()
     {
+        EnsureLatestCredentials();
         var primaryProfile = _configuration.FindProfile(_configuration.Routing.Llm.ProfileId)
             ?? _configuration.Profiles.FirstOrDefault(p => !string.IsNullOrWhiteSpace(p.ApiKey));
         return primaryProfile?.ApiKey;
@@ -59,6 +77,7 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
 
     public AiConfigurationModel GetConfiguration()
     {
+        EnsureLatestCredentials();
         return CloneConfiguration(_configuration);
     }
 
@@ -209,6 +228,7 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
 
         try
         {
+            _lastFileWriteUtc = File.GetLastWriteTimeUtc(_storePath);
             var json = File.ReadAllText(_storePath);
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
@@ -327,9 +347,9 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
                         ],
                         Routing = new AiCapabilityRouting
                         {
-                            Stt = new AiCapabilityTarget { ProfileId = "gemini-default", Model = "gemini-2.5-flash" },
-                            Tts = new AiTtsCapabilityTarget { ProfileId = "gemini-default", Model = "gemini-2.5-flash-preview-tts", Voice = "Puck" },
-                            Llm = new AiCapabilityTarget { ProfileId = "gemini-default", Model = "gemini-2.5-flash" }
+                            Stt = new AiCapabilityTarget { ProfileId = "gemini-default", Model = "gemini-1.5-flash" },
+                            Tts = new AiTtsCapabilityTarget { ProfileId = "gemini-default", Model = "gemini-2.0-flash", Voice = "Puck" },
+                            Llm = new AiCapabilityTarget { ProfileId = "gemini-default", Model = "gemini-1.5-flash" }
                         }
                     };
                 }

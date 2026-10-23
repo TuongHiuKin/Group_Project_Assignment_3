@@ -124,18 +124,18 @@ public class AiSettingsModel : PageModel
                 if (string.Equals(config.Routing.Stt.ProfileId, existing.Id, StringComparison.OrdinalIgnoreCase))
                 {
                     config.Routing.Stt.Model = newAdapter?.GetDefaultModel(AiCapability.SpeechToText)
-                        ?? (ProfileInput.Kind == AiProviderKinds.Gemini ? "gemini-2.5-flash" : "whisper-1");
+                        ?? (ProfileInput.Kind == AiProviderKinds.Gemini ? "gemini-3.5-flash-lite" : "whisper-1");
                 }
                 if (string.Equals(config.Routing.Tts.ProfileId, existing.Id, StringComparison.OrdinalIgnoreCase))
                 {
                     config.Routing.Tts.Model = newAdapter?.GetDefaultModel(AiCapability.TextToSpeech)
-                        ?? (ProfileInput.Kind == AiProviderKinds.Gemini ? "gemini-2.5-flash-preview-tts" : "tts-1");
+                        ?? (ProfileInput.Kind == AiProviderKinds.Gemini ? "gemini-3.8-flash-tts" : "tts-1");
                     config.Routing.Tts.Voice = ProfileInput.Kind == AiProviderKinds.Gemini ? "Puck" : "alloy";
                 }
                 if (string.Equals(config.Routing.Llm.ProfileId, existing.Id, StringComparison.OrdinalIgnoreCase))
                 {
                     config.Routing.Llm.Model = newAdapter?.GetDefaultModel(AiCapability.FollowUpLlm)
-                        ?? (ProfileInput.Kind == AiProviderKinds.Gemini ? "gemini-2.5-flash" : "gpt-4o-mini");
+                        ?? (ProfileInput.Kind == AiProviderKinds.Gemini ? "gemini-3.5-flash-lite" : "gpt-4o-mini");
                 }
             }
 
@@ -171,18 +171,18 @@ public class AiSettingsModel : PageModel
             if (string.IsNullOrWhiteSpace(config.Routing.Stt.ProfileId) && capabilities.HasFlag(AiCapability.SpeechToText))
             {
                 config.Routing.Stt.ProfileId = newProfile.Id;
-                config.Routing.Stt.Model = newProfile.Kind == AiProviderKinds.Gemini ? "gemini-2.5-flash" : "whisper-1";
+                config.Routing.Stt.Model = newProfile.Kind == AiProviderKinds.Gemini ? "gemini-3.5-flash-lite" : "whisper-1";
             }
             if (string.IsNullOrWhiteSpace(config.Routing.Tts.ProfileId) && capabilities.HasFlag(AiCapability.TextToSpeech))
             {
                 config.Routing.Tts.ProfileId = newProfile.Id;
-                config.Routing.Tts.Model = newProfile.Kind == AiProviderKinds.Gemini ? "gemini-2.5-flash-preview-tts" : "tts-1";
+                config.Routing.Tts.Model = newProfile.Kind == AiProviderKinds.Gemini ? "gemini-3.8-flash-tts" : "tts-1";
                 config.Routing.Tts.Voice = newProfile.Kind == AiProviderKinds.Gemini ? "Puck" : "alloy";
             }
             if (string.IsNullOrWhiteSpace(config.Routing.Llm.ProfileId) && capabilities.HasFlag(AiCapability.FollowUpLlm))
             {
                 config.Routing.Llm.ProfileId = newProfile.Id;
-                config.Routing.Llm.Model = newProfile.Kind == AiProviderKinds.Gemini ? "gemini-2.5-flash" : "gpt-4o-mini";
+                config.Routing.Llm.Model = newProfile.Kind == AiProviderKinds.Gemini ? "gemini-3.5-flash-lite" : "gpt-4o-mini";
             }
         }
 
@@ -246,7 +246,7 @@ public class AiSettingsModel : PageModel
             else
             {
                 var adapter = _providerRegistry.GetAdapter(p.Kind);
-                var defaultModel = adapter?.GetDefaultModel(AiCapability.SpeechToText) ?? (p.Kind == AiProviderKinds.Gemini ? "gemini-2.5-flash" : "whisper-1");
+                var defaultModel = adapter?.GetDefaultModel(AiCapability.SpeechToText) ?? (p.Kind == AiProviderKinds.Gemini ? "gemini-3.5-flash-lite" : "whisper-1");
                 if (string.IsNullOrWhiteSpace(RoutingInput.SttModel))
                 {
                     RoutingInput.SttModel = defaultModel;
@@ -282,7 +282,7 @@ public class AiSettingsModel : PageModel
             else
             {
                 var adapter = _providerRegistry.GetAdapter(p.Kind);
-                var defaultModel = adapter?.GetDefaultModel(AiCapability.TextToSpeech) ?? (p.Kind == AiProviderKinds.Gemini ? "gemini-2.5-flash-preview-tts" : "tts-1");
+                var defaultModel = adapter?.GetDefaultModel(AiCapability.TextToSpeech) ?? (p.Kind == AiProviderKinds.Gemini ? "gemini-3.8-flash-tts" : "tts-1");
                 var defaultVoice = p.Kind == AiProviderKinds.Gemini ? "Puck" : "alloy";
 
                 if (string.IsNullOrWhiteSpace(RoutingInput.TtsModel))
@@ -325,7 +325,7 @@ public class AiSettingsModel : PageModel
             else
             {
                 var adapter = _providerRegistry.GetAdapter(p.Kind);
-                var defaultModel = adapter?.GetDefaultModel(AiCapability.FollowUpLlm) ?? (p.Kind == AiProviderKinds.Gemini ? "gemini-2.5-flash" : "gpt-4o-mini");
+                var defaultModel = adapter?.GetDefaultModel(AiCapability.FollowUpLlm) ?? (p.Kind == AiProviderKinds.Gemini ? "gemini-3.5-flash-lite" : "gpt-4o-mini");
 
                 if (string.IsNullOrWhiteSpace(RoutingInput.LlmModel))
                 {

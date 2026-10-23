@@ -62,9 +62,9 @@ public static class DependencyInjection
         services.AddHttpClient<WhisperSpeechToTextService>();
         services.AddHttpClient<OpenAiTextToSpeechService>();
         services.AddHttpClient<OpenAiFollowUpGeneratorService>();
-        services.AddHttpClient<GeminiSpeechToTextService>();
+        services.AddHttpClient<GeminiSpeechToTextService>(client => client.Timeout = TimeSpan.FromMinutes(3));
         services.AddHttpClient<GeminiTextToSpeechService>();
-        services.AddHttpClient<GeminiFollowUpGeneratorService>();
+        services.AddHttpClient<GeminiFollowUpGeneratorService>(client => client.Timeout = TimeSpan.FromMinutes(2));
 
         services.AddSingleton<FollowUpPolicyValidator>();
         services.AddScoped<MockSpeechToTextService>();

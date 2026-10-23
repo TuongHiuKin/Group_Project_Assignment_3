@@ -189,14 +189,15 @@
                                 <label class="form-label small text-muted mb-1">Tên Model:</label>
                                 <div class="input-group">
                                     <input type="text" class="form-control" name="RoutingInput.SttModel" id="sttModelInput"
-                                           value="@Model.RoutingInput.SttModel" placeholder="whisper-1 hoặc gemini-2.5-flash" list="sttModelDatalist" />
+                                           value="@Model.RoutingInput.SttModel" placeholder="whisper-1 hoặc gemini-3.5-flash-lite" list="sttModelDatalist" />
                                     <button class="btn btn-outline-secondary" type="button" onclick="fetchModels('sttProfileSelect', 'sttModelDatalist')">
                                         <i class="bi bi-arrow-repeat"></i>
                                     </button>
                                 </div>
                                 <datalist id="sttModelDatalist">
                                     <option value="whisper-1" />
-                                    <option value="gemini-2.5-flash" />
+                                    <option value="gemini-3.5-flash-lite" />
+                                    <option value="gemini-3.5-flash" />
                                 </datalist>
                             </div>
                         </div>
@@ -225,7 +226,7 @@
                                 <label class="form-label small text-muted mb-1">Tên Model:</label>
                                 <div class="input-group">
                                     <input type="text" class="form-control" name="RoutingInput.TtsModel" id="ttsModelInput"
-                                           value="@Model.RoutingInput.TtsModel" placeholder="tts-1 hoặc gemini-2.5-flash-preview-tts" list="ttsModelDatalist" />
+                                           value="@Model.RoutingInput.TtsModel" placeholder="tts-1 hoặc gemini-3.8-flash-tts" list="ttsModelDatalist" />
                                     <button class="btn btn-outline-secondary" type="button" onclick="fetchModels('ttsProfileSelect', 'ttsModelDatalist')">
                                         <i class="bi bi-arrow-repeat"></i>
                                     </button>
@@ -233,7 +234,8 @@
                                 <datalist id="ttsModelDatalist">
                                     <option value="tts-1" />
                                     <option value="tts-1-hd" />
-                                    <option value="gemini-2.5-flash-preview-tts" />
+                                    <option value="gemini-3.8-flash-tts" />
+                                    <option value="gemini-3.8-flash-lite-tts" />
                                 </datalist>
                             </div>
                             <div class="col-md-3">
@@ -278,7 +280,7 @@
                                 <label class="form-label small text-muted mb-1">Tên Model:</label>
                                 <div class="input-group">
                                     <input type="text" class="form-control" name="RoutingInput.LlmModel" id="llmModelInput"
-                                           value="@Model.RoutingInput.LlmModel" placeholder="gpt-4o-mini hoặc gemini-2.5-flash" list="llmModelDatalist" />
+                                           value="@Model.RoutingInput.LlmModel" placeholder="gpt-4o-mini hoặc gemini-3.5-flash-lite" list="llmModelDatalist" />
                                     <button class="btn btn-outline-secondary" type="button" onclick="fetchModels('llmProfileSelect', 'llmModelDatalist')">
                                         <i class="bi bi-arrow-repeat"></i>
                                     </button>
@@ -286,7 +288,8 @@
                                 <datalist id="llmModelDatalist">
                                     <option value="gpt-4o-mini" />
                                     <option value="gpt-4o" />
-                                    <option value="gemini-2.5-flash" />
+                                    <option value="gemini-3.5-flash-lite" />
+                                    <option value="gemini-3.5-flash" />
                                     <option value="gemini-2.0-flash" />
                                     <option value="llama-3.3-70b-versatile" />
                                     <option value="deepseek-chat" />
@@ -579,7 +582,7 @@
                 const kind = opt ? opt.getAttribute('data-kind') : '';
                 if (kind === '@AiProviderKinds.Gemini') {
                     if (!input.value || isLikelyOpenAiModel(input.value)) {
-                        input.value = 'gemini-2.5-flash';
+                        input.value = 'gemini-3.5-flash-lite';
                     }
                 } else if (kind === '@AiProviderKinds.OpenAi' || kind === '@AiProviderKinds.OpenAiCompatible') {
                     if (!input.value || isLikelyGeminiModel(input.value)) {
@@ -595,7 +598,7 @@
                 const kind = opt ? opt.getAttribute('data-kind') : '';
                 if (kind === '@AiProviderKinds.Gemini') {
                     if (!input.value || isLikelyOpenAiModel(input.value)) {
-                        input.value = 'gemini-2.5-flash-preview-tts';
+                        input.value = 'gemini-3.8-flash-tts';
                     }
                     if (voiceInput && (!voiceInput.value || voiceInput.value === 'alloy')) {
                         voiceInput.value = 'Puck';
@@ -616,7 +619,7 @@
                 const kind = opt ? opt.getAttribute('data-kind') : '';
                 if (kind === '@AiProviderKinds.Gemini') {
                     if (!input.value || isLikelyOpenAiModel(input.value)) {
-                        input.value = 'gemini-2.5-flash';
+                        input.value = 'gemini-3.5-flash-lite';
                     }
                 } else if (kind === '@AiProviderKinds.OpenAi' || kind === '@AiProviderKinds.OpenAiCompatible') {
                     if (!input.value || isLikelyGeminiModel(input.value)) {

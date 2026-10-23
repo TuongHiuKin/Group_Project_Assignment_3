@@ -342,7 +342,7 @@ public class ClassReportService : IClassReportService
             PendingAttemptsCount = pendingAttempts.Count,
             AverageScore = averageScore,
             PassRatePercentage = passRate,
-            Attempts = classAttempts.OrderBy(a => a.AttemptOrdinal).ToList()
+            Attempts = classAttempts.OrderByDescending(a => a.AttemptOrdinal).ToList()
         };
     }
 

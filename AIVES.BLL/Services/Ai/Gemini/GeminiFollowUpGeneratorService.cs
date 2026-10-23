@@ -26,15 +26,15 @@ public sealed class GeminiFollowUpGeneratorService : IFollowUpGeneratorService
         AiProviderProfile profile,
         string? model = null,
         FollowUpPolicyValidator? validator = null,
-        int timeoutSeconds = 15,
+        int timeoutSeconds = 30,
         ILogger<GeminiFollowUpGeneratorService>? logger = null,
         IFollowUpGeneratorService? fallbackService = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
-        _model = string.IsNullOrWhiteSpace(model) ? "gemini-2.5-flash" : model;
+        _model = string.IsNullOrWhiteSpace(model) ? "gemini-1.5-flash" : model;
         _validator = validator ?? new FollowUpPolicyValidator();
-        _timeoutSeconds = timeoutSeconds > 0 ? timeoutSeconds : 15;
+        _timeoutSeconds = timeoutSeconds > 0 ? timeoutSeconds : 30;
         _logger = logger;
         _fallbackService = fallbackService;
     }

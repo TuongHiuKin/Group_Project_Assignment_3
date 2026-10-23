@@ -50,6 +50,7 @@ class VivaExamClient {
 
             // Answering & Recording Section
             answeringSection: document.getElementById('answeringSection'),
+            startExamBanner: document.getElementById('startExamBanner'),
             btnStartExam: document.getElementById('btnStartExam'),
             btnStartRecord: document.getElementById('btnStartRecord'),
             btnStopRecord: document.getElementById('btnStopRecord'),
@@ -252,8 +253,24 @@ class VivaExamClient {
             this.handleSessionStatusChanged(snapshot.status);
         }
 
+        const stateName = typeof snapshot.status?.state === 'string'
+            ? snapshot.status.state
+            : this.mapStateToString(snapshot.status?.state);
+
+        const isPreStart = stateName === 'Created' || stateName === 'Ready';
+
         if (snapshot.currentQuestion) {
-            this.renderQuestion(snapshot.currentQuestion);
+            if (isPreStart) {
+                this.currentQuestionId = snapshot.currentQuestion.questionId;
+                if (this.el.startExamBanner) this.el.startExamBanner.classList.remove('d-none');
+                if (this.el.btnStartExam) this.el.btnStartExam.classList.remove('d-none');
+                if (this.el.questionCard) this.el.questionCard.classList.add('d-none');
+                if (this.el.answeringSection) this.el.answeringSection.classList.add('d-none');
+            } else if (stateName === 'QuestionDelivered') {
+                this.renderQuestion(snapshot.currentQuestion, true);
+            } else {
+                this.renderQuestion(snapshot.currentQuestion, false);
+            }
         }
 
         if (snapshot.latestTranscript) {
@@ -302,20 +319,25 @@ class VivaExamClient {
         }
 
         // Handle states
-        if (stateName === 'Ready') {
+        if (stateName === 'Ready' || stateName === 'Created') {
+            if (this.el.startExamBanner) this.el.startExamBanner.classList.remove('d-none');
             if (this.el.btnStartExam) this.el.btnStartExam.classList.remove('d-none');
+            if (this.el.questionCard) this.el.questionCard.classList.add('d-none');
             if (this.el.answeringSection) this.el.answeringSection.classList.add('d-none');
-        } else if (stateName === 'QuestionDelivered') {
+        } else if (stateName === 'QuestionDelivered' || stateName === 'Answering') {
+            if (this.el.startExamBanner) this.el.startExamBanner.classList.add('d-none');
             if (this.el.btnStartExam) this.el.btnStartExam.classList.add('d-none');
             if (this.el.questionCard) this.el.questionCard.classList.remove('d-none');
             if (this.el.answeringSection) this.el.answeringSection.classList.remove('d-none');
-        } else if (stateName === 'Answering') {
-            if (this.el.btnStartExam) this.el.btnStartExam.classList.add('d-none');
-            if (this.el.answeringSection) this.el.answeringSection.classList.remove('d-none');
         } else if (stateName === 'Transcribing') {
+            if (this.el.startExamBanner) this.el.startExamBanner.classList.add('d-none');
+            if (this.el.questionCard) this.el.questionCard.classList.remove('d-none');
             if (this.el.transcriptionSpinner) this.el.transcriptionSpinner.classList.remove('d-none');
             this.setRecordingUiState('disabled', 'AI đang chuyển giọng nói thành văn bản...');
-        } else if (stateName === 'TranscriptReady') {
+        } else if (stateName === 'TranscriptReady' || stateName === 'FollowUpDelivered') {
+            if (this.el.startExamBanner) this.el.startExamBanner.classList.add('d-none');
+            if (this.el.questionCard) this.el.questionCard.classList.remove('d-none');
+            if (this.el.answeringSection) this.el.answeringSection.classList.remove('d-none');
             if (this.el.transcriptionSpinner) this.el.transcriptionSpinner.classList.add('d-none');
         } else if (stateName === 'Completed') {
             this.handleSessionCompleted(status);
@@ -339,7 +361,7 @@ class VivaExamClient {
             utterance.rate = 1.0;
 
             const voices = window.speechSynthesis.getVoices();
-            const viVoice = voices.find(v => v.lang && (v.lang.startsWith('vi') || v.lang.includes('VIE')));
+            const viVoice = voices.find(v => v.lang && (v.lang.toLowerCase().startsWith('vi') || v.lang.toLowerCase().includes('vie') || v.name.toLowerCase().includes('vietnam')));
             if (viVoice) utterance.voice = viVoice;
 
             let completed = false;
@@ -359,7 +381,8 @@ class VivaExamClient {
             window.speechSynthesis.speak(utterance);
         };
 
-        if (audioEl && audioUrl) {
+        const isMockAudio = !audioUrl || audioUrl.includes('mock-question.mp3');
+        if (audioEl && audioUrl && !isMockAudio) {
             // Play synthesized audio file directly
             audioEl.src = audioUrl;
             audioEl.currentTime = 0;
@@ -376,20 +399,27 @@ class VivaExamClient {
         }
     }
 
-    renderQuestion(question) {
+    renderQuestion(question, autoPlayTts = true) {
         if (!question) return;
         this.currentQuestionId = question.questionId;
         if (this.el.questionTitle) this.el.questionTitle.textContent = question.title || `Câu hỏi: ${question.questionId}`;
         if (this.el.questionContent) this.el.questionContent.textContent = question.content || '';
+
+        // Ensure start banner is hidden and question card is displayed
+        if (this.el.startExamBanner) this.el.startExamBanner.classList.add('d-none');
+        if (this.el.questionCard) this.el.questionCard.classList.remove('d-none');
+        if (this.el.answeringSection) this.el.answeringSection.classList.remove('d-none');
 
         if (question.audioUrl && this.el.questionAudio) {
             this.el.questionAudio.src = question.audioUrl;
         }
 
         if (this.el.btnPlayQuestionAudio) this.el.btnPlayQuestionAudio.classList.remove('d-none');
-        this.playTts(question.content, this.el.questionAudio, question.audioUrl, () => {
-            this.requestBeginAnswering();
-        });
+        if (autoPlayTts) {
+            this.playTts(question.content, this.el.questionAudio, question.audioUrl, () => {
+                this.requestBeginAnswering();
+            });
+        }
     }
 
     async requestBeginAnswering() {
@@ -537,7 +567,7 @@ class VivaExamClient {
 
             const data = await response.json();
             if (data.question) {
-                this.renderQuestion(data.question);
+                this.renderQuestion(data.question, true);
             }
         } catch (err) {
             console.error('StartExam error:', err);

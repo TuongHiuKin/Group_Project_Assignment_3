@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading;
@@ -97,6 +97,12 @@ public class IndexModel : PageModel
         if (!IsAiConfigured)
         {
             ErrorMessage = "Chưa cấu hình AI, vui lòng nhờ Admin vào Cấu hình AI.";
+            return Page();
+        }
+
+        if (User.IsInRole(AIVES.BLL.Security.ApplicationRoles.Lecturer))
+        {
+            ErrorMessage = "Tài khoản Giảng viên không tham gia làm bài thi với tư cách thí sinh. Vui lòng đăng nhập với tài khoản Sinh viên để thi vấn đáp, hoặc truy cập Dashboard Giảng viên / Thống kê Lớp học để đánh giá kết quả.";
             return Page();
         }
 

@@ -29,13 +29,13 @@ public sealed class GeminiTextToSpeechService : ITextToSpeechService
         string? model = null,
         string? voice = null,
         string? cacheDirectory = null,
-        int timeoutSeconds = 10,
+        int timeoutSeconds = 15,
         ILogger<GeminiTextToSpeechService>? logger = null,
         ITextToSpeechService? fallbackService = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
-        _model = string.IsNullOrWhiteSpace(model) ? "gemini-2.5-flash-preview-tts" : model;
+        _model = string.IsNullOrWhiteSpace(model) ? "gemini-2.0-flash" : model;
         _voice = string.IsNullOrWhiteSpace(voice) ? "Puck" : voice;
         _cacheDirectory = cacheDirectory;
         _timeoutSeconds = timeoutSeconds > 0 ? timeoutSeconds : 10;

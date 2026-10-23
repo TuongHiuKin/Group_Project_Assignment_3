@@ -65,7 +65,10 @@
         <!-- LEFT COLUMN: Questions, AI Follow-up & Realtime Transcript -->
         <div class="col-lg-7">
             <!-- Initial Start Exam Callout (shown before question is delivered) -->
-            <div id="startExamBanner" class="viva-start-banner mb-4">
+            @{
+                var isAlreadyStarted = Model.SessionState != VivaSessionState.Created && Model.SessionState != VivaSessionState.Ready;
+            }
+            <div id="startExamBanner" class="viva-start-banner mb-4 @(isAlreadyStarted ? "d-none" : "")">
                 <div class="brand-icon-box mx-auto mb-3" style="width: 58px; height: 58px; font-size: 26px; border-radius: 18px;">
                     <i class="bi bi-mic-fill"></i>
                 </div>
@@ -82,7 +85,7 @@
             </div>
 
             <!-- Primary Question Card -->
-            <div id="questionCard" class="viva-panel-card mb-4 d-none">
+            <div id="questionCard" class="viva-panel-card mb-4 @(isAlreadyStarted ? "" : "d-none")">
                 <div class="viva-panel-header">
                     <div class="d-flex align-items-center gap-2">
                         <span class="badge tag-purple">CÂU HỎI CHÍNH</span>
@@ -167,7 +170,7 @@
 
         <!-- RIGHT COLUMN: Soundwave Visualizer & Microphone Control -->
         <div class="col-lg-5">
-            <div id="answeringSection" class="viva-panel-card">
+            <div id="answeringSection" class="viva-panel-card @(isAlreadyStarted ? "" : "d-none")">
                 <div class="viva-panel-header">
                     <h6 class="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
                         <i class="bi bi-mic text-danger"></i> Ghi âm câu trả lời
