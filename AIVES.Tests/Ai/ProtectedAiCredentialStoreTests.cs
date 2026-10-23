@@ -387,10 +387,10 @@ public sealed class ProtectedAiCredentialStoreTests : IDisposable
         var gemini = config.Profiles.FirstOrDefault(p => p.Kind == AIVES.BLL.Models.Ai.AiProviderKinds.Gemini);
         Assert.NotNull(gemini);
         Assert.Equal("AIzaSyTestGeminiKey1234567890", gemini.ApiKey);
-        Assert.Equal("gemini-1.5-flash", config.Routing.Stt.Model);
-        Assert.Equal("gemini-2.0-flash", config.Routing.Tts.Model);
+        Assert.Equal("gemini-3.8-flash", config.Routing.Stt.Model);
+        Assert.Equal("gemini-3.8-flash-tts", config.Routing.Tts.Model);
         Assert.Equal("Puck", config.Routing.Tts.Voice);
-        Assert.Equal("gemini-1.5-flash", config.Routing.Llm.Model);
+        Assert.Equal("gemini-3.8-flash", config.Routing.Llm.Model);
     }
 
     [Fact]

@@ -2,6 +2,7 @@ using System.Text.Json;
 using AIVES.BLL.Interfaces.Ai;
 using AIVES.BLL.Models.Ai;
 using AIVES.BLL.Options;
+using AIVES.BLL.Services.Ai.Gemini;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -347,9 +348,9 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
                         ],
                         Routing = new AiCapabilityRouting
                         {
-                            Stt = new AiCapabilityTarget { ProfileId = "gemini-default", Model = "gemini-1.5-flash" },
-                            Tts = new AiTtsCapabilityTarget { ProfileId = "gemini-default", Model = "gemini-2.0-flash", Voice = "Puck" },
-                            Llm = new AiCapabilityTarget { ProfileId = "gemini-default", Model = "gemini-1.5-flash" }
+                            Stt = new AiCapabilityTarget { ProfileId = "gemini-default", Model = GeminiModels.DefaultSpeechToText },
+                            Tts = new AiTtsCapabilityTarget { ProfileId = "gemini-default", Model = GeminiModels.DefaultTextToSpeech, Voice = GeminiModels.DefaultVoice },
+                            Llm = new AiCapabilityTarget { ProfileId = "gemini-default", Model = GeminiModels.DefaultFollowUp }
                         }
                     };
                 }

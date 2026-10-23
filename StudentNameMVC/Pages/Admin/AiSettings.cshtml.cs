@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using AIVES.BLL.Interfaces.Ai;
 using AIVES.BLL.Models.Ai;
 using AIVES.BLL.Services.Ai;
+using AIVES.BLL.Services.Ai.Gemini;
 using StudentNameMVC.Security;
 
 namespace StudentNameMVC.Pages.Admin;
@@ -117,25 +118,25 @@ public class AiSettingsModel : PageModel
                 existing.ApiKey = ProfileInput.ApiKey.Trim();
             }
 
-            // If the provider kind changed, reset routed models to the new kind's defaults
+            // If the provider kind changed, reset only routed models that are no longer valid for the new kind
             if (!string.Equals(oldKind, ProfileInput.Kind, StringComparison.OrdinalIgnoreCase))
             {
-                var newAdapter = _providerRegistry.GetAdapter(ProfileInput.Kind);
-                if (string.Equals(config.Routing.Stt.ProfileId, existing.Id, StringComparison.OrdinalIgnoreCase))
+                var kind = ProfileInput.Kind;
+                if (string.Equals(config.Routing.Stt.ProfileId, existing.Id, StringComparison.OrdinalIgnoreCase) &&
+                    !IsModelCompatible(kind, AiCapability.SpeechToText, config.Routing.Stt.Model))
                 {
-                    config.Routing.Stt.Model = newAdapter?.GetDefaultModel(AiCapability.SpeechToText)
-                        ?? (ProfileInput.Kind == AiProviderKinds.Gemini ? "gemini-3.5-flash-lite" : "whisper-1");
+                    config.Routing.Stt.Model = DefaultModelFor(kind, AiCapability.SpeechToText);
                 }
-                if (string.Equals(config.Routing.Tts.ProfileId, existing.Id, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(config.Routing.Tts.ProfileId, existing.Id, StringComparison.OrdinalIgnoreCase) &&
+                    !IsModelCompatible(kind, AiCapability.TextToSpeech, config.Routing.Tts.Model))
                 {
-                    config.Routing.Tts.Model = newAdapter?.GetDefaultModel(AiCapability.TextToSpeech)
-                        ?? (ProfileInput.Kind == AiProviderKinds.Gemini ? "gemini-3.8-flash-tts" : "tts-1");
-                    config.Routing.Tts.Voice = ProfileInput.Kind == AiProviderKinds.Gemini ? "Puck" : "alloy";
+                    config.Routing.Tts.Model = DefaultModelFor(kind, AiCapability.TextToSpeech);
+                    config.Routing.Tts.Voice = DefaultVoiceFor(kind);
                 }
-                if (string.Equals(config.Routing.Llm.ProfileId, existing.Id, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(config.Routing.Llm.ProfileId, existing.Id, StringComparison.OrdinalIgnoreCase) &&
+                    !IsModelCompatible(kind, AiCapability.FollowUpLlm, config.Routing.Llm.Model))
                 {
-                    config.Routing.Llm.Model = newAdapter?.GetDefaultModel(AiCapability.FollowUpLlm)
-                        ?? (ProfileInput.Kind == AiProviderKinds.Gemini ? "gemini-3.5-flash-lite" : "gpt-4o-mini");
+                    config.Routing.Llm.Model = DefaultModelFor(kind, AiCapability.FollowUpLlm);
                 }
             }
 
@@ -171,18 +172,18 @@ public class AiSettingsModel : PageModel
             if (string.IsNullOrWhiteSpace(config.Routing.Stt.ProfileId) && capabilities.HasFlag(AiCapability.SpeechToText))
             {
                 config.Routing.Stt.ProfileId = newProfile.Id;
-                config.Routing.Stt.Model = newProfile.Kind == AiProviderKinds.Gemini ? "gemini-3.5-flash-lite" : "whisper-1";
+                config.Routing.Stt.Model = DefaultModelFor(newProfile.Kind, AiCapability.SpeechToText);
             }
             if (string.IsNullOrWhiteSpace(config.Routing.Tts.ProfileId) && capabilities.HasFlag(AiCapability.TextToSpeech))
             {
                 config.Routing.Tts.ProfileId = newProfile.Id;
-                config.Routing.Tts.Model = newProfile.Kind == AiProviderKinds.Gemini ? "gemini-3.8-flash-tts" : "tts-1";
-                config.Routing.Tts.Voice = newProfile.Kind == AiProviderKinds.Gemini ? "Puck" : "alloy";
+                config.Routing.Tts.Model = DefaultModelFor(newProfile.Kind, AiCapability.TextToSpeech);
+                config.Routing.Tts.Voice = DefaultVoiceFor(newProfile.Kind);
             }
             if (string.IsNullOrWhiteSpace(config.Routing.Llm.ProfileId) && capabilities.HasFlag(AiCapability.FollowUpLlm))
             {
                 config.Routing.Llm.ProfileId = newProfile.Id;
-                config.Routing.Llm.Model = newProfile.Kind == AiProviderKinds.Gemini ? "gemini-3.5-flash-lite" : "gpt-4o-mini";
+                config.Routing.Llm.Model = DefaultModelFor(newProfile.Kind, AiCapability.FollowUpLlm);
             }
         }
 
@@ -245,8 +246,7 @@ public class AiSettingsModel : PageModel
             }
             else
             {
-                var adapter = _providerRegistry.GetAdapter(p.Kind);
-                var defaultModel = adapter?.GetDefaultModel(AiCapability.SpeechToText) ?? (p.Kind == AiProviderKinds.Gemini ? "gemini-3.5-flash-lite" : "whisper-1");
+                var defaultModel = DefaultModelFor(p.Kind, AiCapability.SpeechToText);
                 if (string.IsNullOrWhiteSpace(RoutingInput.SttModel))
                 {
                     RoutingInput.SttModel = defaultModel;
@@ -281,9 +281,8 @@ public class AiSettingsModel : PageModel
             }
             else
             {
-                var adapter = _providerRegistry.GetAdapter(p.Kind);
-                var defaultModel = adapter?.GetDefaultModel(AiCapability.TextToSpeech) ?? (p.Kind == AiProviderKinds.Gemini ? "gemini-3.8-flash-tts" : "tts-1");
-                var defaultVoice = p.Kind == AiProviderKinds.Gemini ? "Puck" : "alloy";
+                var defaultModel = DefaultModelFor(p.Kind, AiCapability.TextToSpeech);
+                var defaultVoice = DefaultVoiceFor(p.Kind);
 
                 if (string.IsNullOrWhiteSpace(RoutingInput.TtsModel))
                 {
@@ -324,8 +323,7 @@ public class AiSettingsModel : PageModel
             }
             else
             {
-                var adapter = _providerRegistry.GetAdapter(p.Kind);
-                var defaultModel = adapter?.GetDefaultModel(AiCapability.FollowUpLlm) ?? (p.Kind == AiProviderKinds.Gemini ? "gemini-3.5-flash-lite" : "gpt-4o-mini");
+                var defaultModel = DefaultModelFor(p.Kind, AiCapability.FollowUpLlm);
 
                 if (string.IsNullOrWhiteSpace(RoutingInput.LlmModel))
                 {
@@ -348,9 +346,18 @@ public class AiSettingsModel : PageModel
             }
         }
 
+        if (ModelState.IsValid)
+        {
+            await ValidateGeminiModelAsync(config.FindProfile(RoutingInput.SttProfileId), AiCapability.SpeechToText, RoutingInput.SttModel, "RoutingInput.SttModel", ct);
+            await ValidateGeminiModelAsync(config.FindProfile(RoutingInput.TtsProfileId), AiCapability.TextToSpeech, RoutingInput.TtsModel, "RoutingInput.TtsModel", ct);
+            await ValidateGeminiModelAsync(config.FindProfile(RoutingInput.LlmProfileId), AiCapability.FollowUpLlm, RoutingInput.LlmModel, "RoutingInput.LlmModel", ct);
+        }
+
         if (!ModelState.IsValid)
         {
+            var submitted = RoutingInput;
             LoadViewModelData();
+            RoutingInput = submitted;
             return Page();
         }
 
@@ -369,6 +376,70 @@ public class AiSettingsModel : PageModel
         await _credentialStore.SaveConfigurationAsync(config, ct);
         TempData["SuccessMessage"] = "Đã lưu thiết lập định tuyến năng lực AI thành công.";
         return RedirectToPage();
+    }
+
+    private string DefaultModelFor(string kind, AiCapability capability) =>
+        _providerRegistry.GetAdapter(kind)?.GetDefaultModel(capability)
+        ?? (string.Equals(kind, AiProviderKinds.Gemini, StringComparison.OrdinalIgnoreCase)
+            ? GeminiModels.DefaultFor(capability)
+            : capability switch
+            {
+                AiCapability.SpeechToText => "whisper-1",
+                AiCapability.TextToSpeech => "tts-1",
+                _ => "gpt-4o-mini"
+            });
+
+    private static string DefaultVoiceFor(string kind) =>
+        string.Equals(kind, AiProviderKinds.Gemini, StringComparison.OrdinalIgnoreCase) ? GeminiModels.DefaultVoice : "alloy";
+
+    /// <summary>True khi model hiện tại vẫn dùng được cho loại nhà cung cấp mới (không cần đặt lại).</summary>
+    private static bool IsModelCompatible(string kind, AiCapability capability, string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return false;
+        if (string.Equals(kind, AiProviderKinds.Gemini, StringComparison.OrdinalIgnoreCase))
+        {
+            return IsLikelyGeminiModel(model) && GeminiModels.IsSuitableFor(capability, model);
+        }
+        return !IsLikelyGeminiModel(model);
+    }
+
+    /// <summary>
+    /// Với hồ sơ Gemini: model TTS phải là model "tts", STT/LLM không được là model TTS, và tên model phải có trong
+    /// danh sách ListModels thật của hồ sơ (nếu lấy được). Sai thì báo lỗi tại trang kèm gợi ý model hợp lệ gần nhất.
+    /// </summary>
+    private async Task ValidateGeminiModelAsync(AiProviderProfile? profile, AiCapability capability, string? model, string field, CancellationToken ct)
+    {
+        if (profile == null || string.IsNullOrWhiteSpace(model) ||
+            !string.Equals(profile.Kind, AiProviderKinds.Gemini, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var name = model.Trim();
+        var capabilityName = capability switch
+        {
+            AiCapability.SpeechToText => "Nhận diện giọng nói (STT)",
+            AiCapability.TextToSpeech => "Đọc câu hỏi (TTS)",
+            _ => "Câu hỏi phụ (LLM)"
+        };
+
+        var liveModels = await _connectionTester.TryListLiveModelsAsync(profile, ct);
+        var suggestion = GeminiModels.SuggestModel(capability, name, liveModels ?? GeminiModels.KnownModels) ?? GeminiModels.DefaultFor(capability);
+
+        if (!GeminiModels.IsSuitableFor(capability, name))
+        {
+            var reason = capability == AiCapability.TextToSpeech
+                ? "không phải model đọc giọng nói (tên model TTS của Gemini có chữ \"tts\")"
+                : "là model đọc giọng nói (TTS), không dùng được cho năng lực này";
+            ModelState.AddModelError(field, $"{capabilityName}: model '{name}' {reason}. Gợi ý: '{suggestion}'.");
+            return;
+        }
+
+        if (liveModels is { Count: > 0 } && !liveModels.Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            ModelState.AddModelError(field,
+                $"{capabilityName}: model '{name}' không có trong danh sách model của hồ sơ '{profile.Name}' (theo ListModels). Gợi ý: '{suggestion}'.");
+        }
     }
 
     private static bool IsLikelyOpenAiModel(string? model)

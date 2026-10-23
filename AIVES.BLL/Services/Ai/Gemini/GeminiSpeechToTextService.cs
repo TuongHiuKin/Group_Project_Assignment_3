@@ -33,7 +33,7 @@ public sealed class GeminiSpeechToTextService : ISpeechToTextService
         _retryDelays = retryDelays ?? GeminiRetryPolicy.DefaultDelays;
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
-        _model = string.IsNullOrWhiteSpace(model) ? "gemini-1.5-flash" : model;
+        _model = string.IsNullOrWhiteSpace(model) ? GeminiModels.DefaultSpeechToText : model;
         _timeoutSeconds = timeoutSeconds > 0 ? timeoutSeconds : 35;
         _logger = logger;
         _fallbackService = fallbackService;

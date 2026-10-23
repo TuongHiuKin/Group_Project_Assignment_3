@@ -35,7 +35,7 @@ public sealed class GeminiFollowUpGeneratorService : IFollowUpGeneratorService
         _retryDelays = retryDelays ?? GeminiRetryPolicy.DefaultDelays;
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
-        _model = string.IsNullOrWhiteSpace(model) ? "gemini-1.5-flash" : model;
+        _model = string.IsNullOrWhiteSpace(model) ? GeminiModels.DefaultFollowUp : model;
         _validator = validator ?? new FollowUpPolicyValidator();
         _timeoutSeconds = timeoutSeconds > 0 ? timeoutSeconds : 30;
         _logger = logger;

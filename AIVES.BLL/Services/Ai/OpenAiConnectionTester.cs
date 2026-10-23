@@ -116,4 +116,25 @@ public sealed class OpenAiConnectionTester : IAiConnectionTester
             return Array.Empty<string>();
         }
     }
+
+    public async Task<IReadOnlyList<string>?> TryListLiveModelsAsync(AiProviderProfile profile, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+
+        // Only Gemini distinguishes a live model list from its built-in fallback list.
+        if (_registry.GetAdapter(profile.Kind) is not GeminiProviderAdapter gemini)
+        {
+            return null;
+        }
+
+        try
+        {
+            return await gemini.TryListLiveModelsAsync(_httpClient, profile, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Failed to list live models for profile {ProfileId}", profile.Id);
+            return null;
+        }
+    }
 }

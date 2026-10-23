@@ -312,10 +312,10 @@ public sealed class AdminAiSettingsTests : IClassFixture<AdminAiSettingsTests.Ad
 
         Assert.IsType<RedirectToPageResult>(result);
         var updated = fakeStore.GetConfiguration();
-        Assert.Equal("gemini-1.5-flash", updated.Routing.Stt.Model);
-        Assert.Equal("gemini-2.0-flash", updated.Routing.Tts.Model);
+        Assert.Equal("gemini-3.8-flash", updated.Routing.Stt.Model);
+        Assert.Equal("gemini-3.8-flash-tts", updated.Routing.Tts.Model);
         Assert.Equal("Puck", updated.Routing.Tts.Voice);
-        Assert.Equal("gemini-1.5-flash", updated.Routing.Llm.Model);
+        Assert.Equal("gemini-3.8-flash", updated.Routing.Llm.Model);
     }
 
     [Fact]
@@ -383,10 +383,10 @@ public sealed class AdminAiSettingsTests : IClassFixture<AdminAiSettingsTests.Ad
         Assert.True(model.ModelState.IsValid);
 
         var saved = fakeStore.GetConfiguration();
-        Assert.Equal("gemini-1.5-flash", saved.Routing.Stt.Model);
-        Assert.Equal("gemini-2.0-flash", saved.Routing.Tts.Model);
+        Assert.Equal("gemini-3.8-flash", saved.Routing.Stt.Model);
+        Assert.Equal("gemini-3.8-flash-tts", saved.Routing.Tts.Model);
         Assert.Equal("Puck", saved.Routing.Tts.Voice);
-        Assert.Equal("gemini-1.5-flash", saved.Routing.Llm.Model);
+        Assert.Equal("gemini-3.8-flash", saved.Routing.Llm.Model);
     }
 
     [Fact]
@@ -550,6 +550,157 @@ public sealed class AdminAiSettingsTests : IClassFixture<AdminAiSettingsTests.Ad
 
         public Task<IReadOnlyList<string>> ListModelsAsync(AIVES.BLL.Models.Ai.AiProviderProfile profile, CancellationToken ct = default) =>
             Task.FromResult<IReadOnlyList<string>>(["gpt-4o-mini", "gemini-2.5-flash"]);
+    }
+
+    /// <summary>Returns a fixed "live" ListModels result for Gemini profiles (no network).</summary>
+    private sealed class LiveModelsConnectionTester(IReadOnlyList<string>? liveModels) : IAiConnectionTester
+    {
+        public Task<(bool Ok, string Message)> TestConnectionAsync(CancellationToken ct = default) => Task.FromResult((true, "OK"));
+        public Task<(bool Ok, string Message)> TestProfileAsync(AIVES.BLL.Models.Ai.AiProviderProfile profile, CancellationToken ct = default) => Task.FromResult((true, "OK"));
+        public Task<IReadOnlyList<string>> ListModelsAsync(AIVES.BLL.Models.Ai.AiProviderProfile profile, CancellationToken ct = default) =>
+            Task.FromResult(liveModels ?? (IReadOnlyList<string>)Array.Empty<string>());
+        public Task<IReadOnlyList<string>?> TryListLiveModelsAsync(AIVES.BLL.Models.Ai.AiProviderProfile profile, CancellationToken ct = default) =>
+            Task.FromResult(liveModels);
+    }
+
+    private static AIVES.BLL.Models.Ai.AiConfigurationModel GeminiOnlyConfig() => new()
+    {
+        UseRealAi = true,
+        Profiles =
+        [
+            new AIVES.BLL.Models.Ai.AiProviderProfile
+            {
+                Id = "gemini-profile",
+                Name = "Google Gemini",
+                Kind = AIVES.BLL.Models.Ai.AiProviderKinds.Gemini,
+                ApiKey = "AIzaSyTest1234567890",
+                BaseUrl = "https://generativelanguage.googleapis.com/v1beta",
+                CustomCapabilities = AIVES.BLL.Models.Ai.AiCapability.All
+            }
+        ],
+        Routing = new AIVES.BLL.Models.Ai.AiCapabilityRouting
+        {
+            Stt = new AIVES.BLL.Models.Ai.AiCapabilityTarget { ProfileId = "gemini-profile", Model = "gemini-3.8-flash" },
+            Tts = new AIVES.BLL.Models.Ai.AiTtsCapabilityTarget { ProfileId = "gemini-profile", Model = "gemini-3.8-flash-tts", Voice = "Kore" },
+            Llm = new AIVES.BLL.Models.Ai.AiCapabilityTarget { ProfileId = "gemini-profile", Model = "gemini-3.8-flash" }
+        }
+    };
+
+    private static readonly string[] KienLiveModels = ["gemini-3.8-flash", "gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts", "gemini-3.5-flash", "gemini-3.5-flash-lite"];
+
+    private static AiSettingsModel.RoutingInputModel GeminiRouting(string stt, string tts, string llm) => new()
+    {
+        UseRealAi = true,
+        SttProfileId = "gemini-profile", SttModel = stt,
+        TtsProfileId = "gemini-profile", TtsModel = tts, TtsVoice = "Puck",
+        LlmProfileId = "gemini-profile", LlmModel = llm
+    };
+
+    [Fact]
+    public async Task OnPostSaveRouting_GeminiModelNotInLiveList_AddsErrorWithSuggestionAndDoesNotSave()
+    {
+        var fakeStore = new InMemoryCredentialStore("AIzaSyTest1234567890", useRealAi: true, GeminiOnlyConfig());
+        var model = CreatePageModel(fakeStore, new LiveModelsConnectionTester(KienLiveModels));
+        model.RoutingInput = GeminiRouting("gemini-3.8-flash", "gemini-3.8-flash-preview-tts", "gemini-1.5-flash");
+
+        var result = await model.OnPostSaveRoutingAsync();
+
+        Assert.IsType<PageResult>(result);
+        Assert.False(fakeStore.SaveCalled);
+        var ttsError = Assert.Single(model.ModelState["RoutingInput.TtsModel"]!.Errors).ErrorMessage;
+        Assert.Contains("'gemini-3.8-flash-preview-tts' không có trong danh sách model", ttsError);
+        Assert.Contains("Gợi ý: 'gemini-3.8-flash-tts'", ttsError);
+        var llmError = Assert.Single(model.ModelState["RoutingInput.LlmModel"]!.Errors).ErrorMessage;
+        Assert.Contains("Gợi ý: 'gemini-", llmError);
+        Assert.False(model.ModelState.ContainsKey("RoutingInput.SttModel"));
+        Assert.Equal("gemini-3.8-flash-preview-tts", model.RoutingInput.TtsModel); // user input kept on the page
+    }
+
+    [Theory]
+    [InlineData("gemini-2.0-flash", "RoutingInput.TtsModel", "không phải model đọc giọng nói")]
+    [InlineData("gemini-3.8-flash-tts", "RoutingInput.SttModel", "là model đọc giọng nói (TTS)")]
+    public async Task OnPostSaveRouting_GeminiModelForWrongCapability_AddsError(string wrongModel, string field, string expected)
+    {
+        var fakeStore = new InMemoryCredentialStore("AIzaSyTest1234567890", useRealAi: true, GeminiOnlyConfig());
+        var model = CreatePageModel(fakeStore, new DummyConnectionTester(true, "OK")); // no live list available
+        model.RoutingInput = field == "RoutingInput.TtsModel"
+            ? GeminiRouting("gemini-3.8-flash", wrongModel, "gemini-3.8-flash")
+            : GeminiRouting(wrongModel, "gemini-3.8-flash-tts", "gemini-3.8-flash");
+
+        var result = await model.OnPostSaveRoutingAsync();
+
+        Assert.IsType<PageResult>(result);
+        Assert.Contains(expected, Assert.Single(model.ModelState[field]!.Errors).ErrorMessage);
+        Assert.False(fakeStore.SaveCalled);
+    }
+
+    [Fact]
+    public async Task OnPostSaveRouting_GeminiModelsInLiveList_Saves()
+    {
+        var fakeStore = new InMemoryCredentialStore("AIzaSyTest1234567890", useRealAi: true, GeminiOnlyConfig());
+        var model = CreatePageModel(fakeStore, new LiveModelsConnectionTester(KienLiveModels));
+        model.RoutingInput = GeminiRouting("gemini-3.8-flash", "gemini-3.8-flash-lite-tts", "gemini-3.5-flash");
+
+        var result = await model.OnPostSaveRoutingAsync();
+
+        Assert.IsType<RedirectToPageResult>(result);
+        var saved = fakeStore.GetConfiguration();
+        Assert.Equal("gemini-3.8-flash-lite-tts", saved.Routing.Tts.Model);
+        Assert.Equal("gemini-3.5-flash", saved.Routing.Llm.Model);
+    }
+
+    [Fact]
+    public async Task OnPostSaveProfile_SameKind_KeepsValidRoutedModels()
+    {
+        var fakeStore = new InMemoryCredentialStore("AIzaSyTest1234567890", useRealAi: true, GeminiOnlyConfig());
+        var model = CreatePageModel(fakeStore, new DummyConnectionTester(true, "OK"));
+        model.ProfileInput = new AiSettingsModel.ProfileInputModel
+        {
+            Id = "gemini-profile",
+            Name = "Google Gemini (renamed)",
+            Kind = AIVES.BLL.Models.Ai.AiProviderKinds.Gemini,
+            BaseUrl = "https://generativelanguage.googleapis.com/v1beta"
+        };
+
+        var result = await model.OnPostSaveProfileAsync();
+
+        Assert.IsType<RedirectToPageResult>(result);
+        var saved = fakeStore.GetConfiguration();
+        Assert.Equal("gemini-3.8-flash", saved.Routing.Stt.Model);
+        Assert.Equal("gemini-3.8-flash-tts", saved.Routing.Tts.Model);
+        Assert.Equal("Kore", saved.Routing.Tts.Voice);
+        Assert.Equal("gemini-3.8-flash", saved.Routing.Llm.Model);
+    }
+
+    [Fact]
+    public async Task OnPostSaveProfile_KindChange_KeepsModelsStillCompatibleWithNewKind()
+    {
+        var config = new AIVES.BLL.Models.Ai.AiConfigurationModel
+        {
+            UseRealAi = true,
+            Profiles =
+            [
+                new AIVES.BLL.Models.Ai.AiProviderProfile
+                {
+                    Id = "p1", Name = "Proxy", Kind = AIVES.BLL.Models.Ai.AiProviderKinds.OpenAiCompatible,
+                    ApiKey = "sk-1234567890", BaseUrl = "https://proxy.example/v1", CustomCapabilities = AIVES.BLL.Models.Ai.AiCapability.All
+                }
+            ],
+            Routing = new AIVES.BLL.Models.Ai.AiCapabilityRouting
+            {
+                Llm = new AIVES.BLL.Models.Ai.AiCapabilityTarget { ProfileId = "p1", Model = "gpt-4o" }
+            }
+        };
+        var fakeStore = new InMemoryCredentialStore("sk-1234567890", useRealAi: true, config);
+        var model = CreatePageModel(fakeStore, new DummyConnectionTester(true, "OK"));
+        model.ProfileInput = new AiSettingsModel.ProfileInputModel
+        {
+            Id = "p1", Name = "OpenAI", Kind = AIVES.BLL.Models.Ai.AiProviderKinds.OpenAi, BaseUrl = "https://api.openai.com/v1"
+        };
+
+        await model.OnPostSaveProfileAsync();
+
+        Assert.Equal("gpt-4o", fakeStore.GetConfiguration().Routing.Llm.Model);
     }
 
     private sealed class TempDataProviderStub : ITempDataProvider

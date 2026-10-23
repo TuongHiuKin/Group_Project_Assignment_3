@@ -19,13 +19,7 @@ public sealed class GeminiProviderAdapter : IAiProviderAdapter
 
     public AiCapability SupportedCapabilities => AiCapability.All;
 
-    public string GetDefaultModel(AiCapability capability) => capability switch
-    {
-        AiCapability.SpeechToText => "gemini-1.5-flash",
-        AiCapability.TextToSpeech => "gemini-2.0-flash",
-        AiCapability.FollowUpLlm => "gemini-1.5-flash",
-        _ => "gemini-1.5-flash"
-    };
+    public string GetDefaultModel(AiCapability capability) => GeminiModels.DefaultFor(capability);
 
     public ISpeechToTextService? CreateSpeechToTextService(IServiceProvider sp, AiProviderProfile profile, string model)
     {
@@ -144,10 +138,18 @@ public sealed class GeminiProviderAdapter : IAiProviderAdapter
 
     public async Task<IReadOnlyList<string>> ListModelsAsync(HttpClient httpClient, AiProviderProfile profile, CancellationToken ct = default)
     {
-        var fallbackModels = new List<string> { "gemini-3.5-flash-lite", "gemini-3.8-flash-tts", "gemini-3.5-flash", "gemini-3.8-flash", "gemini-flash-lite-latest" };
+        return await TryListLiveModelsAsync(httpClient, profile, ct).ConfigureAwait(false) ?? GeminiModels.KnownModels;
+    }
+
+    /// <summary>
+    /// Danh sách model thật từ Gemini <c>GET /models</c>; null khi không lấy được (thiếu key, lỗi mạng, HTTP lỗi),
+    /// để nơi kiểm tra hợp lệ không nhầm danh sách dự phòng là danh sách thật.
+    /// </summary>
+    public async Task<IReadOnlyList<string>?> TryListLiveModelsAsync(HttpClient httpClient, AiProviderProfile profile, CancellationToken ct = default)
+    {
         if (string.IsNullOrWhiteSpace(profile.ApiKey))
         {
-            return fallbackModels;
+            return null;
         }
 
         var baseUrl = string.IsNullOrWhiteSpace(profile.BaseUrl)
@@ -166,7 +168,7 @@ public sealed class GeminiProviderAdapter : IAiProviderAdapter
             var response = await httpClient.SendAsync(request, linkedCts.Token).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
-                return fallbackModels;
+                return null;
             }
 
             var body = await response.Content.ReadAsStringAsync(linkedCts.Token).ConfigureAwait(false);
@@ -197,12 +199,12 @@ public sealed class GeminiProviderAdapter : IAiProviderAdapter
                 }
             }
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            // Fall back to known models
+            // Caller decides whether to fall back to known models.
         }
 
-        return fallbackModels;
+        return null;
     }
 
     private static string? ExtractErrorMessage(string? json)
