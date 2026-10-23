@@ -18,6 +18,10 @@ public sealed class QuestionRubric
     public string QuestionId { get; init; } = string.Empty;
     public string ExamId { get; init; } = string.Empty;
     public string Title { get; init; } = string.Empty;
+
+    /// <summary>Mức nhận thức theo thang Bloom do giảng viên gắn cho câu hỏi (Nhớ, Hiểu, Vận dụng, Phân tích).</summary>
+    public string BloomLevel { get; init; } = string.Empty;
+
     public decimal MaxScore { get; init; } = 10.0m;
     public IReadOnlyList<RubricCriterion> Criteria { get; init; } = Array.Empty<RubricCriterion>();
 

@@ -114,7 +114,7 @@
             </div>
         </div>
 
-        <!-- 2.5. Tiêu chí chấm điểm theo Rubric từ khóa (nguồn: RubricCatalog trong BLL) -->
+        <!-- 2.5. Thiết lập chấm điểm cho AI theo Rubric (dữ liệu mô phỏng: RubricCatalog trong BLL) -->
         <div class="viva-panel-card p-4 mb-4 border-0 shadow-sm" style="background: #ffffff; border-radius: 18px; border: 1px solid #e2e8f0;">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3 pb-3 border-bottom">
                 <div>
@@ -124,12 +124,12 @@
                         </span>
                         <span class="badge tag-purple">BỘ TIÊU CHÍ KHẢO THÍ ĐỀ @defaultExam</span>
                     </div>
-                    <h5 class="fw-bold mb-1 text-dark">Tiêu chí Chấm điểm Vấn đáp theo Rubric</h5>
-                    <p class="text-secondary small mb-0">Transcript câu trả lời được so khớp với nhóm từ khóa của từng tiêu chí. Điểm câu = tổng trọng số tiêu chí đạt quy về thang 10.</p>
+                    <h5 class="fw-bold mb-1 text-dark">Thiết lập Chấm điểm cho AI theo Rubric</h5>
+                    <p class="text-secondary small mb-0">AI chấm gợi ý từng câu theo các tiêu chí, trọng số dưới đây; điểm câu = tổng trọng số tiêu chí đạt quy về thang 10. Giảng viên là người chốt điểm cuối cùng.</p>
                 </div>
                 <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-white text-secondary border rounded-pill px-3 py-2 fw-semibold" title="Mức demo, không phải chấm AI nâng cao (Nhóm 4)">
-                        <i class="bi bi-info-circle me-1"></i> Chấm tự động theo Rubric từ khóa
+                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-3 py-2 fw-semibold" title="Nhóm 1 (ngân hàng câu hỏi & rubric) và Nhóm 4 (AI chấm điểm) chưa triển khai: thiết lập và điểm AI là dữ liệu mô phỏng">
+                        <i class="bi bi-info-circle me-1"></i> Dữ liệu mô phỏng
                     </span>
                 </div>
             </div>
@@ -149,7 +149,11 @@
                                     <span class="badge tag-purple fw-bold">@rubric.QuestionId</span>
                                     <span class="badge bg-white text-dark border">Thang điểm: @rubric.MaxScore.ToString("0.#")</span>
                                 </div>
-                                <h6 class="fw-bold text-dark mb-2">@rubric.Title</h6>
+                                <h6 class="fw-bold text-dark mb-1">@rubric.Title</h6>
+                                @if (!string.IsNullOrWhiteSpace(rubric.BloomLevel))
+                                {
+                                    <div class="small mb-2"><span class="badge bg-info-subtle text-info-emphasis border border-info-subtle"><i class="bi bi-diagram-3-fill me-1"></i>Bloom: @rubric.BloomLevel</span></div>
+                                }
                                 <div class="small text-secondary mb-3">Các ý trọng tâm được chấm:</div>
                                 <ul class="list-unstyled small mb-0 vstack gap-2">
                                     @for (var i = 0; i < rubric.Criteria.Count; i++)

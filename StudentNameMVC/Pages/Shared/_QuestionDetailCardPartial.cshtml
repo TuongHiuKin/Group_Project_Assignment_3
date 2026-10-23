@@ -115,7 +115,7 @@
             <div class="aives-block-heading">
                 <span class="aives-block-badge-num">4</span>
                 <span>Đánh giá chi tiết & Điểm số đạt được</span>
-                <span class="badge bg-white text-secondary border ms-2 fw-normal" title="Mức demo: so khớp từ khóa trong transcript với Rubric, không phải chấm AI nâng cao">Chấm tự động theo Rubric từ khóa</span>
+                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-2 fw-normal" title="Nhóm 4 (AI chấm điểm) chưa triển khai: điểm và nhận xét AI được mô phỏng từ Rubric giảng viên thiết lập">AI chấm gợi ý (mô phỏng)</span>
             </div>
 
             <!-- Thanh Huy hiệu Điểm số & Trạng thái -->
@@ -162,8 +162,8 @@
                 else if (!isPassFailMode)
                 {
                     <div class="d-flex flex-wrap align-items-center gap-2">
-                        <span class="badge tag-purple rounded-pill px-3 py-2" title="Điểm chấm tự động theo Rubric từ khóa">
-                            <i class="bi bi-card-checklist me-1"></i>Rubric tự động: <strong>@Model.AiSuggestedScore / @Model.MaxScore</strong>
+                        <span class="badge tag-purple rounded-pill px-3 py-2" title="Điểm AI gợi ý (mô phỏng theo Rubric giảng viên)">
+                            <i class="bi bi-card-checklist me-1"></i>AI gợi ý: <strong>@Model.AiSuggestedScore / @Model.MaxScore</strong>
                         </span>
                         @if (Model.TeacherFinalScore > 0)
                         {
@@ -183,7 +183,7 @@
             {
                 <div class="aives-feedback-box mb-3">
                     <div class="fw-bold text-dark mb-1 d-flex align-items-center gap-1">
-                        <i class="bi bi-chat-square-dots-fill text-primary"></i> Nhận xét tự động:
+                        <i class="bi bi-chat-square-dots-fill text-primary"></i> Nhận xét của AI:
                     </div>
                     <p class="mb-0 text-dark lh-base">@Model.AiFeedback</p>
                 </div>

@@ -3,7 +3,8 @@ using AIVES.BLL.Models.ExamReporting;
 namespace AIVES.BLL.Services.ExamReporting;
 
 /// <summary>
-/// Nguồn Rubric duy nhất của đề EXAM01. LecturerDashboard và RubricGradingService đều đọc từ đây.
+/// Dữ liệu mô phỏng thiết lập chấm điểm của giảng viên cho đề EXAM01 (Nhóm 1 và 4 chưa triển khai):
+/// mức Bloom, tiêu chí, trọng số và từ khóa của từng câu. LecturerDashboard và RubricGradingService đều đọc từ đây.
 /// Từ khóa viết tự nhiên (có dấu, tiếng Việt và tiếng Anh); khi chấm sẽ được chuẩn hóa bỏ dấu và chữ thường.
 /// </summary>
 public static class RubricCatalog
@@ -15,6 +16,7 @@ public static class RubricCatalog
             QuestionId = "EXAM01-Q01",
             ExamId = "EXAM01",
             Title = "DbContext Lifetime & Entity Tracker",
+            BloomLevel = "Phân tích",
             Criteria = new List<RubricCriterion>
             {
                 new()
@@ -63,6 +65,7 @@ public static class RubricCatalog
             QuestionId = "EXAM01-Q02",
             ExamId = "EXAM01",
             Title = "3-Layer Boundaries & Decoupling",
+            BloomLevel = "Hiểu",
             Criteria = new List<RubricCriterion>
             {
                 new()
@@ -111,6 +114,7 @@ public static class RubricCatalog
             QuestionId = "EXAM01-Q03",
             ExamId = "EXAM01",
             Title = "SignalR Group Security & Ownership",
+            BloomLevel = "Vận dụng",
             Criteria = new List<RubricCriterion>
             {
                 new()

@@ -232,7 +232,7 @@ public sealed class ExamReportRepository : IExamReportRepository
                 {
                     QuestionId = qGroup.Key,
                     QuestionTitle = qTitle,
-                    CognitiveLevel = "Vấn đáp AI",
+                    CognitiveLevel = _gradingService.GetRubric(qGroup.Key)?.BloomLevel is { Length: > 0 } bloom ? bloom : "Vấn đáp AI",
                     EarnedScore = 0m,
                     MaxScore = 10.0m,
                     PassThresholdScore = DefaultPassThresholdScore,
@@ -292,7 +292,6 @@ public sealed class ExamReportRepository : IExamReportRepository
 
     private static void ApplyGrading(QuestionResultDto questionResult, RubricGradingResult grading)
     {
-        questionResult.CognitiveLevel = "Chấm tự động theo Rubric từ khóa";
         questionResult.EarnedScore = grading.EarnedScore;
         questionResult.MaxScore = grading.MaxScore;
         questionResult.AiSuggestedScore = grading.EarnedScore;

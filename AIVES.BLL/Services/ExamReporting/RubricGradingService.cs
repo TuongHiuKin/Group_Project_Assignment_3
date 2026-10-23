@@ -16,6 +16,9 @@ public sealed class RubricGradingService : IRubricGradingService
 
     public const string NoRelevantAnswerFeedback = "Chưa có câu trả lời phù hợp (câu trả lời rỗng hoặc chỉ lặp lại câu hỏi).";
 
+    /// <summary>Nhóm 4 (AI chấm điểm) chưa triển khai: nhận xét là mô phỏng theo Rubric của giảng viên.</summary>
+    public const string FeedbackPrefix = "AI chấm gợi ý (mô phỏng theo Rubric của giảng viên): ";
+
     private readonly IReadOnlyList<QuestionRubric> _rubrics;
 
     public RubricGradingService() : this(RubricCatalog.All)
@@ -83,7 +86,16 @@ public sealed class RubricGradingService : IRubricGradingService
             weaknesses = string.Join(" ", rubric.Criteria
                 .Where(c => !outcomes.First(o => o.CriterionId == c.Id).IsMet)
                 .Select(c => $"Cần bổ sung: {c.ImprovementHint}"));
-            feedback = $"Chấm tự động theo Rubric từ khóa: đạt {metCount}/{rubric.Criteria.Count} tiêu chí, {earned:0.##}/{rubric.MaxScore:0.##} điểm.";
+            var missing = rubric.Criteria
+                .Where(c => !outcomes.First(o => o.CriterionId == c.Id).IsMet)
+                .Select(c => c.Name)
+                .ToList();
+            var verdict = missing.Count == 0
+                ? "Câu trả lời đầy đủ, bao quát hết các ý trọng tâm của giảng viên."
+                : earned >= passThresholdScore
+                    ? $"Câu trả lời khá tốt nhưng còn thiếu ý: {string.Join("; ", missing)}."
+                    : $"Câu trả lời chưa đạt, cần ôn lại các ý: {string.Join("; ", missing)}.";
+            feedback = $"{FeedbackPrefix}đạt {metCount}/{rubric.Criteria.Count} tiêu chí, {earned:0.##}/{rubric.MaxScore:0.##} điểm. {verdict}";
         }
 
         return new RubricGradingResult
