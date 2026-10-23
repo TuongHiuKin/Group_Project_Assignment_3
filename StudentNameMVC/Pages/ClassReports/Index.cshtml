@@ -404,11 +404,11 @@
                                     </td>
                                     <td class="text-muted small">@row.Note</td>
                                     <td class="text-center">
+                                        @* No attemptOrdinal: StudentDetail then selects the newest attempt by default. *@
                                         <a asp-page="/ClassReports/StudentDetail"
                                            asp-route-studentId="@row.StudentId"
                                            asp-route-classId="@selectedClassId"
                                            asp-route-examId="@selectedExamId"
-                                           asp-route-attemptOrdinal="@selectedAttemptOrdinal"
                                            class="table-action-btn" title="Xem chi tiết bài thi của sinh viên này">
                                             <i class="bi bi-arrow-up-right"></i>
                                         </a>
