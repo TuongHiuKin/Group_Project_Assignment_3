@@ -26,6 +26,7 @@ public sealed class VivaCompositionTests : IClassFixture<VivaCompositionTests.Co
                 ["VivaInterview:Enabled"] = "true",
                 ["AiServices:UseMock"] = "true",
                 ["AiServices:UseBrowserSpeechSynthesis"] = "false",
+                ["MockData:SeedOnStartup"] = "false",
                 ["AiServices:CredentialStorePath"] = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aives-mock-store-" + System.Guid.NewGuid() + ".json"),
                 ["ConnectionStrings:DefaultConnection"] = "Server=unused;Database=CompositionFixture;Integrated Security=true;TrustServerCertificate=true",
                 ["DefaultAdmin:Email"] = "composition@example.test",

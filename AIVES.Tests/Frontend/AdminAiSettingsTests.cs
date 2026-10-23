@@ -41,6 +41,7 @@ public sealed class AdminAiSettingsTests : IClassFixture<AdminAiSettingsTests.Ad
             {
                 ["VivaInterview:Enabled"] = "true",
                 ["AiServices:UseMock"] = "true",
+                ["MockData:SeedOnStartup"] = "false",
                 ["ConnectionStrings:DefaultConnection"] = "Server=unused;Database=AdminFixture;Integrated Security=true;TrustServerCertificate=true",
                 ["DefaultAdmin:Email"] = "admin@example.test",
                 ["DefaultAdmin:Password"] = "admin-password-test"
