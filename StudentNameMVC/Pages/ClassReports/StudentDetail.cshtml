@@ -79,8 +79,8 @@
                 @if (report.AverageScore.HasValue)
                 {
                     <h3 class="fw-bold text-success mb-0">@report.AverageScore.Value <span class="fs-6 text-muted">/ 10</span></h3>
-                    <span class="badge @(report.AverageScore.Value >= 6.0m ? "bg-success" : "bg-danger") rounded-pill px-3 mt-1">
-                        @(report.AverageScore.Value >= 6.0m ? "ĐẠT YÊU CẦU" : "CHƯA ĐẠT")
+                    <span class="badge @(report.AverageScore.Value >= report.PassThresholdScore ? "bg-success" : "bg-danger") rounded-pill px-3 mt-1">
+                        @(report.AverageScore.Value >= report.PassThresholdScore ? "ĐẠT YÊU CẦU" : "CHƯA ĐẠT")
                     </span>
                 }
                 else

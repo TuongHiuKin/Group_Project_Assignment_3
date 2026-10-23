@@ -1,4 +1,4 @@
-﻿@page "/Account/LecturerDashboard"
+@page "/Account/LecturerDashboard"
 @model StudentNameMVC.Pages.Account.LecturerDashboardModel
 @using AIVES.BLL.Security
 @{
@@ -114,106 +114,58 @@
             </div>
         </div>
 
-        <!-- 2.5. Mock Data Tiêu chí Chấm điểm Rubric & Chuẩn Đầu ra (AI Grading Rubric & Criteria) -->
+        <!-- 2.5. Tiêu chí chấm điểm theo Rubric từ khóa (nguồn: RubricCatalog trong BLL) -->
         <div class="viva-panel-card p-4 mb-4 border-0 shadow-sm" style="background: #ffffff; border-radius: 18px; border: 1px solid #e2e8f0;">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3 pb-3 border-bottom">
                 <div>
                     <div class="d-flex align-items-center gap-2 mb-1">
                         <span class="badge rounded-pill px-3 py-1 text-white" style="background: #0f766e;">
-                            <i class="bi bi-card-checklist me-1"></i> RUBRIC MOCK DATA
+                            <i class="bi bi-card-checklist me-1"></i> RUBRIC
                         </span>
                         <span class="badge tag-purple">BỘ TIÊU CHÍ KHẢO THÍ ĐỀ @defaultExam</span>
                     </div>
-                    <h5 class="fw-bold mb-1 text-dark">Tiêu chí Chấm điểm Vấn đáp AI theo Chuẩn Rubric</h5>
-                    <p class="text-secondary small mb-0">Hệ thống AI đối soát câu trả lời qua microphone của sinh viên căn cứ vào các ý trọng tâm do Giảng viên thiết lập.</p>
+                    <h5 class="fw-bold mb-1 text-dark">Tiêu chí Chấm điểm Vấn đáp theo Rubric</h5>
+                    <p class="text-secondary small mb-0">Transcript câu trả lời được so khớp với nhóm từ khóa của từng tiêu chí. Điểm câu = tổng trọng số tiêu chí đạt quy về thang 10.</p>
                 </div>
                 <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 rounded-pill px-3 py-2 fw-semibold">
-                        <i class="bi bi-check-circle-fill me-1"></i> Đã kích hoạt AI Auto-Grading
+                    <span class="badge bg-white text-secondary border rounded-pill px-3 py-2 fw-semibold" title="Mức demo, không phải chấm AI nâng cao (Nhóm 4)">
+                        <i class="bi bi-info-circle me-1"></i> Chấm tự động theo Rubric từ khóa
                     </span>
                 </div>
             </div>
 
-            <!-- 3 Question Rubric Cards Grid -->
-            <div class="row g-3">
-                <!-- Q01 Rubric -->
-                <div class="col-lg-4">
-                    <div class="p-3 rounded-4 h-100" style="background: #f8fafc; border: 1px solid #e2e8f0;">
-                        <div class="d-flex align-items-center justify-content-between mb-2">
-                            <span class="badge tag-purple fw-bold">EXAM01-Q01</span>
-                            <span class="badge bg-white text-dark border">Thang điểm: 10</span>
+            @if (Model.Rubrics.Count == 0)
+            {
+                <p class="text-muted small mb-0">Chưa có Rubric cho đề @defaultExam.</p>
+            }
+            else
+            {
+                <div class="row g-3">
+                    @foreach (var rubric in Model.Rubrics)
+                    {
+                        <div class="col-lg-4">
+                            <div class="p-3 rounded-4 h-100" style="background: #f8fafc; border: 1px solid #e2e8f0;">
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <span class="badge tag-purple fw-bold">@rubric.QuestionId</span>
+                                    <span class="badge bg-white text-dark border">Thang điểm: @rubric.MaxScore.ToString("0.#")</span>
+                                </div>
+                                <h6 class="fw-bold text-dark mb-2">@rubric.Title</h6>
+                                <div class="small text-secondary mb-3">Các ý trọng tâm được chấm:</div>
+                                <ul class="list-unstyled small mb-0 vstack gap-2">
+                                    @for (var i = 0; i < rubric.Criteria.Count; i++)
+                                    {
+                                        var criterion = rubric.Criteria[i];
+                                        <li class="d-flex align-items-start gap-2">
+                                            <i class="bi bi-dot text-primary"></i>
+                                            <span><strong>Ý @(i + 1) (@rubric.PointsFor(criterion).ToString("0.#")đ):</strong> @criterion.Description</span>
+                                        </li>
+                                    }
+                                </ul>
+                            </div>
                         </div>
-                        <h6 class="fw-bold text-dark mb-2">DbContext Lifetime & Entity Tracker</h6>
-                        <div class="small text-secondary mb-3">Các ý trọng tâm AI chấm điểm:</div>
-                        <ul class="list-unstyled small mb-0 vstack gap-2">
-                            <li class="d-flex align-items-start gap-2">
-                                <i class="bi bi-check-circle-fill text-success mt-0.5"></i>
-                                <span><strong>Ý 1 (3.5đ):</strong> Hiểu đúng Scoped lifetime theo từng HTTP request.</span>
-                            </li>
-                            <li class="d-flex align-items-start gap-2">
-                                <i class="bi bi-check-circle-fill text-success mt-0.5"></i>
-                                <span><strong>Ý 2 (3.5đ):</strong> Phân tích rò rỉ bộ nhớ do ChangeTracker giữ entity.</span>
-                            </li>
-                            <li class="d-flex align-items-start gap-2">
-                                <i class="bi bi-check-circle-fill text-success mt-0.5"></i>
-                                <span><strong>Ý 3 (3.0đ):</strong> Nêu rõ DbContext không an toàn đa luồng (non-thread-safe).</span>
-                            </li>
-                        </ul>
-                    </div>
+                    }
                 </div>
-
-                <!-- Q02 Rubric -->
-                <div class="col-lg-4">
-                    <div class="p-3 rounded-4 h-100" style="background: #f8fafc; border: 1px solid #e2e8f0;">
-                        <div class="d-flex align-items-center justify-content-between mb-2">
-                            <span class="badge tag-cyan fw-bold">EXAM01-Q02</span>
-                            <span class="badge bg-white text-dark border">Thang điểm: 10</span>
-                        </div>
-                        <h6 class="fw-bold text-dark mb-2">3-Layer Boundaries & Decoupling</h6>
-                        <div class="small text-secondary mb-3">Các ý trọng tâm AI chấm điểm:</div>
-                        <ul class="list-unstyled small mb-0 vstack gap-2">
-                            <li class="d-flex align-items-start gap-2">
-                                <i class="bi bi-check-circle-fill text-success mt-0.5"></i>
-                                <span><strong>Ý 1 (3.5đ):</strong> Tách biệt trách nhiệm (Separation of Concerns).</span>
-                            </li>
-                            <li class="d-flex align-items-start gap-2">
-                                <i class="bi bi-check-circle-fill text-success mt-0.5"></i>
-                                <span><strong>Ý 2 (3.5đ):</strong> Tránh rò rỉ EF Core vào UI (loose coupling).</span>
-                            </li>
-                            <li class="d-flex align-items-start gap-2">
-                                <i class="bi bi-check-circle-fill text-success mt-0.5"></i>
-                                <span><strong>Ý 3 (3.0đ):</strong> BLL nắm giữ toàn vẹn nghiệp vụ và validation.</span>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-
-                <!-- Q03 Rubric -->
-                <div class="col-lg-4">
-                    <div class="p-3 rounded-4 h-100" style="background: #f8fafc; border: 1px solid #e2e8f0;">
-                        <div class="d-flex align-items-center justify-content-between mb-2">
-                            <span class="badge tag-pink fw-bold">EXAM01-Q03</span>
-                            <span class="badge bg-white text-dark border">Thang điểm: 10</span>
-                        </div>
-                        <h6 class="fw-bold text-dark mb-2">SignalR Group Security & Ownership</h6>
-                        <div class="small text-secondary mb-3">Các ý trọng tâm AI chấm điểm:</div>
-                        <ul class="list-unstyled small mb-0 vstack gap-2">
-                            <li class="d-flex align-items-start gap-2">
-                                <i class="bi bi-check-circle-fill text-success mt-0.5"></i>
-                                <span><strong>Ý 1 (3.5đ):</strong> Xác thực danh tính sinh viên qua ClaimsPrincipal.</span>
-                            </li>
-                            <li class="d-flex align-items-start gap-2">
-                                <i class="bi bi-check-circle-fill text-success mt-0.5"></i>
-                                <span><strong>Ý 2 (3.5đ):</strong> Kiểm tra quyền sở hữu SessionId trước khi JoinGroup.</span>
-                            </li>
-                            <li class="d-flex align-items-start gap-2">
-                                <i class="bi bi-check-circle-fill text-success mt-0.5"></i>
-                                <span><strong>Ý 3 (3.0đ):</strong> Quản lý vòng đời kết nối an toàn thời gian thực.</span>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
+            }
         </div>
 
         <!-- 3. Các lớp học phần phụ trách -->

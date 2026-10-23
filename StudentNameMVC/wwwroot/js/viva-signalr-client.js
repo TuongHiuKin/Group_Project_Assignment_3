@@ -453,7 +453,8 @@ class VivaExamClient {
 
         if (this.el.transcriptConfidence && transcript.confidenceScore !== undefined) {
             const pct = Math.round(transcript.confidenceScore * 100);
-            this.el.transcriptConfidence.textContent = `Độ tin cậy: ${pct}%`;
+            // Gemini does not return a confidence score; the server sends a fixed estimate.
+            this.el.transcriptConfidence.textContent = `Độ tin cậy (ước lượng): ${pct}%`;
             this.el.transcriptConfidence.className = 'badge ' + (pct >= 80 ? 'bg-success' : (pct >= 50 ? 'bg-warning text-dark' : 'bg-danger'));
         }
     }
