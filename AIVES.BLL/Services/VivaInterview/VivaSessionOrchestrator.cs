@@ -18,8 +18,15 @@ namespace AIVES.BLL.Services.VivaInterview;
 /// </summary>
 public class VivaSessionOrchestrator : IVivaSessionOrchestrator
 {
-    private const int DefaultMaxTurnsAllowed = 2;
+    /// <summary>Each question gets the primary answer plus one follow-up; then the exam moves to the next question.</summary>
+    public const int MaxTurnsPerQuestion = 2;
     private const int MaxAudioSizeBytes = 25 * 1024 * 1024; // 25 MB
+
+    /// <summary>Total turns a session may take: every question of the exam times <see cref="MaxTurnsPerQuestion"/>.</summary>
+    public static int SessionMaxTurns(int questionCount) => Math.Max(1, questionCount) * MaxTurnsPerQuestion;
+
+    private async Task<int> GetSessionMaxTurnsAsync(string examId, CancellationToken ct) =>
+        SessionMaxTurns((await _questionRepo.GetQuestionsByExamAsync(examId, ct))?.Count ?? 0);
 
     private readonly IVivaSessionRepository _sessionRepo;
     private readonly IVivaQuestionRepository _questionRepo;
@@ -74,6 +81,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
 
         // 1. Persistence First
         await _sessionRepo.CreateSessionAsync(session, ct);
+        var maxTurns = await GetSessionMaxTurnsAsync(examId, ct);
 
         var statusDto = new VivaSessionStatusDto(
             SessionId: session.SessionId,
@@ -81,7 +89,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
             StudentId: session.StudentId,
             State: VivaSessionState.Created,
             CurrentTurnOrdinal: 0,
-            MaxTurnsAllowed: DefaultMaxTurnsAllowed,
+            MaxTurnsAllowed: maxTurns,
             UpdatedAtUtc: DateTime.UtcNow,
             Message: "Session created successfully."
         );
@@ -130,6 +138,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         }
 
         var initialQuestion = questions.OrderBy(q => q.QuestionId, StringComparer.Ordinal).First();
+        var maxTurns = SessionMaxTurns(questions.Count);
 
         // Synthesize TTS audio if not already available
         string? audioUrl = initialQuestion.AudioUrl;
@@ -169,7 +178,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
             StudentId: session.StudentId,
             State: VivaSessionState.QuestionDelivered,
             CurrentTurnOrdinal: 1,
-            MaxTurnsAllowed: DefaultMaxTurnsAllowed,
+            MaxTurnsAllowed: maxTurns,
             UpdatedAtUtc: DateTime.UtcNow,
             Message: $"Question {initialQuestion.QuestionId} delivered."
         );
@@ -221,13 +230,14 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
             await _sessionRepo.UpdateStateAsync(submission.SessionId, (byte)VivaSessionState.Transcribing, ct);
             _timers?.Stop(submission.SessionId);
         }
+        var maxTurns = await GetSessionMaxTurnsAsync(session.ExamId, ct);
         await _publisher.PublishStatusChangedAsync(new VivaSessionStatusDto(
             SessionId: submission.SessionId,
             ExamId: session.ExamId,
             StudentId: session.StudentId,
             State: VivaSessionState.Transcribing,
             CurrentTurnOrdinal: 1,
-            MaxTurnsAllowed: DefaultMaxTurnsAllowed,
+            MaxTurnsAllowed: maxTurns,
             UpdatedAtUtc: DateTime.UtcNow,
             Message: "Transcribing student audio..."
         ), ct);
@@ -254,7 +264,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
                     await _sessionRepo.UpdateStateAsync(submission.SessionId, (byte)retryState, ct);
                     if (canRetry) _timers.Resume(acceptedDeadline, secondsLeftAtSubmit);
                     await _publisher.PublishStatusChangedAsync(new(submission.SessionId, session.ExamId, session.StudentId,
-                        retryState, 1, DefaultMaxTurnsAllowed, DateTime.UtcNow), ct);
+                        retryState, 1, maxTurns, DateTime.UtcNow), ct);
                 }
             }
             _logger.LogError("STT processing failed for Session: {SessionId}. Error: {Error}", submission.SessionId, sttResult.ErrorMessage);
@@ -307,7 +317,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
             StudentId: session.StudentId,
             State: VivaSessionState.TranscriptReady,
             CurrentTurnOrdinal: turnOrdinal,
-            MaxTurnsAllowed: DefaultMaxTurnsAllowed,
+            MaxTurnsAllowed: maxTurns,
             UpdatedAtUtc: DateTime.UtcNow,
             Message: "Transcript ready."
         ), ct);
@@ -328,13 +338,19 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         if (turn.SessionId != sessionId)
             throw new InvalidOperationException("Turn does not belong to this examination session.");
 
-        // Rule: Follow-Up Count Limit (Max 1-2 turns)
         var turnCount = await _turnRepo.GetTurnCountForSessionAsync(sessionId, ct);
-        if (turnCount >= DefaultMaxTurnsAllowed)
+        var questions = (await _questionRepo.GetQuestionsByExamAsync(session.ExamId, ct) ?? new())
+            .OrderBy(q => q.QuestionId, StringComparer.Ordinal).ToList();
+        var maxTurns = SessionMaxTurns(questions.Count);
+
+        // Rule: Follow-Up Count Limit per question (primary answer + 1 follow-up), then the next question.
+        var details = await _sessionRepo.GetWithDetailsAsync(sessionId, ct);
+        var questionTurns = details?.Turns.Count(t => t.QuestionId == turn.QuestionId) ?? 0;
+        if (questionTurns >= MaxTurnsPerQuestion)
         {
-            _logger.LogInformation("Session {SessionId} reached maximum allowed turns ({MaxTurns}). Concluding session.",
-                sessionId, DefaultMaxTurnsAllowed);
-            await CompleteSessionAsync(sessionId, ct);
+            _logger.LogInformation("Session {SessionId} reached {MaxTurns} turns for question {QuestionId}.",
+                sessionId, MaxTurnsPerQuestion, turn.QuestionId);
+            await AdvanceToNextQuestionAsync(session, turn.QuestionId, questions, turnCount, maxTurns, ct);
             return null;
         }
 
@@ -349,7 +365,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
             StudentId: session.StudentId,
             State: VivaSessionState.FollowUpGenerating,
             CurrentTurnOrdinal: turnCount,
-            MaxTurnsAllowed: DefaultMaxTurnsAllowed,
+            MaxTurnsAllowed: maxTurns,
             UpdatedAtUtc: DateTime.UtcNow,
             Message: "Generating follow-up question..."
         ), ct);
@@ -376,14 +392,14 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         {
             // Infrastructure failure (429/503, timeout, unavailable provider): keep the session open and let the
             // student retry or finish instead of silently completing at turn 1/2.
-            await ReportFollowUpFailureAsync(session, turnCount, followUpResult.ErrorMessage, ct);
+            await ReportFollowUpFailureAsync(session, turnCount, maxTurns, followUpResult.ErrorMessage, ct);
             return null;
         }
 
         if (string.IsNullOrWhiteSpace(followUpResult.FollowUpQuestionText))
         {
-            _logger.LogInformation("Follow-up generator returned no question. Completing session {SessionId}.", sessionId);
-            await CompleteSessionAsync(sessionId, ct);
+            _logger.LogInformation("Follow-up generator returned no question for session {SessionId}.", sessionId);
+            await AdvanceToNextQuestionAsync(session, turn.QuestionId, questions, turnCount, maxTurns, ct);
             return null;
         }
 
@@ -425,7 +441,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
             StudentId: session.StudentId,
             State: VivaSessionState.FollowUpDelivered,
             CurrentTurnOrdinal: followUpOrdinal,
-            MaxTurnsAllowed: DefaultMaxTurnsAllowed,
+            MaxTurnsAllowed: maxTurns,
             UpdatedAtUtc: DateTime.UtcNow,
             Message: "Follow-up question delivered."
         ), ct);
@@ -433,9 +449,40 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         return followUpDto;
     }
 
+    /// <summary>
+    /// Delivers the exam's next question (ordered by QuestionId), or completes the session after the last one.
+    /// The client reloads the snapshot on QuestionDelivered to read the new question.
+    /// </summary>
+    private async Task AdvanceToNextQuestionAsync(VivaSession session, string currentQuestionId,
+        IReadOnlyList<VivaQuestion> orderedQuestions, int turnCount, int maxTurns, CancellationToken ct)
+    {
+        var next = orderedQuestions.FirstOrDefault(q => string.CompareOrdinal(q.QuestionId, currentQuestionId) > 0);
+        if (next is null)
+        {
+            _logger.LogInformation("Session {SessionId} answered the last question. Concluding session.", session.SessionId);
+            await CompleteSessionAsync(session.SessionId, ct);
+            return;
+        }
+
+        // 1. Persistence First
+        await _sessionRepo.UpdateStateAsync(session.SessionId, (byte)VivaSessionState.QuestionDelivered, ct);
+
+        // 2. Realtime Broadcast
+        await _publisher.PublishStatusChangedAsync(new VivaSessionStatusDto(
+            SessionId: session.SessionId,
+            ExamId: session.ExamId,
+            StudentId: session.StudentId,
+            State: VivaSessionState.QuestionDelivered,
+            CurrentTurnOrdinal: turnCount,
+            MaxTurnsAllowed: maxTurns,
+            UpdatedAtUtc: DateTime.UtcNow,
+            Message: $"Question {next.QuestionId} delivered."
+        ), ct);
+    }
+
     public const string FollowUpFailedErrorCode = "FOLLOWUP_GENERATION_FAILED";
 
-    private async Task ReportFollowUpFailureAsync(VivaSession session, int turnCount, string? providerError, CancellationToken ct)
+    private async Task ReportFollowUpFailureAsync(VivaSession session, int turnCount, int maxTurns, string? providerError, CancellationToken ct)
     {
         _logger.LogWarning("Follow-up generation failed for Session {SessionId}: {Error}. Session kept open for retry.",
             session.SessionId, providerError);
@@ -448,7 +495,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
             StudentId: session.StudentId,
             State: VivaSessionState.TranscriptReady,
             CurrentTurnOrdinal: turnCount,
-            MaxTurnsAllowed: DefaultMaxTurnsAllowed,
+            MaxTurnsAllowed: maxTurns,
             UpdatedAtUtc: DateTime.UtcNow,
             Message: "Follow-up generation failed."
         ), ct);
@@ -506,6 +553,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         _timers?.Stop(sessionId);
 
         var turnCount = await _turnRepo.GetTurnCountForSessionAsync(sessionId, ct);
+        var maxTurns = await GetSessionMaxTurnsAsync(session.ExamId, ct);
 
         // 2. Realtime Broadcast: SessionCompleted and StatusChanged
         await _publisher.PublishSessionCompletedAsync(sessionId, session.ExamId, session.StudentId, ct);
@@ -516,7 +564,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
             StudentId: session.StudentId,
             State: VivaSessionState.Completed,
             CurrentTurnOrdinal: turnCount,
-            MaxTurnsAllowed: DefaultMaxTurnsAllowed,
+            MaxTurnsAllowed: maxTurns,
             UpdatedAtUtc: completedAt,
             Message: "Session completed successfully."
         );

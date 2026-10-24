@@ -22,6 +22,7 @@ public class VivaSessionOrchestratorTests
     private sealed class FakeVivaSessionRepository : IVivaSessionRepository
     {
         public readonly Dictionary<Guid, VivaSession> Sessions = new();
+        public FakeVivaTurnRepository? TurnSource { get; set; }
 
         public Task<VivaSession?> GetByIdAsync(Guid sessionId, CancellationToken ct = default)
         {
@@ -31,7 +32,11 @@ public class VivaSessionOrchestratorTests
 
         public Task<VivaSession?> GetWithDetailsAsync(Guid sessionId, CancellationToken ct = default)
         {
-            return GetByIdAsync(sessionId, ct);
+            if (Sessions.TryGetValue(sessionId, out var session) && TurnSource is not null)
+            {
+                session.Turns = TurnSource.Turns.Values.Where(t => t.SessionId == sessionId).ToList();
+            }
+            return Task.FromResult(session);
         }
 
         public Task<List<VivaSession>> GetSessionsWithDetailsAsync(string? examId = null, string? studentId = null, CancellationToken ct = default)
@@ -251,6 +256,7 @@ public class VivaSessionOrchestratorTests
 
     private VivaSessionOrchestrator CreateOrchestrator()
     {
+        _sessionRepo.TurnSource = _turnRepo;
         return new VivaSessionOrchestrator(
             _sessionRepo,
             _questionRepo,
@@ -479,6 +485,42 @@ public class VivaSessionOrchestratorTests
         Assert.Equal((byte)VivaSessionState.Completed, _sessionRepo.Sessions[session.SessionId].State);
         Assert.Single(_publisher.PublishedCompleted);
         Assert.Equal(session.SessionId, _publisher.PublishedCompleted[0].SessionId);
+    }
+
+    [Fact]
+    public async Task GenerateFollowUpAsync_QuestionTurnsReached_DeliversNextQuestionInsteadOfCompleting()
+    {
+        var orchestrator = CreateOrchestrator();
+        var session = await orchestrator.InitializeSessionAsync("EXAM01", "STUDENT_42");
+        _questionRepo.Questions.Add(new VivaQuestion { QuestionId = "Q2", ExamId = "EXAM01", Title = "Hub", Content = "Explain groups." });
+        _questionRepo.Questions.Add(new VivaQuestion { QuestionId = "Q1", ExamId = "EXAM01", Title = "DI", Content = "Explain Scoped." });
+        var turn1 = new VivaSessionTurn { TurnId = Guid.NewGuid(), SessionId = session.SessionId, QuestionId = "Q1", TurnOrdinal = 1, TranscriptText = "Answer 1", FollowUpQuestionText = "Why?" };
+        var turn2 = new VivaSessionTurn { TurnId = Guid.NewGuid(), SessionId = session.SessionId, QuestionId = "Q1", TurnOrdinal = 2, TranscriptText = "Answer 2" };
+        await _turnRepo.CreateTurnAsync(turn1);
+        await _turnRepo.CreateTurnAsync(turn2);
+
+        var followUp = await orchestrator.GenerateFollowUpAsync(session.SessionId, turn2.TurnId);
+
+        Assert.Null(followUp);
+        Assert.Equal((byte)VivaSessionState.QuestionDelivered, _sessionRepo.Sessions[session.SessionId].State);
+        Assert.Empty(_publisher.PublishedCompleted);
+        Assert.Empty(_publisher.PublishedFollowUps);
+        var status = _publisher.PublishedStatuses.Last();
+        Assert.Equal(VivaSessionState.QuestionDelivered, status.State);
+        Assert.Equal(4, status.MaxTurnsAllowed);
+        Assert.Contains("Q2", status.Message);
+    }
+
+    [Fact]
+    public async Task GenerateFollowUpAsync_EmptyFollowUpWithNextQuestion_DeliversNextQuestion()
+    {
+        var (orchestrator, sessionId, turnId) = await ArrangeFirstTurnAsync();
+        _questionRepo.Questions.Add(new VivaQuestion { QuestionId = "Q2", ExamId = "EXAM01", Title = "Hub", Content = "Explain groups." });
+        _followUpService.FollowUpText = "  ";
+
+        Assert.Null(await orchestrator.GenerateFollowUpAsync(sessionId, turnId));
+        Assert.Equal((byte)VivaSessionState.QuestionDelivered, _sessionRepo.Sessions[sessionId].State);
+        Assert.Empty(_publisher.PublishedCompleted);
     }
 
     private async Task<(VivaSessionOrchestrator Orchestrator, Guid SessionId, Guid TurnId)> ArrangeFirstTurnAsync()

@@ -24,6 +24,8 @@ internal sealed class RealtimeData : IVivaSessionRepository, IVivaQuestionReposi
         QuestionId = "Q1", ExamId = "EXAM01", Title = "Lifetime", Content = "Explain scoped lifetime.",
         TimeLimitSeconds = 60, AudioUrl = "/audio/question.mp3"
     };
+    /// <summary>Further questions of the same exam, after <see cref="Question"/> in QuestionId order.</summary>
+    public List<VivaQuestion> ExtraQuestions { get; } = new();
     public bool FailSave { get; set; }
     public int TimeoutSaves;
     public int StateSaves;
@@ -85,7 +87,7 @@ internal sealed class RealtimeData : IVivaSessionRepository, IVivaQuestionReposi
     public Task<List<VivaQuestion>> GetQuestionsByExamAsync(string examId, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        return Task.FromResult(examId == Question.ExamId ? new List<VivaQuestion> { Question } : new());
+        return Task.FromResult(examId == Question.ExamId ? new List<VivaQuestion> { Question }.Concat(ExtraQuestions).ToList() : new());
     }
     public Task<List<string>> GetDistinctExamIdsAsync(CancellationToken ct = default)
     {
@@ -95,7 +97,7 @@ internal sealed class RealtimeData : IVivaSessionRepository, IVivaQuestionReposi
     Task<VivaQuestion?> IVivaQuestionRepository.GetByIdAsync(string id, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        return Task.FromResult(id == Question.QuestionId ? Question : null);
+        return Task.FromResult(id == Question.QuestionId ? Question : ExtraQuestions.FirstOrDefault(q => q.QuestionId == id));
     }
     public Task<Guid> CreateTurnAsync(VivaSessionTurn turn, CancellationToken ct = default)
     {

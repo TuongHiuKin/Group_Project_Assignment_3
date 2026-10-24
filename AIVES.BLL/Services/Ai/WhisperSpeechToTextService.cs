@@ -15,6 +15,8 @@ namespace AIVES.BLL.Services.Ai;
 public class WhisperSpeechToTextService : ISpeechToTextService
 {
     private const string DefaultEndpoint = "https://api.openai.com/v1/audio/transcriptions";
+    public const string NoSpeechDetectedMessage =
+        "Không nghe thấy câu trả lời (bản ghi chỉ có khoảng lặng hoặc tạp âm). Vui lòng nói rõ hơn và ghi âm lại.";
     private readonly HttpClient _httpClient;
     private readonly IOptions<AiServiceOptions> _options;
     private readonly ISpeechToTextService? _fallbackService;
@@ -99,6 +101,8 @@ public class WhisperSpeechToTextService : ISpeechToTextService
         form.Add(streamContent, "file", $"audio.{fileExtension}");
         form.Add(new StringContent(config.OpenAI.WhisperModel ?? "whisper-1"), "model");
         form.Add(new StringContent("verbose_json"), "response_format");
+        // Greedy decoding: higher temperatures make Whisper invent text on silence.
+        form.Add(new StringContent("0"), "temperature");
 
         if (!string.IsNullOrWhiteSpace(config.OpenAI.TranscriptionLanguage))
         {
@@ -172,7 +176,16 @@ public class WhisperSpeechToTextService : ISpeechToTextService
                 return new SpeechToTextResult(false, string.Empty, 0m, "Malformed response from STT service.");
             }
 
-            var text = textProp.GetString()?.Trim() ?? string.Empty;
+            var rawText = textProp.GetString()?.Trim() ?? string.Empty;
+            var text = WhisperHallucinationFilter.Clean(root, rawText);
+            if (text.Length == 0)
+            {
+                // Silence or noise: Whisper returns nothing or invents outro phrases. Ask the student to record again.
+                _logger?.LogWarning("Whisper STT heard no speech in {Elapsed}ms (raw transcript length {Length}).",
+                    elapsedMs, rawText.Length);
+                return new SpeechToTextResult(false, string.Empty, 0m, NoSpeechDetectedMessage);
+            }
+
             decimal confidence = CalculateConfidence(root);
 
             _logger?.LogInformation("Whisper STT completed in {Elapsed}ms with confidence {Confidence}",

@@ -254,7 +254,7 @@ public class ExamModel : PageModel
 
             try
             {
-                // Tạo câu hỏi phụ cho lượt vừa nộp; khi đủ số lượt, orchestrator tự hoàn thành phiên.
+                // Tạo câu hỏi phụ cho lượt vừa nộp; khi câu hỏi đủ lượt, orchestrator chuyển câu tiếp theo hoặc hoàn thành phiên.
                 await _orchestrator.GenerateFollowUpAsync(sessionId, transcript.TurnId, ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
