@@ -19,9 +19,22 @@ public sealed class VivaRealtimeSessionService(
         var state = (VivaSessionState)session.State;
         var latest = session.Turns.OrderByDescending(t => t.TurnOrdinal).ThenByDescending(t => t.CreatedAtUtc).FirstOrDefault();
         var count = session.Turns.Count;
-        var question = latest is null
-            ? (await questions.GetQuestionsByExamAsync(session.ExamId, ct)).OrderBy(q => q.QuestionId, StringComparer.Ordinal).FirstOrDefault()
-            : await questions.GetByIdAsync(latest.QuestionId, ct);
+        var ordered = (await questions.GetQuestionsByExamAsync(session.ExamId, ct) ?? new())
+            .OrderBy(q => q.QuestionId, StringComparer.Ordinal).ToList();
+        var question = latest is null ? ordered.FirstOrDefault() : await questions.GetByIdAsync(latest.QuestionId, ct);
+        // A new question is open when the latest turn has no pending follow-up (its question is finished).
+        var nextQuestion = latest is not null && string.IsNullOrEmpty(latest.FollowUpQuestionText) &&
+            state is VivaSessionState.QuestionDelivered or VivaSessionState.Answering
+            ? ordered.FirstOrDefault(q => string.CompareOrdinal(q.QuestionId, latest.QuestionId) > 0)
+            : null;
+        if (nextQuestion is not null)
+        {
+            var nextCurrent = new VivaQuestionDto(nextQuestion.QuestionId, nextQuestion.ExamId, nextQuestion.Title,
+                nextQuestion.Content, nextQuestion.TimeLimitSeconds, nextQuestion.AudioUrl);
+            var nextStatus = new VivaSessionStatusDto(sessionId, session.ExamId, session.StudentId, state, count,
+                VivaSessionOrchestrator.SessionMaxTurns(ordered.Count), latest!.CompletedAtUtc ?? latest.CreatedAtUtc);
+            return new(nextStatus, nextCurrent, null, null, state == VivaSessionState.Answering ? timers.GetRemaining(sessionId) : null);
+        }
         VivaFollowUpDto? followUp = null;
         if (latest?.FollowUpQuestionText is { Length: > 0 } text)
             followUp = new(sessionId, latest.TurnId, $"{latest.QuestionId}-FU{latest.TurnOrdinal}", text,
@@ -36,7 +49,8 @@ public sealed class VivaRealtimeSessionService(
                 latest.CompletedAtUtc ?? latest.CreatedAtUtc) : null;
         var updated = session.CompletedAtUtc ?? latest?.CompletedAtUtc ?? latest?.CreatedAtUtc ?? session.StartedAtUtc;
         var status = new VivaSessionStatusDto(sessionId, session.ExamId, session.StudentId, state,
-            Math.Max(count, state is VivaSessionState.QuestionDelivered or VivaSessionState.Answering ? 1 : 0), 2, updated);
+            Math.Max(count, state is VivaSessionState.QuestionDelivered or VivaSessionState.Answering ? 1 : 0),
+            VivaSessionOrchestrator.SessionMaxTurns(ordered.Count), updated);
         return new(status, current, transcript, followUp, state == VivaSessionState.Answering ? timers.GetRemaining(sessionId) : null);
     }
 

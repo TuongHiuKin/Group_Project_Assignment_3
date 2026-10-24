@@ -384,8 +384,15 @@ class VivaExamClient {
     }
 
     handleSessionStatusChanged(status) {
+        const previousState = typeof this.sessionState === 'string' ? this.sessionState : this.mapStateToString(this.sessionState);
         this.sessionState = status.state;
         const stateName = typeof status.state === 'string' ? status.state : this.mapStateToString(status.state);
+
+        // The previous question is finished and the server opened the next one: load it from the snapshot.
+        if (stateName === 'QuestionDelivered' &&
+            ['Transcribing', 'TranscriptReady', 'FollowUpGenerating', 'FollowUpDelivered'].includes(previousState)) {
+            this.showNextQuestion();
+        }
 
         if (this.el.stateBadge) {
             this.el.stateBadge.textContent = this.formatStateFriendly(stateName);
@@ -433,6 +440,17 @@ class VivaExamClient {
             this.setRecordingUiState('disabled', 'Đã hết thời gian trả lời câu hỏi!');
             this.showToast('Hết thời gian trả lời cho lượt thi này.', 'warning');
         }
+    }
+
+    /** Clears the previous question's transcript and follow-up, then renders the next question from the snapshot. */
+    async showNextQuestion() {
+        this.hideFollowUpError();
+        this.currentTurnId = null;
+        if (this.el.followUpCard) this.el.followUpCard.classList.add('d-none');
+        if (this.el.transcriptCard) this.el.transcriptCard.classList.add('d-none');
+        if (this.el.transcriptText) this.el.transcriptText.textContent = '';
+        this.showToast('Chuyển sang câu hỏi tiếp theo.', 'info');
+        await this.joinAndRestoreSession();
     }
 
     playTts(text, audioEl, audioUrl, onEndCallback) {
@@ -768,7 +786,11 @@ class VivaExamClient {
 
             const result = await response.json();
             console.log('Submission result:', result);
-            this.setRecordingUiState('disabled', 'Đã nộp bài thành công! Đang chờ AI phân tích...');
+            // SignalR events usually arrive before this response; keep the UI of a follow-up or next question already shown.
+            const stateNow = typeof this.sessionState === 'string' ? this.sessionState : this.mapStateToString(this.sessionState);
+            if (['Transcribing', 'TranscriptReady', 'FollowUpGenerating'].includes(stateNow)) {
+                this.setRecordingUiState('disabled', 'Đã nộp bài thành công! Đang chờ AI phân tích...');
+            }
         } catch (err) {
             console.error('Submit audio error:', err);
             this.showError('SUBMIT_AUDIO_ERROR', err.message, true);
