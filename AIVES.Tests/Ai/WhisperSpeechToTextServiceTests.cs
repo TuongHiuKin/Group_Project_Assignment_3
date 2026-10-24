@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Options;
 using Xunit;
+using AIVES.BLL.Interfaces.Ai;
 using AIVES.BLL.Options;
 using AIVES.BLL.Services.Ai;
 using AIVES.BLL.Services.Ai.Mocks;
@@ -395,5 +396,64 @@ public class WhisperSpeechToTextServiceTests
         var result = await service.TranscribeAsync(audioStream, "audio/webm");
 
         Assert.True(result.IsSuccess);
+    }
+
+    private static async Task<SpeechToTextResult> TranscribeJsonAsync(string json)
+    {
+        var handler = new DelegatingHandlerStub((req, ct) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        }));
+        using var client = new HttpClient(handler);
+        var service = new WhisperSpeechToTextService(client, CreateOptions(apiKey: "sk-test-valid"));
+        using var audioStream = new MemoryStream(new byte[] { 1, 2, 3 });
+        return await service.TranscribeAsync(audioStream, "audio/webm");
+    }
+
+    [Theory]
+    [InlineData("Hãy subscribe cho kênh Ghiền Mì Gõ Để không bỏ lỡ những video hấp dẫn")]
+    [InlineData("Cảm ơn các bạn đã theo dõi và hẹn gặp lại.")]
+    [InlineData("")]
+    public async Task TranscribeAsync_SilenceHallucination_FailsWithNoSpeechMessage(string text)
+    {
+        var result = await TranscribeJsonAsync($$"""{"text":"{{text}}","segments":[{"no_speech_prob":0.01}]}""");
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(WhisperSpeechToTextService.NoSpeechDetectedMessage, result.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_DropsOutroSentence_KeepsRealAnswer()
+    {
+        var result = await TranscribeJsonAsync("""
+        {"text":"DbContext nên đăng ký Scoped. Cảm ơn các bạn đã theo dõi.",
+         "segments":[{"text":" DbContext nên đăng ký Scoped.","no_speech_prob":0.02,"avg_logprob":-0.2},
+                     {"text":" Cảm ơn các bạn đã theo dõi.","no_speech_prob":0.1,"avg_logprob":-0.4}]}
+        """);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("DbContext nên đăng ký Scoped.", result.TranscriptText);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_DropsSilentSegments()
+    {
+        var result = await TranscribeJsonAsync("""
+        {"text":"Hub dùng group theo session. Ừm",
+         "segments":[{"text":" Hub dùng group theo session.","no_speech_prob":0.05,"avg_logprob":-0.3},
+                     {"text":" Ừm","no_speech_prob":0.9,"avg_logprob":-1.6}]}
+        """);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Hub dùng group theo session.", result.TranscriptText);
+    }
+
+    [Fact]
+    public async Task TranscribeAsync_TechnicalSubscribe_IsNotTreatedAsHallucination()
+    {
+        var result = await TranscribeJsonAsync("""{"text":"Client subscribe vào group của SignalR hub."}""");
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("Client subscribe vào group của SignalR hub.", result.TranscriptText);
     }
 }
