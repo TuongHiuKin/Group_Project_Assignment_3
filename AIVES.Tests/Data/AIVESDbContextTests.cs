@@ -23,18 +23,18 @@ public class AIVESDbContextTests
     {
         using var context = CreateContext();
         var tables = context.Model.GetEntityTypes().ToArray();
-        Assert.Equal(new[] { "Category", "NewsArticle", "NewsTag", "SystemAccount", "Tag", "VivaQuestion", "VivaSession", "VivaSessionTurn" },
+        Assert.Equal(new[] { "Category", "NewsArticle", "NewsTag", "SystemAccount", "Tag", "VivaGradingResult", "VivaQuestion", "VivaSession", "VivaSessionTurn" },
             tables.Select(x => x.GetTableName()).OrderBy(x => x));
         Assert.All(tables, table =>
         {
             Assert.Equal("dbo", table.GetSchema());
             Assert.DoesNotContain(table.GetProperties(), x => x.IsShadowProperty());
         });
-        Assert.Equal(7, tables.Count(x => x.FindPrimaryKey()!.Properties.Count == 1));
+        Assert.Equal(8, tables.Count(x => x.FindPrimaryKey()!.Properties.Count == 1));
         var newsIdentityTables = new[] { typeof(Category), typeof(NewsArticle), typeof(SystemAccount), typeof(Tag) };
         Assert.All(tables.Where(x => newsIdentityTables.Contains(x.ClrType)), table =>
             Assert.Equal(ValueGenerated.OnAdd, table.FindPrimaryKey()!.Properties.Single().ValueGenerated));
-        var vivaNeverTables = new[] { typeof(VivaQuestion), typeof(VivaSession), typeof(VivaSessionTurn) };
+        var vivaNeverTables = new[] { typeof(VivaGradingResult), typeof(VivaQuestion), typeof(VivaSession), typeof(VivaSessionTurn) };
         Assert.All(tables.Where(x => vivaNeverTables.Contains(x.ClrType)), table =>
             Assert.Equal(ValueGenerated.Never, table.FindPrimaryKey()!.Properties.Single().ValueGenerated));
     }
@@ -72,9 +72,10 @@ public class AIVESDbContextTests
         var join = context.Model.FindEntityType(typeof(NewsTag))!;
         Assert.Equal(new[] { "NewsArticleId", "TagId" }, join.FindPrimaryKey()!.Properties.Select(x => x.Name));
         var foreignKeys = context.Model.GetEntityTypes().SelectMany(x => x.GetForeignKeys()).ToArray();
-        Assert.Equal(7, foreignKeys.Length);
+        Assert.Equal(9, foreignKeys.Length);
         var cascades = foreignKeys.Where(x => x.DeleteBehavior == DeleteBehavior.Cascade).ToArray();
-        Assert.Equal(2, cascades.Length);
+        Assert.Equal(3, cascades.Length);
+        Assert.Contains(cascades, x => x.DeclaringEntityType.ClrType == typeof(VivaGradingResult) && x.PrincipalEntityType.ClrType == typeof(VivaSession));
         Assert.Contains(cascades, x => x.DeclaringEntityType.ClrType == typeof(NewsTag) && x.PrincipalEntityType.ClrType == typeof(NewsArticle));
         Assert.Contains(cascades, x => x.DeclaringEntityType.ClrType == typeof(VivaSessionTurn) && x.PrincipalEntityType.ClrType == typeof(VivaSession));
         Assert.All(foreignKeys.Where(x => !cascades.Contains(x)), x => Assert.Equal(DeleteBehavior.ClientNoAction, x.DeleteBehavior));
@@ -125,6 +126,29 @@ public class AIVESDbContextTests
         Assert.Equal("nvarchar(max)", turn.FindProperty(nameof(VivaSessionTurn.TranscriptText))!.GetColumnType());
         Assert.Equal("nvarchar(max)", turn.FindProperty(nameof(VivaSessionTurn.FollowUpQuestionText))!.GetColumnType());
         Assert.Equal(3, turn.FindProperty(nameof(VivaSessionTurn.CreatedAtUtc))!.GetPrecision());
+    }
+
+    [Fact]
+    public void VivaGradingResult_columns_match_schema()
+    {
+        using var context = CreateContext();
+        var grading = context.Model.FindEntityType(typeof(VivaGradingResult))!;
+        Assert.Equal("VivaGradingResult", grading.GetTableName());
+        Assert.Equal(50, grading.FindProperty(nameof(VivaGradingResult.QuestionId))!.GetMaxLength());
+        Assert.False(grading.FindProperty(nameof(VivaGradingResult.QuestionId))!.IsUnicode());
+        Assert.Equal(5, grading.FindProperty(nameof(VivaGradingResult.AiScore))!.GetPrecision());
+        Assert.Equal(2, grading.FindProperty(nameof(VivaGradingResult.AiScore))!.GetScale());
+        Assert.Equal("nvarchar(max)", grading.FindProperty(nameof(VivaGradingResult.AiFeedback))!.GetColumnType());
+        Assert.Equal(100, grading.FindProperty(nameof(VivaGradingResult.AiProvider))!.GetMaxLength());
+        Assert.Equal(100, grading.FindProperty(nameof(VivaGradingResult.AiModel))!.GetMaxLength());
+        Assert.Equal("tinyint", grading.FindProperty(nameof(VivaGradingResult.GradingState))!.GetColumnType());
+        Assert.Equal(5, grading.FindProperty(nameof(VivaGradingResult.TeacherFinalScore))!.GetPrecision());
+        Assert.Equal(2, grading.FindProperty(nameof(VivaGradingResult.TeacherFinalScore))!.GetScale());
+        Assert.Equal(100, grading.FindProperty(nameof(VivaGradingResult.FinalizedBy))!.GetMaxLength());
+        Assert.Equal(3, grading.FindProperty(nameof(VivaGradingResult.FinalizedAtUtc))!.GetPrecision());
+        Assert.True(grading.FindProperty(nameof(VivaGradingResult.RowVersion))!.IsConcurrencyToken);
+        var uniqueIndex = Assert.Single(grading.GetIndexes(), x => x.IsUnique);
+        Assert.Equal("UQ_VivaGradingResult_SessionId_QuestionId", uniqueIndex.GetDatabaseName());
     }
 
     [Fact]
