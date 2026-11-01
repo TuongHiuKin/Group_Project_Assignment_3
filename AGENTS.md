@@ -1,18 +1,22 @@
 # AIVES — Agent & Team Governance Instructions
 
-## 1. Project Identity & Assignment 2 Scope
+## 1. Project Identity & Scope
 
 **AIVES — AI-powered Viva Examination System** is a 3-layer enterprise ASP.NET Core .NET 8 application.
 
-* **Current Active Goal (Assignment 2):** **Group 3 — AI Interview Core**.
-  - Interactive viva examination flow in **Razor Pages** (`/Viva/Exam/{sessionId}`).
-  - Question presentation & **Text-to-Speech (TTS)** audio playback.
-  - Student voice recording via microphone & **Speech-to-Text (STT)** transcription.
-  - Realtime event broadcasting via **SignalR** (`VivaHub`).
-  - Contextual **AI Follow-up Question** generation (LLM) & limits enforcement.
-  - Turn transcript and follow-up persistence in **SQL Server via EF Core Repositories**.
-* **Pre-existing Modules:** Group 6 (Feedback & Reports) is already implemented and must be preserved. Legacy News Management remains in source code history only; it is not a criteria for Assignment 2.
-* **Out of Scope for ASM2:** Group 4 (AI Scoring & Grading) is strictly reserved for a future assignment. Do NOT implement automated scoring in Assignment 2.
+* **Current Active Goal (Assignment 3 / Group Project):** **Group 4 — AI-Assisted Viva Exam Grading with Human-in-the-Loop (HITL)**.
+  - Asynchronous question-by-question grading via background queue (`System.Threading.Channels` + `VivaGradingBackgroundService`).
+  - Multi-provider AI grading adapters (`GeminiAnswerGradingService`, `OpenAiAnswerGradingService`, `MockAnswerGradingService`) implementing `IAnswerGradingService`.
+  - Database-driven rubric criteria seeded per question (`VivaRubricCriterion`), replacing hard-coded `RubricCatalog`.
+  - Fault isolation per question with automatic fallback to keyword-based `RubricGradingService` if AI calls fail or time out.
+  - Realtime grading notifications to lecturer groups via **SignalR** (`VivaHub` events: `GradingStarted`, `GradingCompleted`, `GradingFailed`).
+  - Human-in-the-Loop review and override workflow in **Razor Pages** (`/Grading/Index`, `/Grading/Review/{sessionId}`).
+  - Concurrency-safe score confirmation ("Xác nhận điểm AI") or manual override ("Nhập điểm GV") with mandatory audit trail logging (`VivaGradeChangeLogs`).
+  - Immediate student visibility of tentative scores marked **"AI chấm, chờ giảng viên duyệt"**, updated to **"Điểm chính thức"** once confirmed by the lecturer.
+* **Pre-existing Modules:**
+  - **Group 3 (AI Interview Core):** Interactive viva room (`/Viva/Exam/{sessionId}`), WebAudio recording, STT/TTS, follow-up questions, SignalR session management. Fully implemented and preserved.
+  - **Group 6 (Feedback & Reports):** Student and class reports, rubric keyword evaluation fallback. Preserved and updated to read persisted `VivaGradingResult`.
+  - Legacy News Management remains in source code history only; it is not a criteria for this project.
 
 ---
 
@@ -21,8 +25,8 @@
 Every agent working on this repository must read and follow the designated skill for their assigned domain:
 
 * **Architecture, Boundaries & Razor Pages:** [`.agents/skills/aives-architecture/SKILL.md`](.agents/skills/aives-architecture/SKILL.md)
-* **Realtime SignalR Hubs & Events:** [`.agents/skills/aives-realtime-signalr/SKILL.md`](.agents/skills/aives-realtime-signalr/SKILL.md)
-* **AI Integrations (STT, TTS, LLM):** [`.agents/skills/aives-ai-integration/SKILL.md`](.agents/skills/aives-ai-integration/SKILL.md)
+* **Realtime SignalR Hubs & Background Queue:** [`.agents/skills/aives-realtime-signalr/SKILL.md`](.agents/skills/aives-realtime-signalr/SKILL.md)
+* **AI Integrations (STT, TTS, LLM Follow-Up, LLM Grading):** [`.agents/skills/aives-ai-integration/SKILL.md`](.agents/skills/aives-ai-integration/SKILL.md)
 * **Git Tasks, Branching & PRs:** [`.agents/skills/team-git-workflow/SKILL.md`](.agents/skills/team-git-workflow/SKILL.md)
 * *(Note: `.agents/skills/funews-architecture/SKILL.md` is deprecated and superseded by `aives-architecture`).*
 
@@ -32,40 +36,50 @@ Every agent working on this repository must read and follow the designated skill
 
 Before implementing code or creating tasks, agents must consult:
 
-1. **Shared Contracts & Events:** [`docs/ASM2-CONTRACTS.md`](docs/ASM2-CONTRACTS.md) (The single source of truth for DTOs, SignalR events, Hub routes, and service interfaces).
-2. **Team Task Board (29 Issues):** [`docs/ASM2-TASK-BOARD.md`](docs/ASM2-TASK-BOARD.md) (Task definitions, dependencies, and assigned roles).
-3. **Architecture Overview:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-4. **Code Review Checklist:** [`docs/CODE-REVIEW-CHECKLIST.md`](docs/CODE-REVIEW-CHECKLIST.md).
+1. **Shared Contracts & Events (Group 4):** [`docs/G4-CONTRACTS.md`](docs/G4-CONTRACTS.md) (The single source of truth for Group 4 DTOs, grading states, SignalR events, and service interfaces).
+2. **Team Task Board (Group 4 - 30 Issues):** [`docs/G4-TASK-BOARD.md`](docs/G4-TASK-BOARD.md) (Task definitions, dependencies, and assigned roles).
+3. **Group 3 Historical Contracts:** [`docs/ASM2-CONTRACTS.md`](docs/ASM2-CONTRACTS.md) and [`docs/ASM2-TASK-BOARD.md`](docs/ASM2-TASK-BOARD.md).
+4. **Architecture Overview:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+5. **Code Review Checklist:** [`docs/CODE-REVIEW-CHECKLIST.md`](docs/CODE-REVIEW-CHECKLIST.md).
 
 ---
 
 ## 4. Architecture Boundaries & Constraints
 
 * **3-Layer Physical Architecture:**
-  - **Presentation Layer:** `StudentNameMVC` (hosts Razor Pages, MVC Controllers, SignalR Hubs, ViewModels).
-  - **Business Logic Layer:** `AIVES.BLL` (Services, Orchestration, Business Rules, AI Abstractions).
+  - **Presentation Layer:** `StudentNameMVC` (hosts Razor Pages `/Grading`, `/Viva`, MVC Controllers, SignalR Hubs, ViewModels).
+  - **Business Logic Layer:** `AIVES.BLL` (Services, Orchestration, Business Rules, AI Abstractions, Background Services).
   - **Data Access Layer:** `AIVES.DAL` (Entities, Scoped Repositories, Scoped `AIVESDbContext`).
-* **Request Flow:**
-  - `Razor Page / MVC Controller / SignalR Hub → BLL Service → DAL Repository → AIVESDbContext → SQL Server`.
+* **Request & Execution Flows:**
+  - **Razor Page / MVC Controller Flow:**
+    `Razor Page / Controller → BLL Service (IGradingOrchestrator) → DAL Repository → AIVESDbContext → SQL Server`.
+  - **Background Grading Execution Flow:**
+    `Channel Queue → VivaGradingBackgroundService (IServiceScopeFactory) → IGradingOrchestrator → IVivaGradingRepository / IAnswerGradingService → DbContext → SQL Server → IVivaRealtimePublisher → VivaHub`.
 * **Zero Direct Database Access:**
-  - Razor Pages, Controllers, and SignalR Hubs must **NEVER** inject `AIVESDbContext` or Repositories directly.
+  - Razor Pages, Controllers, Background Services, and SignalR Hubs must **NEVER** inject `AIVESDbContext` or Repositories directly.
   - BLL Services must **NEVER** reference `AIVESDbContext` or EF Core.
 * **Scoped Lifetimes:**
   - Repositories and `AIVESDbContext` are always **Scoped**. Never register Repositories as Singleton.
-  - DAO pass-through layer has been consolidated into Repositories; do not recreate separate DAO classes.
+  - Background workers must create a new `IServiceScope` for each grading job to safely resolve scoped services (`IGradingOrchestrator`, repositories).
 * **Persistence First for Realtime:**
-  - Authoritative state must be persisted to SQL Server via `SaveChangesAsync` before broadcasting SignalR events.
+  - Authoritative state must be persisted to SQL Server via `SaveChangesAsync` before broadcasting SignalR events (`GradingStarted`, `GradingCompleted`, `GradingFailed`).
+* **Locked Business Decisions for Group 4:**
+  1. Students see AI score immediately after exam completion with label `"AI chấm, chờ giảng viên duyệt"`.
+  2. Teacher review: "Xác nhận điểm AI" -> final score = AI score; or teacher enters custom score -> final score = teacher score. Label becomes `"Điểm chính thức"`.
+  3. Editing a finalized score requires mandatory `Reason` and records an audit entry in `VivaGradeChangeLogs`.
+  4. Rubrics for exam questions are stored in and read from SQL Server (`VivaRubricCriteria`), replacing hardcoded `RubricCatalog`.
+  5. AI grades each question independently. AI failure falls back to keyword-based `RubricGradingService` without failing other questions.
 
 ---
 
 ## 5. Team Roles & Shared-File Governance
 
 The team consists of 5 members:
-1. **Tech Lead / Reviewer (Member 1):** Owns architectural boundaries, shared contracts (`ASM2-CONTRACTS.md`), BLL orchestration (`IVivaSessionOrchestrator`), dependency injection, and PR reviews.
-2. **Razor Pages Frontend (Member 2):** Owns UI (`/Viva/Exam`), WebAudio recording, client SignalR JS.
-3. **SignalR Realtime (Member 3):** Owns `VivaHub`, session group security, and `IVivaRealtimePublisher`.
-4. **Database & Repositories (Member 4):** Owns Viva domain entities, EF Core configurations, and Repositories.
-5. **AI Integration (Member 5):** Owns STT, TTS, and LLM follow-up service adapters and mocks.
+1. **Tech Lead / Reviewer (Member 1 - Kien):** Owns architectural boundaries, shared contracts (`G4-CONTRACTS.md`), BLL orchestration (`IGradingOrchestrator`), DI registration in `Program.cs`, reporting integration (`ExamReportRepository`), and PR reviews.
+2. **Database & Repositories (Member 2):** Owns `VivaGradingResult`, `VivaGradeChangeLog`, `VivaRubricCriterion` entities, EF Core configurations, `IVivaGradingRepository`, `IVivaRubricRepository`, SQL migration scripts `005` & `006`, and seed data extensions.
+3. **AI Integration (Member 3):** Owns `IAnswerGradingService`, `MockAnswerGradingService`, structured prompt design in `AiPrompts`, `GeminiAnswerGradingService`, `OpenAiAnswerGradingService`, output validation/injection guardrails, and speech metrics.
+4. **Background & Realtime (Member 4):** Owns `System.Threading.Channels` queue, `VivaGradingBackgroundService`, startup recovery of pending jobs, SignalR lecturer group authorization, realtime grading events, regrade triggers, and client JS updates.
+5. **Razor Pages Frontend (Member 5):** Owns lecturer grading UI (`/Grading/Index`, `/Grading/Review/{sessionId}`), score review/override forms, regrade button, audit log display, student/class report badge updates, and UI automated tests.
 
 **Shared-File Rule:**
 Only the Tech Lead is authorized to modify or approve modifications to:
@@ -79,7 +93,7 @@ Only the Tech Lead is authorized to modify or approve modifications to:
 ## 6. Task Scope & Git Safety Rules
 
 * **Task-Scoped Work:** Agents must implement only the assigned issue. Never create unrelated features or rewrite working modules.
-* **Branch Convention:** `<member-name>/<feature-name>` (e.g. `kien/asm2-lead-04-orchestrator`, `member2/asm2-ui-03-microphone`).
+* **Branch Convention:** `<member-name>/g4-<feature-name>` (e.g. `kien/g4-lead-03-orchestrator`, `member2/g4-db-01-entities`).
 * **1-Issue-1-Branch-1-PR Rule:** Each issue is isolated on its own feature branch and submitted via a Pull Request with the issue ID clearly referenced.
 * **Explicit User Authorization Required:**
   - Never commit, push, create a PR, or merge automatically.
