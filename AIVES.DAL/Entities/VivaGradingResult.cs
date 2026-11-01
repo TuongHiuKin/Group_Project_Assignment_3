@@ -25,4 +25,6 @@ public class VivaGradingResult
 
     public VivaSession? Session { get; set; }
     public VivaQuestion? Question { get; set; }
+
+    public ICollection<VivaGradeChangeLog> ChangeLogs { get; set; } = new List<VivaGradeChangeLog>();
 }
