@@ -5,7 +5,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using AIVES.BLL.Interfaces.Ai;
+using AIVES.BLL.Interfaces.Grading;
 using AIVES.BLL.Interfaces.VivaInterview;
+using AIVES.BLL.Models.Grading;
 using AIVES.BLL.Models.VivaInterview;
 using AIVES.DAL.Entities;
 using AIVES.DAL.Repositories.Interfaces;
@@ -37,6 +39,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
     private readonly IVivaRealtimePublisher _publisher;
     private readonly ILogger<VivaSessionOrchestrator> _logger;
     private readonly VivaTimerManager? _timers;
+    private readonly IGradingQueue? _gradingQueue;
 
     public VivaSessionOrchestrator(
         IVivaSessionRepository sessionRepo,
@@ -47,7 +50,8 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         IFollowUpGeneratorService followUpService,
         IVivaRealtimePublisher publisher,
         ILogger<VivaSessionOrchestrator> logger,
-        VivaTimerManager? timers = null)
+        VivaTimerManager? timers = null,
+        IGradingQueue? gradingQueue = null)
     {
         _sessionRepo = sessionRepo ?? throw new ArgumentNullException(nameof(sessionRepo));
         _questionRepo = questionRepo ?? throw new ArgumentNullException(nameof(questionRepo));
@@ -58,6 +62,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _timers = timers;
+        _gradingQueue = gradingQueue;
     }
 
     /// <inheritdoc />
@@ -552,6 +557,10 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         await _sessionRepo.CompleteSessionAsync(sessionId, completedAt, ct);
         _timers?.Stop(sessionId);
 
+        // G4-RT-01: queue AI grading only after the completion is committed. Non-blocking; if it cannot be
+        // queued, startup recovery (G4-RT-04) picks the session up because it has no grading results yet.
+        EnqueueGrading(sessionId, session.ExamId);
+
         var turnCount = await _turnRepo.GetTurnCountForSessionAsync(sessionId, ct);
         var maxTurns = await GetSessionMaxTurnsAsync(session.ExamId, ct);
 
@@ -571,5 +580,19 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         await _publisher.PublishStatusChangedAsync(statusDto, ct);
 
         return statusDto;
+    }
+
+    private void EnqueueGrading(Guid sessionId, string examId)
+    {
+        if (_gradingQueue is null) return;
+        try
+        {
+            if (!_gradingQueue.TryEnqueue(new GradingJob(sessionId, ExamId: examId)))
+                _logger.LogInformation("Grading for session {SessionId} is already queued or the queue is full.", sessionId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not queue grading for session {SessionId}; recovery will retry.", sessionId);
+        }
     }
 }

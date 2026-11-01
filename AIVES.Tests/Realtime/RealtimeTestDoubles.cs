@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using AIVES.BLL.Interfaces.Ai;
 using AIVES.BLL.Interfaces.VivaInterview;
+using AIVES.BLL.Models.Grading;
 using AIVES.BLL.Models.VivaInterview;
 using AIVES.DAL.Entities;
 using AIVES.DAL.Repositories.Interfaces;
@@ -156,4 +157,7 @@ internal sealed class RecordingPublisher : IVivaRealtimePublisher
     public Task PublishTimeRemainingAsync(VivaTimeRemainingDto timer, CancellationToken ct = default) => Add(timer, ct);
     public Task PublishSessionCompletedAsync(Guid id, string examId, string studentId, CancellationToken ct = default) => Add((id, examId, studentId), ct);
     public Task PublishErrorAsync(VivaErrorDto error, CancellationToken ct = default) => Add(error, ct);
+    public Task PublishGradingStartedAsync(string examId, GradingStartedDto started, CancellationToken ct = default) => Add((examId, started), ct);
+    public Task PublishGradingCompletedAsync(string examId, GradingCompletedDto completed, CancellationToken ct = default) => Add((examId, completed), ct);
+    public Task PublishGradingFailedAsync(string examId, GradingFailedDto failed, CancellationToken ct = default) => Add((examId, failed), ct);
 }

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 using AIVES.BLL.Interfaces.Ai;
 using AIVES.BLL.Interfaces.VivaInterview;
+using AIVES.BLL.Models.Grading;
 using AIVES.BLL.Models.VivaInterview;
 using AIVES.BLL.Services.VivaInterview;
 using AIVES.DAL.Entities;
@@ -206,6 +207,10 @@ public class VivaSessionOrchestratorTests
         public readonly List<VivaTimeRemainingDto> PublishedTimers = new();
         public readonly List<(Guid SessionId, string ExamId, string StudentId)> PublishedCompleted = new();
         public readonly List<VivaErrorDto> PublishedErrors = new();
+
+        public Task PublishGradingStartedAsync(string examId, GradingStartedDto started, CancellationToken ct = default) => Task.CompletedTask;
+        public Task PublishGradingCompletedAsync(string examId, GradingCompletedDto completed, CancellationToken ct = default) => Task.CompletedTask;
+        public Task PublishGradingFailedAsync(string examId, GradingFailedDto failed, CancellationToken ct = default) => Task.CompletedTask;
 
         public Task PublishStatusChangedAsync(VivaSessionStatusDto status, CancellationToken ct = default)
         {

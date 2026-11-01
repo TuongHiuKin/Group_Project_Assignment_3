@@ -1,7 +1,10 @@
 using System.Security.Claims;
+using AIVES.BLL.Interfaces.Grading;
 using AIVES.BLL.Interfaces.VivaInterview;
 using AIVES.BLL.Models.VivaInterview;
+using AIVES.BLL.Security;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 
 namespace StudentNameMVC.Hubs;
@@ -70,6 +73,57 @@ public sealed class VivaHub(
             logger.LogWarning(ex, "Could not begin answering for viva session {SessionId}.", sessionId);
             throw new HubException("Unable to begin answering. Please reload the session or contact the examiner.");
         }
+    }
+
+    // ---- Group 4: lecturer grading room (grading-{examId}) ----
+
+    /// <summary>Lecturer/Admin only. Subscribes the caller to GradingStarted/GradingCompleted/GradingFailed for one exam.</summary>
+    public Task JoinGradingGroup(string examId)
+    {
+        var group = AuthorizeGradingGroup(examId);
+        return Groups.AddToGroupAsync(Context.ConnectionId, group, Context.ConnectionAborted);
+    }
+
+    public Task LeaveGradingGroup(string examId)
+    {
+        if (!GradingGroup.IsValidExamId(examId)) throw new HubException("A valid exam ID is required.");
+        return Groups.RemoveFromGroupAsync(Context.ConnectionId, GradingGroup.Name(examId), Context.ConnectionAborted);
+    }
+
+    /// <summary>Lecturer/Admin only. Queues an AI regrade for one question (or the whole session when questionId is empty).</summary>
+    public async Task<string> RequestRegrade(Guid sessionId, string? questionId,
+        [FromServices] IGradingRegradeService regrade)
+    {
+        RequireGradingRole();
+        var lecturerId = Context.User!.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? throw new HubException("Unauthorized to manage grading.");
+        try
+        {
+            var result = await regrade.RequestRegradeAsync(sessionId, questionId, lecturerId, Context.ConnectionAborted);
+            return result.ToString();
+        }
+        catch (ArgumentException) { throw new HubException("A valid session ID is required."); }
+        catch (OperationCanceledException) when (Context.ConnectionAborted.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not queue regrade for session {SessionId}.", sessionId);
+            throw new HubException("Unable to queue the regrade. Please retry.");
+        }
+    }
+
+    private string AuthorizeGradingGroup(string examId)
+    {
+        RequireGradingRole();
+        if (!GradingGroup.IsValidExamId(examId)) throw new HubException("A valid exam ID is required.");
+        return GradingGroup.Name(examId);
+    }
+
+    private void RequireGradingRole()
+    {
+        var user = Context.User;
+        if (user?.Identity?.IsAuthenticated != true ||
+            !(user.IsInRole(ApplicationRoles.Lecturer) || user.IsInRole(ApplicationRoles.Admin)))
+            throw new HubException("Unauthorized to join this grading group.");
     }
 
     private async Task<string> AuthorizeAsync(Guid sessionId)
