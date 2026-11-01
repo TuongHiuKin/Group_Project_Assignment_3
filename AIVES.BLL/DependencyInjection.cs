@@ -50,6 +50,7 @@ public static class DependencyInjection
         services.AddScoped<ISpeechToTextService, MockSpeechToTextService>();
         services.AddScoped<ITextToSpeechService, MockTextToSpeechService>();
         services.AddScoped<IFollowUpGeneratorService, MockFollowUpGeneratorService>();
+        services.AddScoped<IAnswerGradingService, MockAnswerGradingService>();
         return services;
     }
 
@@ -71,6 +72,7 @@ public static class DependencyInjection
         services.AddScoped<MockSpeechToTextService>();
         services.AddScoped<MockTextToSpeechService>();
         services.AddScoped<MockFollowUpGeneratorService>();
+        services.AddScoped<MockAnswerGradingService>();
 
         services.AddScoped<ISpeechToTextService>(sp => ResolveCapability<ISpeechToTextService>(
             sp,
@@ -111,6 +113,14 @@ public static class DependencyInjection
             (adapter, profile, model, _) => adapter.CreateFollowUpGeneratorService(sp, profile, model),
             () => sp.GetRequiredService<MockFollowUpGeneratorService>(),
             reason => new UnavailableFollowUpGeneratorService(reason)));
+
+        services.AddScoped<IAnswerGradingService>(sp => ResolveCapability<IAnswerGradingService>(
+            sp,
+            AiCapability.Grading,
+            config => (config.Routing.Grading.ProfileId, config.Routing.Grading.Model),
+            (adapter, profile, model, _) => adapter.CreateAnswerGradingService(sp, profile, model),
+            () => sp.GetRequiredService<MockAnswerGradingService>(),
+            reason => new UnavailableAnswerGradingService(reason)));
 
         return services;
     }

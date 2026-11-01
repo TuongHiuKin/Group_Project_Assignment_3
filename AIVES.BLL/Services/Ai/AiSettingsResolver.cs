@@ -69,12 +69,14 @@ public static class AiSettingsResolver
         var sttProfile = config.FindProfile(config.Routing.Stt.ProfileId);
         var ttsProfile = config.FindProfile(config.Routing.Tts.ProfileId);
         var llmProfile = config.FindProfile(config.Routing.Llm.ProfileId);
+        var gradingProfile = config.FindProfile(config.Routing.Grading.ProfileId);
 
         var sttDesc = FormatDesc(sttProfile, config.Routing.Stt.Model, AiCapability.SpeechToText, registry);
         var ttsDesc = FormatDesc(ttsProfile, config.Routing.Tts.Model, AiCapability.TextToSpeech, registry);
         var llmDesc = FormatDesc(llmProfile, config.Routing.Llm.Model, AiCapability.FollowUpLlm, registry);
+        var gradingDesc = FormatDesc(gradingProfile, config.Routing.Grading.Model, AiCapability.Grading, registry);
 
-        return $"Real [STT={sttDesc}, TTS={ttsDesc}, LLM={llmDesc}]";
+        return $"Real [STT={sttDesc}, TTS={ttsDesc}, LLM={llmDesc}, Grading={gradingDesc}]";
     }
 
     private static string FormatDesc(AiProviderProfile? profile, string? model, AiCapability cap, IAiProviderRegistry registry)

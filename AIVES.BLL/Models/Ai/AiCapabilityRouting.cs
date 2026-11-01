@@ -20,11 +20,12 @@ public sealed class AiTtsCapabilityTarget
 }
 
 /// <summary>
-/// Mapping of each core AI capability (STT, TTS, LLM) to a target provider profile and model.
+/// Mapping of each core AI capability (STT, TTS, LLM, Grading) to a target provider profile and model.
 /// </summary>
 public sealed class AiCapabilityRouting
 {
     public AiCapabilityTarget Stt { get; set; } = new();
     public AiTtsCapabilityTarget Tts { get; set; } = new();
     public AiCapabilityTarget Llm { get; set; } = new();
+    public AiCapabilityTarget Grading { get; set; } = new();
 }
