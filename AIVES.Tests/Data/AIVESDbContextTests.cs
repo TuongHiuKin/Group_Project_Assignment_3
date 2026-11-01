@@ -209,7 +209,8 @@ public class AIVESDbContextTests
             typeof(ITagRepository),
             typeof(IVivaSessionRepository),
             typeof(IVivaQuestionRepository),
-            typeof(IVivaTurnRepository)
+            typeof(IVivaTurnRepository),
+            typeof(IVivaGradingRepository)
         })
         {
             Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, x => x.ServiceType == type).Lifetime);
@@ -229,7 +230,8 @@ public class AIVESDbContextTests
             typeof(TagRepository),
             typeof(VivaSessionRepository),
             typeof(VivaQuestionRepository),
-            typeof(VivaTurnRepository)
+            typeof(VivaTurnRepository),
+            typeof(VivaGradingRepository)
         };
 
         foreach (var type in repoTypes)
