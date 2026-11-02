@@ -79,6 +79,23 @@ public sealed class GeminiProviderAdapter : IAiProviderAdapter
         return new GeminiFollowUpGeneratorService(httpClient, profile, effectiveModel, validator, timeoutSeconds: timeout, logger, mock);
     }
 
+    public IAnswerGradingService? CreateAnswerGradingService(IServiceProvider sp, AiProviderProfile profile, string model)
+    {
+        if (!profile.CustomCapabilities.HasFlag(AiCapability.Grading))
+        {
+            return null;
+        }
+
+        var effectiveModel = string.IsNullOrWhiteSpace(model) ? GetDefaultModel(AiCapability.Grading) : model;
+        var httpClient = sp.GetRequiredService<HttpClient>();
+        var logger = sp.GetService<ILogger<GeminiAnswerGradingService>>();
+        var aiOptions = sp.GetService<IOptions<AiServiceOptions>>()?.Value;
+        var allowFallback = aiOptions?.AllowMockFallback ?? false;
+        var mock = allowFallback ? sp.GetService<MockAnswerGradingService>() : null;
+        var timeout = aiOptions?.GradingTimeoutSeconds > 0 ? aiOptions.GradingTimeoutSeconds : 30;
+        return new GeminiAnswerGradingService(httpClient, profile, effectiveModel, timeoutSeconds: timeout, logger, mock);
+    }
+
     public async Task<(bool Ok, string Message)> TestConnectionAsync(HttpClient httpClient, AiProviderProfile profile, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(profile.ApiKey))
