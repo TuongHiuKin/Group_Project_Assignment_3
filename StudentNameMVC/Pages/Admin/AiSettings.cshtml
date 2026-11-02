@@ -1,4 +1,4 @@
-﻿@page "/Admin/AiSettings"
+@page "/Admin/AiSettings"
 @model StudentNameMVC.Pages.Admin.AiSettingsModel
 @using AIVES.BLL.Models.Ai
 @using AIVES.BLL.Services.Ai.Gemini
@@ -97,10 +97,10 @@
                                     var sttP = Model.Configuration.FindProfile(Model.Configuration.Routing.Stt.ProfileId);
                                     var ttsP = Model.Configuration.FindProfile(Model.Configuration.Routing.Tts.ProfileId);
                                     var llmP = Model.Configuration.FindProfile(Model.Configuration.Routing.Llm.ProfileId);
+                                    var gradingP = Model.Configuration.FindProfile(Model.Configuration.Routing.Grading.ProfileId);
                                     var sttIsMock = sttP == null || !sttP.CustomCapabilities.HasFlag(AiCapability.SpeechToText);
                                     var ttsIsMock = ttsP == null || !ttsP.CustomCapabilities.HasFlag(AiCapability.TextToSpeech);
                                     var llmIsMock = llmP == null || !llmP.CustomCapabilities.HasFlag(AiCapability.FollowUpLlm);
-                                    var gradingP = Model.Configuration.FindProfile(Model.Configuration.Routing.Grading.ProfileId);
                                     var gradingIsMock = gradingP == null || !gradingP.CustomCapabilities.HasFlag(AiCapability.Grading);
                                 }
                                 <span class="badge @(sttIsMock ? "bg-warning text-dark border" : "bg-light text-dark border")">
@@ -121,7 +121,7 @@
                 </div>
             </div>
 
-            @if (Model.Configuration.UseRealAi && (sttIsMock || ttsIsMock || llmIsMock))
+            @if (Model.Configuration.UseRealAi && (sttIsMock || ttsIsMock || llmIsMock || gradingIsMock))
             {
                 <div class="alert alert-warning d-flex align-items-start shadow-sm mb-4" role="alert">
                     <i class="bi bi-exclamation-triangle-fill fs-4 me-3 text-warning flex-shrink-0 mt-1"></i>
@@ -140,6 +140,10 @@
                             @if (llmIsMock)
                             {
                                 <li><strong>LLM Follow-up:</strong> Đang dùng Mock (@(llmP == null ? "chưa gán nhà cung cấp" : $"hồ sơ '{llmP.Name}' không bật LLM")).</li>
+                            }
+                            @if (gradingIsMock)
+                            {
+                                <li><strong>AI Grading:</strong> Đang dùng Mock (@(gradingP == null ? "chưa gán nhà cung cấp" : $"hồ sơ '{gradingP.Name}' không bật Grading")).</li>
                             }
                         </ul>
                     </div>
@@ -304,14 +308,14 @@
                         <div class="row align-items-center mb-4">
                             <div class="col-md-3">
                                 <label class="fw-bold mb-0">
-                                    <i class="bi bi-award text-warning me-1"></i>Cháº¥m Ä‘iá»ƒm (AI Grading):
+                                    <i class="bi bi-award text-warning me-1"></i>Chấm điểm (AI Grading):
                                 </label>
-                                <div class="text-muted small">Cháº¥m Ä‘iá»ƒm cĂ¢u tráº£ lá»i theo rubric tiĂªu chĂ­</div>
+                                <div class="text-muted small">Chấm điểm câu trả lời theo rubric tiêu chí</div>
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label small text-muted mb-1">NhĂ  cung cáº¥p:</label>
+                                <label class="form-label small text-muted mb-1">Nhà cung cấp:</label>
                                 <select class="form-select" name="RoutingInput.GradingProfileId" id="gradingProfileSelect" onchange="onRoutingProfileChange('grading')">
-                                    <option value="">-- DĂ¹ng Mock (MĂ´ phá»ng) --</option>
+                                    <option value="">-- Dùng Mock (Mô phỏng) --</option>
                                     @foreach (var p in Model.Configuration.Profiles.Where(p => p.CustomCapabilities.HasFlag(AiCapability.Grading)))
                                     {
                                         <option value="@p.Id" data-kind="@p.Kind" selected="@(p.Id == Model.RoutingInput.GradingProfileId)">
@@ -321,10 +325,10 @@
                                 </select>
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label small text-muted mb-1">TĂªn Model:</label>
+                                <label class="form-label small text-muted mb-1">Tên Model:</label>
                                 <div class="input-group">
                                     <input type="text" class="form-control" name="RoutingInput.GradingModel" id="gradingModelInput"
-                                           value="@Model.RoutingInput.GradingModel" placeholder="gpt-4o-mini hoáº·c gemini-3.8-flash" list="gradingModelDatalist" />
+                                           value="@Model.RoutingInput.GradingModel" placeholder="gpt-4o-mini hoặc gemini-3.8-flash" list="gradingModelDatalist" />
                                     <button class="btn btn-outline-secondary" type="button" onclick="fetchModels('gradingProfileSelect', 'gradingModelDatalist')">
                                         <i class="bi bi-arrow-repeat"></i>
                                     </button>
@@ -430,11 +434,11 @@
                                                 }
                                                 @if (p.CustomCapabilities.HasFlag(AiCapability.FollowUpLlm))
                                                 {
-                                                    <span class="badge bg-info-subtle text-info border border-info-subtle" title="Sinh cĂ¢u há»i phá»¥">LLM</span>
+                                                    <span class="badge bg-info-subtle text-info border border-info-subtle" title="Sinh câu hỏi phụ">LLM</span>
                                                 }
                                                 @if (p.CustomCapabilities.HasFlag(AiCapability.Grading))
                                                 {
-                                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle" title="Cháº¥m Ä‘iá»ƒm AI">Grading</span>
+                                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle" title="Chấm điểm AI">Grading</span>
                                                 }
                                             </div>
                                         </td>
