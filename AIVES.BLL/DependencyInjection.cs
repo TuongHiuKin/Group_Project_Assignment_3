@@ -72,6 +72,7 @@ public static class DependencyInjection
 
         services.AddSingleton<FollowUpPolicyValidator>();
         services.AddSingleton<GradingOutputValidator>();
+        services.AddSingleton<ISpeechMetricsAnalyzer, SpeechMetricsAnalyzer>();
         services.AddScoped<MockSpeechToTextService>();
         services.AddScoped<MockTextToSpeechService>();
         services.AddScoped<MockFollowUpGeneratorService>();

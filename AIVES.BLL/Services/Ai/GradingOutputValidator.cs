@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using AIVES.BLL.Interfaces.Ai;
 using AIVES.BLL.Models.Grading;
 using Microsoft.Extensions.Logging;
 
@@ -15,6 +16,7 @@ namespace AIVES.BLL.Services.Ai;
 public sealed class GradingOutputValidator
 {
     private readonly ILogger<GradingOutputValidator>? _logger;
+    private readonly ISpeechMetricsAnalyzer _speechMetricsAnalyzer;
 
     // Các mẫu regex phát hiện Prompt Injection (cố tình ghi đè system prompt / ép AI cho điểm)
     private static readonly Regex[] InjectionPatterns =
@@ -38,9 +40,12 @@ public sealed class GradingOutputValidator
         new(@"\b(please pass me|help me pass|begging you for points?)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled),
     ];
 
-    public GradingOutputValidator(ILogger<GradingOutputValidator>? logger = null)
+    public GradingOutputValidator(
+        ILogger<GradingOutputValidator>? logger = null,
+        ISpeechMetricsAnalyzer? speechMetricsAnalyzer = null)
     {
         _logger = logger;
+        _speechMetricsAnalyzer = speechMetricsAnalyzer ?? new SpeechMetricsAnalyzer();
     }
 
     /// <summary>
@@ -168,6 +173,15 @@ public sealed class GradingOutputValidator
         result.AiFeedback = SanitizePlainText(result.AiFeedback);
         result.Strengths = SanitizePlainText(result.Strengths);
         result.Weaknesses = SanitizePlainText(result.Weaknesses);
+
+        // 6. Tính toán tín hiệu phụ giọng nói (Speech Metrics) nếu chưa có
+        if (result.SpeechMetrics == null)
+        {
+            result.SpeechMetrics = _speechMetricsAnalyzer.Analyze(
+                input.StudentAnswerTranscript, 
+                input.AnswerDurationSeconds, 
+                input.FollowUpTurns);
+        }
 
         return result;
     }

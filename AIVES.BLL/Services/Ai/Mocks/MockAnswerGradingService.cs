@@ -14,10 +14,14 @@ namespace AIVES.BLL.Services.Ai.Mocks;
 public sealed class MockAnswerGradingService : IAnswerGradingService
 {
     private readonly IRubricGradingService? _rubricGradingService;
+    private readonly ISpeechMetricsAnalyzer _speechMetricsAnalyzer;
 
-    public MockAnswerGradingService(IRubricGradingService? rubricGradingService = null)
+    public MockAnswerGradingService(
+        IRubricGradingService? rubricGradingService = null,
+        ISpeechMetricsAnalyzer? speechMetricsAnalyzer = null)
     {
         _rubricGradingService = rubricGradingService;
+        _speechMetricsAnalyzer = speechMetricsAnalyzer ?? new SpeechMetricsAnalyzer();
     }
 
     public Task<QuestionGradingResultDto> GradeAnswerAsync(
@@ -165,7 +169,8 @@ public sealed class MockAnswerGradingService : IAnswerGradingService
             CriteriaOutcomes = outcomes,
             AiProvider = "Mock",
             AiModel = "mock-rubric-v1",
-            State = GradingState.AiGraded
+            State = GradingState.AiGraded,
+            SpeechMetrics = _speechMetricsAnalyzer.Analyze(input.StudentAnswerTranscript, input.AnswerDurationSeconds, input.FollowUpTurns)
         };
 
         return Task.FromResult(result);
