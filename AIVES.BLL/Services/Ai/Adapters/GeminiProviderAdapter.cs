@@ -93,7 +93,8 @@ public sealed class GeminiProviderAdapter : IAiProviderAdapter
         var allowFallback = aiOptions?.AllowMockFallback ?? false;
         var mock = allowFallback ? sp.GetService<MockAnswerGradingService>() : null;
         var timeout = aiOptions?.GradingTimeoutSeconds > 0 ? aiOptions.GradingTimeoutSeconds : 30;
-        return new GeminiAnswerGradingService(httpClient, profile, effectiveModel, timeoutSeconds: timeout, logger, mock);
+        var validator = sp.GetService<GradingOutputValidator>() ?? new GradingOutputValidator();
+        return new GeminiAnswerGradingService(httpClient, profile, effectiveModel, timeoutSeconds: timeout, logger, mock, retryDelays: null, validator: validator);
     }
 
     public async Task<(bool Ok, string Message)> TestConnectionAsync(HttpClient httpClient, AiProviderProfile profile, CancellationToken ct = default)

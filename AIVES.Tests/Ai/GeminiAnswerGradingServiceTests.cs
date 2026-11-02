@@ -168,7 +168,7 @@ public sealed class GeminiAnswerGradingServiceTests
         var input = CreateSampleInput();
         var result = await service.GradeAnswerAsync(input);
 
-        Assert.Equal(10.0m, result.AiScore); // Clamped to input.MaxPoints = 10m
+        Assert.Equal(5.0m, result.AiScore); // Reconciled to sum of valid criteria (5.0m + 0.0m = 5.0m)
         var c1 = result.CriteriaOutcomes.First(c => c.CriterionCode == "EXAM01-Q01-C1");
         Assert.Equal(5.0m, c1.AwardedPoints); // Clamped to criterion max = 5m
 

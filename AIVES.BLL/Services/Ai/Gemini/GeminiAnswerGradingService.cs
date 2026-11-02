@@ -21,6 +21,7 @@ public sealed class GeminiAnswerGradingService : IAnswerGradingService
     private readonly IAnswerGradingService? _fallbackService;
     private readonly ILogger<GeminiAnswerGradingService>? _logger;
     private readonly IReadOnlyList<TimeSpan> _retryDelays;
+    private readonly GradingOutputValidator _validator;
 
     public GeminiAnswerGradingService(
         HttpClient httpClient,
@@ -29,7 +30,8 @@ public sealed class GeminiAnswerGradingService : IAnswerGradingService
         int timeoutSeconds = 30,
         ILogger<GeminiAnswerGradingService>? logger = null,
         IAnswerGradingService? fallbackService = null,
-        IReadOnlyList<TimeSpan>? retryDelays = null)
+        IReadOnlyList<TimeSpan>? retryDelays = null,
+        GradingOutputValidator? validator = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
@@ -38,6 +40,7 @@ public sealed class GeminiAnswerGradingService : IAnswerGradingService
         _logger = logger;
         _fallbackService = fallbackService;
         _retryDelays = retryDelays ?? GeminiRetryPolicy.DefaultDelays;
+        _validator = validator ?? new GradingOutputValidator();
     }
 
     public async Task<QuestionGradingResultDto> GradeAnswerAsync(
@@ -255,7 +258,7 @@ public sealed class GeminiAnswerGradingService : IAnswerGradingService
 
         var clampedTotal = Math.Clamp(Math.Round(parsed.TotalScore, 2), 0m, input.MaxPoints);
 
-        return new QuestionGradingResultDto
+        var rawResult = new QuestionGradingResultDto
         {
             Id = Guid.NewGuid(),
             SessionId = input.SessionId,
@@ -272,6 +275,8 @@ public sealed class GeminiAnswerGradingService : IAnswerGradingService
             AiModel = _model,
             State = GradingState.AiGraded
         };
+
+        return _validator.Validate(rawResult, input);
     }
 
     private QuestionGradingResultDto CreateFailedResult(GradingInputDto input, string errorMessage)

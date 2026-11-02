@@ -71,6 +71,7 @@ public static class DependencyInjection
         services.AddHttpClient<GeminiAnswerGradingService>(client => client.Timeout = TimeSpan.FromMinutes(2));
 
         services.AddSingleton<FollowUpPolicyValidator>();
+        services.AddSingleton<GradingOutputValidator>();
         services.AddScoped<MockSpeechToTextService>();
         services.AddScoped<MockTextToSpeechService>();
         services.AddScoped<MockFollowUpGeneratorService>();

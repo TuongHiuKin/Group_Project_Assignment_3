@@ -22,6 +22,7 @@ public sealed class OpenAiAnswerGradingService : IAnswerGradingService
     private readonly int _timeoutSeconds;
     private readonly IAnswerGradingService? _fallbackService;
     private readonly ILogger<OpenAiAnswerGradingService>? _logger;
+    private readonly GradingOutputValidator _validator;
 
     public OpenAiAnswerGradingService(
         HttpClient httpClient,
@@ -29,7 +30,8 @@ public sealed class OpenAiAnswerGradingService : IAnswerGradingService
         string? model = null,
         int timeoutSeconds = 30,
         ILogger<OpenAiAnswerGradingService>? logger = null,
-        IAnswerGradingService? fallbackService = null)
+        IAnswerGradingService? fallbackService = null,
+        GradingOutputValidator? validator = null)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _profile = profile ?? throw new ArgumentNullException(nameof(profile));
@@ -37,6 +39,7 @@ public sealed class OpenAiAnswerGradingService : IAnswerGradingService
         _timeoutSeconds = timeoutSeconds > 0 ? timeoutSeconds : 30;
         _logger = logger;
         _fallbackService = fallbackService;
+        _validator = validator ?? new GradingOutputValidator();
     }
 
     public async Task<QuestionGradingResultDto> GradeAnswerAsync(
@@ -247,7 +250,7 @@ public sealed class OpenAiAnswerGradingService : IAnswerGradingService
             ? "OpenAI-Compatible"
             : "OpenAI";
 
-        return new QuestionGradingResultDto
+        var rawResult = new QuestionGradingResultDto
         {
             Id = Guid.NewGuid(),
             SessionId = input.SessionId,
@@ -264,6 +267,8 @@ public sealed class OpenAiAnswerGradingService : IAnswerGradingService
             AiModel = _model,
             State = GradingState.AiGraded
         };
+
+        return _validator.Validate(rawResult, input);
     }
 
     private QuestionGradingResultDto CreateFailedResult(GradingInputDto input, string errorMessage)
