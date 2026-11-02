@@ -12,6 +12,10 @@ using AIVES.BLL.Services.Ai.Gemini;
 using AIVES.BLL.Services.Ai.Mocks;
 using AIVES.BLL.Services.Ai.Unavailable;
 using AIVES.BLL.Services.VivaInterview;
+using AIVES.BLL.Interfaces.ExamReporting;
+using AIVES.BLL.Interfaces.Grading;
+using AIVES.BLL.Services.ExamReporting;
+using AIVES.BLL.Services.Grading;
 
 namespace AIVES.BLL;
 
@@ -36,6 +40,17 @@ public static class DependencyInjection
     /// <summary>
     /// Registers BLL services for Group 3 AI Viva Interview Core.
     /// </summary>
+    /// <summary>
+    /// Registers BLL services for Group 4 AI-assisted Viva Exam Grading.
+    /// </summary>
+    public static IServiceCollection AddVivaGradingServices(this IServiceCollection services)
+    {
+        services.TryAddScoped<IRubricGradingService, RubricGradingService>();
+        services.TryAddScoped<IAnswerGradingService, MockAnswerGradingService>();
+        services.AddScoped<IGradingOrchestrator, GradingOrchestrator>();
+        return services;
+    }
+
     public static IServiceCollection AddVivaInterviewServices(this IServiceCollection services)
     {
         services.AddScoped<IVivaSessionOrchestrator, VivaSessionOrchestrator>();
@@ -50,6 +65,7 @@ public static class DependencyInjection
         services.AddScoped<ISpeechToTextService, MockSpeechToTextService>();
         services.AddScoped<ITextToSpeechService, MockTextToSpeechService>();
         services.AddScoped<IFollowUpGeneratorService, MockFollowUpGeneratorService>();
+        services.AddScoped<IAnswerGradingService, MockAnswerGradingService>();
         return services;
     }
 
