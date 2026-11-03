@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.TestHost;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -296,7 +297,40 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
         public Task<SessionGradingSummaryDto> GradeSessionAsync(Guid sessionId, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<QuestionGradingResultDto> GradeQuestionAsync(Guid sessionId, string questionId, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<QuestionGradingResultDto> RegradeQuestionAsync(Guid sessionId, string questionId, string requestedBy, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<QuestionGradingResultDto> FinalizeScoreAsync(FinalizeScoreRequestDto request, string teacherId, CancellationToken ct = default) => throw new NotImplementedException();
+
+        public Task<QuestionGradingResultDto> FinalizeScoreAsync(FinalizeScoreRequestDto request, string teacherId, CancellationToken ct = default)
+        {
+            var session = Sessions.FirstOrDefault(s => s.SessionId == request.SessionId)
+                ?? throw new InvalidOperationException($"Session {request.SessionId} not found");
+
+            var question = session.QuestionResults.FirstOrDefault(q => string.Equals(q.QuestionId, request.QuestionId, StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException($"Question {request.QuestionId} not found");
+
+            if (string.Equals(request.ExpectedRowVersion, "CONFLICT", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new DbUpdateConcurrencyException("The grading result was modified by another instructor.");
+            }
+
+            if (question.State == GradingState.Finalized && string.IsNullOrWhiteSpace(request.ChangeReason))
+            {
+                throw new ArgumentException("A non-empty reason is mandatory when modifying an already finalized score.", nameof(request.ChangeReason));
+            }
+
+            question.TeacherFinalScore = request.FinalScore;
+            question.TeacherNotes = request.TeacherNotes;
+            question.FinalizedBy = teacherId;
+            question.FinalizedAtUtc = DateTime.UtcNow;
+            question.State = GradingState.Finalized;
+
+            session.TotalFinalScore = session.QuestionResults.Sum(q => q.TeacherFinalScore ?? q.AiScore ?? 0);
+            session.IsFullyFinalized = session.QuestionResults.All(q => q.IsFinalized);
+            if (session.IsFullyFinalized)
+            {
+                session.OverallState = GradingState.Finalized;
+            }
+
+            return Task.FromResult(question);
+        }
     }
 
     public sealed class FakeClassReportService : IClassReportService
@@ -480,7 +514,149 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
     }
 
     // ==========================================
-    // 3. INTEGRATION TESTS: HTTP & Security
+    // 3. UNIT TESTS: Review Form Actions (UI-03)
+    // ==========================================
+
+    [Fact]
+    public async Task ReviewModel_OnPostAcceptAiScoreAsync_ValidRequest_FinalizesScoreAndSetsSuccessMessage()
+    {
+        var fakeOrchestrator = new FakeGradingOrchestrator();
+        var fakeReportService = new FakeClassReportService();
+        var httpContext = new DefaultHttpContext();
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        {
+            SessionId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            PageContext = new PageContext { HttpContext = httpContext },
+            TempData = new TempDataDictionary(httpContext, new EmptyTempDataProvider())
+        };
+
+        var result = await model.OnPostAcceptAiScoreAsync("Q1", 8.5m, null);
+
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.NotNull(model.TempData["SuccessMessage"]);
+        Assert.Contains("8.5", model.TempData["SuccessMessage"]?.ToString());
+
+        var session = await fakeOrchestrator.GetSessionGradingAsync(model.SessionId.Value);
+        Assert.NotNull(session);
+        var q1 = session.QuestionResults.First(q => q.QuestionId == "Q1");
+        Assert.Equal(8.5m, q1.TeacherFinalScore);
+        Assert.Equal(GradingState.Finalized, q1.State);
+    }
+
+    [Fact]
+    public async Task ReviewModel_OnPostOverrideScoreAsync_ValidScore_OverridesAndFinalizes()
+    {
+        var fakeOrchestrator = new FakeGradingOrchestrator();
+        var fakeReportService = new FakeClassReportService();
+        var httpContext = new DefaultHttpContext();
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        {
+            SessionId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            PageContext = new PageContext { HttpContext = httpContext },
+            TempData = new TempDataDictionary(httpContext, new EmptyTempDataProvider())
+        };
+
+        var result = await model.OnPostOverrideScoreAsync("Q1", 9.5m, "Trả lời xuất sắc", null, null, isAlreadyFinalized: false);
+
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.NotNull(model.TempData["SuccessMessage"]);
+        Assert.Contains("9.5", model.TempData["SuccessMessage"]?.ToString());
+
+        var session = await fakeOrchestrator.GetSessionGradingAsync(model.SessionId.Value);
+        Assert.NotNull(session);
+        var q1 = session.QuestionResults.First(q => q.QuestionId == "Q1");
+        Assert.Equal(9.5m, q1.TeacherFinalScore);
+        Assert.Equal("Trả lời xuất sắc", q1.TeacherNotes);
+        Assert.Equal(GradingState.Finalized, q1.State);
+    }
+
+    [Fact]
+    public async Task ReviewModel_OnPostOverrideScoreAsync_InvalidScore_FailsWithErrorMessage()
+    {
+        var fakeOrchestrator = new FakeGradingOrchestrator();
+        var fakeReportService = new FakeClassReportService();
+        var httpContext = new DefaultHttpContext();
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        {
+            SessionId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            PageContext = new PageContext { HttpContext = httpContext },
+            TempData = new TempDataDictionary(httpContext, new EmptyTempDataProvider())
+        };
+
+        // Score 15 is > maxPoints (10)
+        await model.OnPostOverrideScoreAsync("Q1", 15m, "Ghi chú", null, null, isAlreadyFinalized: false, maxPoints: 10m);
+
+        Assert.NotNull(model.TempData["ErrorMessage"]);
+        Assert.Contains("không hợp lệ", model.TempData["ErrorMessage"]?.ToString());
+    }
+
+    [Fact]
+    public async Task ReviewModel_OnPostOverrideScoreAsync_AlreadyFinalizedWithoutReason_FailsWithMandatoryReasonError()
+    {
+        var fakeOrchestrator = new FakeGradingOrchestrator();
+        var fakeReportService = new FakeClassReportService();
+        var httpContext = new DefaultHttpContext();
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        {
+            SessionId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            PageContext = new PageContext { HttpContext = httpContext },
+            TempData = new TempDataDictionary(httpContext, new EmptyTempDataProvider())
+        };
+
+        // Modifying an already finalized score with EMPTY reason
+        await model.OnPostOverrideScoreAsync("Q1", 8.0m, "Giảm điểm", "", null, isAlreadyFinalized: true);
+
+        Assert.NotNull(model.TempData["ErrorMessage"]);
+        Assert.Contains("Bắt buộc phải nhập lý do điều chỉnh", model.TempData["ErrorMessage"]?.ToString());
+    }
+
+    [Fact]
+    public async Task ReviewModel_OnPostOverrideScoreAsync_AlreadyFinalizedWithReason_Succeeds()
+    {
+        var fakeOrchestrator = new FakeGradingOrchestrator();
+        var fakeReportService = new FakeClassReportService();
+        var httpContext = new DefaultHttpContext();
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        {
+            SessionId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            PageContext = new PageContext { HttpContext = httpContext },
+            TempData = new TempDataDictionary(httpContext, new EmptyTempDataProvider())
+        };
+
+        // Modifying an already finalized score WITH reason
+        await model.OnPostOverrideScoreAsync("Q1", 8.5m, "Giảm điểm sau hội đồng", "Phúc khảo theo đơn sinh viên", null, isAlreadyFinalized: true);
+
+        Assert.NotNull(model.TempData["SuccessMessage"]);
+        Assert.Contains("8.5", model.TempData["SuccessMessage"]?.ToString());
+
+        var session = await fakeOrchestrator.GetSessionGradingAsync(model.SessionId.Value);
+        Assert.NotNull(session);
+        var q1 = session.QuestionResults.First(q => q.QuestionId == "Q1");
+        Assert.Equal(8.5m, q1.TeacherFinalScore);
+    }
+
+    [Fact]
+    public async Task ReviewModel_OnPostOverrideScoreAsync_ConcurrencyConflict_CatchesAndSetsWarning()
+    {
+        var fakeOrchestrator = new FakeGradingOrchestrator();
+        var fakeReportService = new FakeClassReportService();
+        var httpContext = new DefaultHttpContext();
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        {
+            SessionId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            PageContext = new PageContext { HttpContext = httpContext },
+            TempData = new TempDataDictionary(httpContext, new EmptyTempDataProvider())
+        };
+
+        // Pass expectedRowVersion = "CONFLICT" to simulate DbUpdateConcurrencyException
+        await model.OnPostOverrideScoreAsync("Q1", 9.0m, "Chấm điểm", null, "CONFLICT", isAlreadyFinalized: false);
+
+        Assert.NotNull(model.TempData["ErrorMessage"]);
+        Assert.Contains("Xung đột dữ liệu", model.TempData["ErrorMessage"]?.ToString());
+    }
+
+    // ==========================================
+    // 4. INTEGRATION TESTS: HTTP & Security
     // ==========================================
 
     [Fact]
@@ -714,5 +890,92 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.NotNull(response.Headers.Location);
         Assert.Contains("/Grading", response.Headers.Location.ToString());
+    }
+
+    [Fact]
+    public async Task Post_GradingReview_AcceptAiScore_LecturerRole_FinalizesScoreAndRedirects()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+        client.DefaultRequestHeaders.Add("X-Test-User", "GV01");
+        client.DefaultRequestHeaders.Add("X-Test-Role", ApplicationRoles.Lecturer);
+
+        var sessionId = "11111111-1111-1111-1111-111111111111";
+        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["questionId"] = "Q1",
+            ["aiScore"] = "8.5"
+        });
+
+        var response = await client.PostAsync($"/Grading/Review?handler=AcceptAiScore&sessionId={sessionId}", content);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+        Assert.Contains(sessionId, response.Headers.Location.ToString());
+
+        var session = await _factory.FakeOrchestrator.GetSessionGradingAsync(Guid.Parse(sessionId));
+        Assert.NotNull(session);
+        var q1 = session.QuestionResults.First(q => q.QuestionId == "Q1");
+        Assert.Equal(8.5m, q1.TeacherFinalScore);
+        Assert.Equal(GradingState.Finalized, q1.State);
+    }
+
+    [Fact]
+    public async Task Post_GradingReview_OverrideScore_LecturerRole_ValidScore_FinalizesScore()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+        client.DefaultRequestHeaders.Add("X-Test-User", "GV01");
+        client.DefaultRequestHeaders.Add("X-Test-Role", ApplicationRoles.Lecturer);
+
+        var sessionId = "11111111-1111-1111-1111-111111111111";
+        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["questionId"] = "Q1",
+            ["finalScore"] = "9.0",
+            ["teacherNotes"] = "Rất tốt",
+            ["isAlreadyFinalized"] = "false",
+            ["maxPoints"] = "10"
+        });
+
+        var response = await client.PostAsync($"/Grading/Review?handler=OverrideScore&sessionId={sessionId}", content);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+
+        var session = await _factory.FakeOrchestrator.GetSessionGradingAsync(Guid.Parse(sessionId));
+        Assert.NotNull(session);
+        var q1 = session.QuestionResults.First(q => q.QuestionId == "Q1");
+        Assert.Equal(9.0m, q1.TeacherFinalScore);
+        Assert.Equal("Rất tốt", q1.TeacherNotes);
+        Assert.Equal(GradingState.Finalized, q1.State);
+    }
+
+    [Fact]
+    public async Task Post_GradingReview_StudentRole_IsForbidden()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+        client.DefaultRequestHeaders.Add("X-Test-User", "SV01");
+        client.DefaultRequestHeaders.Add("X-Test-Role", ApplicationRoles.Staff);
+
+        var sessionId = "11111111-1111-1111-1111-111111111111";
+        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["questionId"] = "Q1",
+            ["aiScore"] = "8.5"
+        });
+
+        var response = await client.PostAsync($"/Grading/Review?handler=AcceptAiScore&sessionId={sessionId}", content);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+        Assert.Contains("/Account/AccessDenied", response.Headers.Location.ToString());
     }
 }

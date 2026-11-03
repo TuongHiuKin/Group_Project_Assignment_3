@@ -491,7 +491,7 @@
                             </div>
                         }
 
-                        <!-- 3.6 Khung Chốt Điểm Giảng Viên (Human-in-the-Loop Actions) -->
+                        <!-- 3.6 Khung Chốt Điểm Giảng Viên (Human-in-the-Loop Actions & Forms) -->
                         <div class="p-3 p-md-4 rounded-4 bg-light border">
                             <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
                                 <div>
@@ -528,27 +528,16 @@
                                 </div>
 
                                 <div class="d-flex align-items-center gap-2 flex-wrap">
-                                    <input type="hidden" name="rowVersion-@q.QuestionId" value="@q.RowVersion" />
-
-                                    @if (!isFinalized)
+                                    @if (!isFinalized && q.AiScore.HasValue)
                                     {
-                                        <button type="button" class="btn btn-outline-success rounded-pill px-3 fw-semibold btn-accept-ai"
-                                                data-session-id="@session.SessionId"
-                                                data-question-id="@q.QuestionId"
-                                                data-ai-score="@(q.AiScore?.ToString("0.##") ?? "0")"
-                                                data-row-version="@q.RowVersion">
-                                            <i class="bi bi-check-lg me-1"></i>Xác nhận điểm AI (@(q.AiScore?.ToString("0.##") ?? "—"))
+                                        <button type="button" class="btn btn-outline-success rounded-pill px-3 fw-semibold"
+                                                data-bs-toggle="modal" data-bs-target="#confirmAiModal_@q.QuestionId">
+                                            <i class="bi bi-check-lg me-1"></i>Xác nhận điểm AI (@q.AiScore.Value.ToString("0.##"))
                                         </button>
                                     }
 
-                                    <button type="button" class="btn btn-primary rounded-pill px-3 fw-semibold btn-override-score"
-                                            data-session-id="@session.SessionId"
-                                            data-question-id="@q.QuestionId"
-                                            data-question-title="@q.QuestionTitle"
-                                            data-current-score="@(q.EffectiveScore?.ToString("0.##") ?? "0")"
-                                            data-max-score="@q.MaxPoints.ToString("0.##")"
-                                            data-is-finalized="@(isFinalized ? "true" : "false")"
-                                            data-row-version="@q.RowVersion">
+                                    <button type="button" class="btn btn-primary rounded-pill px-3 fw-semibold"
+                                            data-bs-toggle="modal" data-bs-target="#overrideModal_@q.QuestionId">
                                         <i class="bi bi-pencil-fill me-1"></i>@(isFinalized ? "Sửa điểm chính thức" : "Nhập điểm GV")
                                     </button>
 
@@ -561,10 +550,121 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- MODAL 1: Xác nhận điểm AI -->
+                        @if (!isFinalized && q.AiScore.HasValue)
+                        {
+                            <div class="modal fade" id="confirmAiModal_@q.QuestionId" tabindex="-1" aria-labelledby="confirmAiModalLabel_@q.QuestionId" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <div class="modal-content rounded-4 border-0 shadow">
+                                        <div class="modal-header border-bottom-0 pb-0">
+                                            <h5 class="modal-title fw-bold text-dark" id="confirmAiModalLabel_@q.QuestionId">
+                                                <i class="bi bi-robot text-primary me-2"></i>Xác Nhận Điểm AI
+                                            </h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <form method="post" asp-page-handler="AcceptAiScore" asp-route-sessionId="@session.SessionId">
+                                            <div class="modal-body py-3">
+                                                <input type="hidden" name="questionId" value="@q.QuestionId" />
+                                                <input type="hidden" name="aiScore" value="@q.AiScore.Value" />
+                                                <input type="hidden" name="expectedRowVersion" value="@q.RowVersion" />
+
+                                                <p class="text-secondary mb-3">
+                                                    Bạn có chắc chắn muốn xác nhận điểm số do mô hình AI chấm cho câu hỏi <strong>@q.QuestionTitle</strong> không?
+                                                </p>
+                                                <div class="p-3 bg-light rounded-3 text-center mb-3">
+                                                    <div class="text-muted small">Điểm AI đề xuất</div>
+                                                    <div class="fs-2 fw-bold text-success">
+                                                        @q.AiScore.Value.ToString("0.##") <span class="fs-6 text-muted fw-normal">/@q.MaxPoints.ToString("0.##")</span>
+                                                    </div>
+                                                </div>
+                                                <div class="alert alert-info py-2 px-3 small border-0 mb-0">
+                                                    <i class="bi bi-info-circle me-1"></i>Sau khi xác nhận, điểm này sẽ trở thành <strong>Điểm chính thức</strong> của câu hỏi.
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer border-top-0 pt-0">
+                                                <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Hủy</button>
+                                                <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold">
+                                                    <i class="bi bi-check2-circle me-1"></i>Xác nhận điểm
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        <!-- MODAL 2: Nhập điểm GV hoặc Sửa điểm chính thức -->
+                        <div class="modal fade" id="overrideModal_@q.QuestionId" tabindex="-1" aria-labelledby="overrideModalLabel_@q.QuestionId" aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content rounded-4 border-0 shadow">
+                                    <div class="modal-header border-bottom-0 pb-0">
+                                        <h5 class="modal-title fw-bold text-dark" id="overrideModalLabel_@q.QuestionId">
+                                            <i class="bi bi-pencil-square text-primary me-2"></i>@(isFinalized ? "Điều Chỉnh Điểm Chính Thức" : "Nhập Điểm Giảng Viên")
+                                        </h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <form method="post" asp-page-handler="OverrideScore" asp-route-sessionId="@session.SessionId">
+                                        <div class="modal-body py-3">
+                                            <input type="hidden" name="questionId" value="@q.QuestionId" />
+                                            <input type="hidden" name="expectedRowVersion" value="@q.RowVersion" />
+                                            <input type="hidden" name="isAlreadyFinalized" value="@(isFinalized ? "true" : "false")" />
+                                            <input type="hidden" name="maxPoints" value="@q.MaxPoints" />
+
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold text-dark small">
+                                                    Câu hỏi: <span class="text-primary">@q.QuestionTitle</span>
+                                                </label>
+                                                <div class="input-group">
+                                                    <span class="input-group-text bg-light fw-bold text-secondary">Điểm số</span>
+                                                    <input type="number" step="0.25" min="0" max="@q.MaxPoints" name="finalScore" 
+                                                           value="@(q.EffectiveScore?.ToString("0.##") ?? "0")" 
+                                                           class="form-control form-control-lg fw-bold text-primary" required />
+                                                    <span class="input-group-text bg-light">/@q.MaxPoints.ToString("0.##")</span>
+                                                </div>
+                                            </div>
+
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold text-dark small">Ghi chú đánh giá của giảng viên:</label>
+                                                <textarea name="teacherNotes" class="form-control rounded-3" rows="2" 
+                                                          placeholder="Nhận xét cụ thể của giảng viên cho câu trả lời này...">@q.TeacherNotes</textarea>
+                                            </div>
+
+                                            @if (isFinalized)
+                                            {
+                                                <div class="mb-3">
+                                                    <label class="form-label text-danger fw-bold small">
+                                                        <i class="bi bi-exclamation-triangle-fill me-1"></i>Lý do sửa đổi điểm (Bắt buộc vì điểm đã được chốt trước đó):
+                                                    </label>
+                                                    <textarea name="changeReason" class="form-control border-danger rounded-3" rows="2" 
+                                                              placeholder="Nhập lý do điều chỉnh điểm đã chốt (ghi vào nhật ký thay đổi)..." required></textarea>
+                                                    <div class="form-text text-danger small">
+                                                        Mọi thay đổi sau khi chốt điểm đều được lưu vết vào nhật ký hệ thống (Audit Log).
+                                                    </div>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="mb-2">
+                                                    <label class="form-label text-secondary fw-semibold small">Lý do điều chỉnh (Không bắt buộc):</label>
+                                                    <input type="text" name="changeReason" class="form-control rounded-3" 
+                                                           placeholder="Lý do ghi đè điểm AI (tùy chọn)..." />
+                                                </div>
+                                            }
+                                        </div>
+                                        <div class="modal-footer border-top-0 pt-0">
+                                            <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Hủy</button>
+                                            <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold">
+                                                <i class="bi bi-save2 me-1"></i>Lưu điểm chính thức
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         }
     }
 </div>
-
