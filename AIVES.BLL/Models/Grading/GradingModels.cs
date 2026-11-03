@@ -76,6 +76,9 @@ public sealed class QuestionGradingResultDto
     // Concurrency Token (Base64)
     public string? RowVersion { get; set; }
 
+    // Audit Change Logs (for UI-04)
+    public List<GradeChangeLogDto> ChangeLogs { get; set; } = new();
+
     // Calculated Property for Effective Score
     public decimal? EffectiveScore => TeacherFinalScore ?? AiScore;
     public bool IsFinalized => State == GradingState.Finalized;
@@ -97,6 +100,8 @@ public sealed class SessionGradingSummaryDto
     public GradingState OverallState { get; set; }
     public bool IsFullyFinalized { get; set; }
     public List<QuestionGradingResultDto> QuestionResults { get; set; } = new();
+
+    public List<GradeChangeLogDto> AllChangeLogs => QuestionResults.SelectMany(q => q.ChangeLogs).OrderByDescending(l => l.ChangedAtUtc).ToList();
 }
 
 public sealed class FinalizeScoreRequestDto
@@ -113,6 +118,8 @@ public sealed class GradeChangeLogDto
 {
     public long Id { get; set; }
     public Guid GradingResultId { get; set; }
+    public string? QuestionId { get; set; }
+    public string? QuestionTitle { get; set; }
     public decimal? OldScore { get; set; }
     public decimal NewScore { get; set; }
     public string ChangedBy { get; set; } = string.Empty;

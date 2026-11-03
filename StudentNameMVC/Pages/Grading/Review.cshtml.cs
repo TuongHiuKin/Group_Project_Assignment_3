@@ -196,6 +196,47 @@ public class ReviewModel : PageModel
         return RedirectToPage(new { sessionId = SessionId });
     }
 
+    public async Task<IActionResult> OnPostRegradeQuestionAsync(
+        string questionId,
+        CancellationToken ct = default)
+    {
+        if (!SessionId.HasValue || SessionId.Value == Guid.Empty)
+        {
+            SetErrorMessage("Mã phiên thi không hợp lệ.");
+            return RedirectToPage("/Grading/Index");
+        }
+
+        if (string.IsNullOrWhiteSpace(questionId))
+        {
+            SetErrorMessage("Mã câu hỏi không hợp lệ.");
+            return RedirectToPage(new { sessionId = SessionId });
+        }
+
+        try
+        {
+            // Kiểm tra xem câu hỏi đã bị chốt điểm hay chưa
+            var currentSession = await _gradingOrchestrator.GetSessionGradingAsync(SessionId.Value, ct);
+            var question = currentSession?.QuestionResults.FirstOrDefault(q => string.Equals(q.QuestionId, questionId, StringComparison.OrdinalIgnoreCase));
+            if (question != null && question.IsFinalized)
+            {
+                SetErrorMessage($"Câu hỏi '{question.QuestionTitle}' đã chốt điểm chính thức nên không thể chấm lại bằng AI. Vui lòng mở khóa hoặc sử dụng chức năng 'Sửa điểm chính thức'.");
+                return RedirectToPage(new { sessionId = SessionId });
+            }
+
+            var teacherId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "Teacher";
+            var result = await _gradingOrchestrator.RegradeQuestionAsync(SessionId.Value, questionId, teacherId, ct);
+
+            SetSuccessMessage($"Đã hoàn tất chấm lại bằng AI cho câu hỏi {questionId}. Điểm AI đề xuất mới: {result.AiScore:0.##}/{result.MaxPoints:0.##}.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi khi chấm lại bằng AI cho phiên {SessionId}, câu {QuestionId}", SessionId, questionId);
+            SetErrorMessage($"Không thể chấm lại bằng AI: {ex.Message}");
+        }
+
+        return RedirectToPage(new { sessionId = SessionId });
+    }
+
     public string GetSpeakingSpeedAssessment(double wpm)
     {
         if (wpm <= 0) return "Chưa xác định";

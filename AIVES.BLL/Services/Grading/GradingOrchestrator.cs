@@ -456,6 +456,21 @@ public sealed class GradingOrchestrator(
             }
         }
 
+        var changeLogs = entity.ChangeLogs?
+            .OrderByDescending(l => l.ChangedAtUtc)
+            .Select(l => new GradeChangeLogDto
+            {
+                Id = l.Id,
+                GradingResultId = l.GradingResultId,
+                QuestionId = entity.QuestionId,
+                QuestionTitle = question?.Title ?? entity.QuestionId,
+                OldScore = l.OldScore,
+                NewScore = l.NewScore,
+                ChangedBy = l.ChangedBy,
+                Reason = l.Reason,
+                ChangedAtUtc = l.ChangedAtUtc
+            }).ToList() ?? new();
+
         return new QuestionGradingResultDto
         {
             Id = entity.Id,
@@ -476,7 +491,8 @@ public sealed class GradingOrchestrator(
             TeacherNotes = entity.TeacherNotes,
             FinalizedBy = entity.FinalizedBy,
             FinalizedAtUtc = entity.FinalizedAtUtc,
-            RowVersion = entity.RowVersion != null ? Convert.ToBase64String(entity.RowVersion) : null
+            RowVersion = entity.RowVersion != null ? Convert.ToBase64String(entity.RowVersion) : null,
+            ChangeLogs = changeLogs
         };
     }
 }

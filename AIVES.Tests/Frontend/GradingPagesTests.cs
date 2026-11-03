@@ -238,7 +238,22 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
                             TeacherNotes = "Thí sinh diễn đạt rất tự tin và thực tế, chấm 9.",
                             FinalizedBy = "GV01",
                             FinalizedAtUtc = new DateTime(2026, 11, 2, 15, 0, 0, DateTimeKind.Utc),
-                            State = GradingState.Finalized
+                            State = GradingState.Finalized,
+                            ChangeLogs = new List<GradeChangeLogDto>
+                            {
+                                new()
+                                {
+                                    Id = 1,
+                                    GradingResultId = Guid.NewGuid(),
+                                    QuestionId = "Q1",
+                                    QuestionTitle = "Khái niệm Dependency Injection",
+                                    OldScore = 7.0m,
+                                    NewScore = 9.0m,
+                                    ChangedBy = "GV01",
+                                    Reason = "Thí sinh trả lời bổ sung rất xuất sắc phần Scoped vs Transient",
+                                    ChangedAtUtc = new DateTime(2026, 11, 2, 15, 0, 0, DateTimeKind.Utc)
+                                }
+                            }
                         }
                     }
                 },
@@ -296,7 +311,25 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
 
         public Task<SessionGradingSummaryDto> GradeSessionAsync(Guid sessionId, CancellationToken ct = default) => throw new NotImplementedException();
         public Task<QuestionGradingResultDto> GradeQuestionAsync(Guid sessionId, string questionId, CancellationToken ct = default) => throw new NotImplementedException();
-        public Task<QuestionGradingResultDto> RegradeQuestionAsync(Guid sessionId, string questionId, string requestedBy, CancellationToken ct = default) => throw new NotImplementedException();
+        public Task<QuestionGradingResultDto> RegradeQuestionAsync(Guid sessionId, string questionId, string requestedBy, CancellationToken ct = default)
+        {
+            var session = Sessions.FirstOrDefault(s => s.SessionId == sessionId)
+                ?? throw new InvalidOperationException($"Session {sessionId} not found");
+
+            var question = session.QuestionResults.FirstOrDefault(q => string.Equals(q.QuestionId, questionId, StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException($"Question {questionId} not found");
+
+            if (question.State == GradingState.Finalized)
+            {
+                return Task.FromResult(question);
+            }
+
+            question.AiScore = 8.8m;
+            question.AiFeedback = "Đã chấm lại bằng mô hình AI. Cập nhật phân tích lời thoại mới.";
+            question.State = GradingState.AiGraded;
+            session.TotalAiScore = session.QuestionResults.Sum(q => q.AiScore ?? 0);
+            return Task.FromResult(question);
+        }
 
         public Task<QuestionGradingResultDto> FinalizeScoreAsync(FinalizeScoreRequestDto request, string teacherId, CancellationToken ct = default)
         {
@@ -315,6 +348,20 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
             {
                 throw new ArgumentException("A non-empty reason is mandatory when modifying an already finalized score.", nameof(request.ChangeReason));
             }
+
+            var oldScore = question.TeacherFinalScore ?? question.AiScore;
+            question.ChangeLogs.Add(new GradeChangeLogDto
+            {
+                Id = question.ChangeLogs.Count + 1,
+                GradingResultId = question.Id,
+                QuestionId = question.QuestionId,
+                QuestionTitle = question.QuestionTitle,
+                OldScore = oldScore,
+                NewScore = request.FinalScore,
+                ChangedBy = teacherId,
+                Reason = string.IsNullOrWhiteSpace(request.ChangeReason) ? "Xác nhận điểm" : request.ChangeReason,
+                ChangedAtUtc = DateTime.UtcNow
+            });
 
             question.TeacherFinalScore = request.FinalScore;
             question.TeacherNotes = request.TeacherNotes;
@@ -655,6 +702,70 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
         Assert.Contains("Xung đột dữ liệu", model.TempData["ErrorMessage"]?.ToString());
     }
 
+    [Fact]
+    public async Task ReviewModel_OnPostRegradeQuestionAsync_NotFinalized_TriggersRegradeAndSetsSuccessMessage()
+    {
+        var fakeOrchestrator = new FakeGradingOrchestrator();
+        var fakeReportService = new FakeClassReportService();
+        var httpContext = new DefaultHttpContext();
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        {
+            SessionId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            PageContext = new PageContext { HttpContext = httpContext },
+            TempData = new TempDataDictionary(httpContext, new EmptyTempDataProvider())
+        };
+
+        var result = await model.OnPostRegradeQuestionAsync("Q1");
+
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.NotNull(model.TempData["SuccessMessage"]);
+        Assert.Contains("Đã hoàn tất chấm lại bằng AI cho câu hỏi Q1", model.TempData["SuccessMessage"]?.ToString());
+
+        var session = await fakeOrchestrator.GetSessionGradingAsync(model.SessionId.Value);
+        Assert.NotNull(session);
+        var q1 = session.QuestionResults.First(q => q.QuestionId == "Q1");
+        Assert.Equal(8.8m, q1.AiScore);
+    }
+
+    [Fact]
+    public async Task ReviewModel_OnPostRegradeQuestionAsync_AlreadyFinalized_RejectsAndSetsErrorMessage()
+    {
+        var fakeOrchestrator = new FakeGradingOrchestrator();
+        var fakeReportService = new FakeClassReportService();
+        var httpContext = new DefaultHttpContext();
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        {
+            SessionId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            PageContext = new PageContext { HttpContext = httpContext },
+            TempData = new TempDataDictionary(httpContext, new EmptyTempDataProvider())
+        };
+
+        var result = await model.OnPostRegradeQuestionAsync("Q1");
+
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.NotNull(model.TempData["ErrorMessage"]);
+        Assert.Contains("đã chốt điểm chính thức nên không thể chấm lại bằng AI", model.TempData["ErrorMessage"]?.ToString());
+    }
+
+    [Fact]
+    public async Task ReviewModel_OnPostRegradeQuestionAsync_InvalidSessionOrQuestion_SetsErrorMessage()
+    {
+        var fakeOrchestrator = new FakeGradingOrchestrator();
+        var fakeReportService = new FakeClassReportService();
+        var httpContext = new DefaultHttpContext();
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        {
+            SessionId = null,
+            PageContext = new PageContext { HttpContext = httpContext },
+            TempData = new TempDataDictionary(httpContext, new EmptyTempDataProvider())
+        };
+
+        var result = await model.OnPostRegradeQuestionAsync("Q1");
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.Equal("/Grading/Index", redirect.PageName);
+        Assert.Equal("Mã phiên thi không hợp lệ.", model.TempData["ErrorMessage"]?.ToString());
+    }
+
     // ==========================================
     // 4. INTEGRATION TESTS: HTTP & Security
     // ==========================================
@@ -977,5 +1088,74 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.NotNull(response.Headers.Location);
         Assert.Contains("/Account/AccessDenied", response.Headers.Location.ToString());
+    }
+
+    [Fact]
+    public async Task Post_GradingReview_RegradeQuestion_LecturerRole_NotFinalized_SucceedsAndRedirects()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+        client.DefaultRequestHeaders.Add("X-Test-User", "GV01");
+        client.DefaultRequestHeaders.Add("X-Test-Role", ApplicationRoles.Lecturer);
+
+        var sessionId = "11111111-1111-1111-1111-111111111111";
+        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["questionId"] = "Q1"
+        });
+
+        var response = await client.PostAsync($"/Grading/Review?handler=RegradeQuestion&sessionId={sessionId}", content);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+
+        var session = await _factory.FakeOrchestrator.GetSessionGradingAsync(Guid.Parse(sessionId));
+        Assert.NotNull(session);
+        var q1 = session.QuestionResults.First(q => q.QuestionId == "Q1");
+        Assert.Equal(8.8m, q1.AiScore);
+    }
+
+    [Fact]
+    public async Task Get_GradingReview_FinalizedQuestion_HasDisabledRegradeButton()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-User", "GV01");
+        client.DefaultRequestHeaders.Add("X-Test-Role", ApplicationRoles.Lecturer);
+
+        var sessionId = "22222222-2222-2222-2222-222222222222";
+        var response = await client.GetAsync($"/Grading/Review?sessionId={sessionId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var rawHtml = await response.Content.ReadAsStringAsync();
+        var html = WebUtility.HtmlDecode(rawHtml);
+
+        // Disabled button with tooltip
+        Assert.Contains("disabled", html);
+        Assert.Contains("Câu hỏi này đã chốt điểm chính thức nên không thể chấm lại bằng AI", html);
+    }
+
+    [Fact]
+    public async Task Get_GradingReview_RendersAuditChangeLogs_WhenLogsExist()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-User", "GV01");
+        client.DefaultRequestHeaders.Add("X-Test-Role", ApplicationRoles.Lecturer);
+
+        var sessionId = "22222222-2222-2222-2222-222222222222";
+        var response = await client.GetAsync($"/Grading/Review?sessionId={sessionId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var rawHtml = await response.Content.ReadAsStringAsync();
+        var html = WebUtility.HtmlDecode(rawHtml);
+
+        // Audit Trail headers & contents
+        Assert.Contains("Lịch sử điều chỉnh điểm (Audit Trail)", html);
+        Assert.Contains("Nhật Ký Điều Chỉnh Điểm Toàn Bộ Phiên Thi (Session Audit Trail)", html);
+        Assert.Contains("Thí sinh trả lời bổ sung rất xuất sắc phần Scoped vs Transient", html);
+        Assert.Contains("GV01", html);
+        Assert.Contains("7", html);
+        Assert.Contains("9", html);
     }
 }
