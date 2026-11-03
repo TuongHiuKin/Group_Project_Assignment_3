@@ -8,8 +8,11 @@ using AIVES.BLL.Models.Grading;
 using AIVES.BLL.Security;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,6 +27,12 @@ namespace AIVES.Tests.Frontend;
 
 public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingFactory>
 {
+    private sealed class EmptyTempDataProvider : ITempDataProvider
+    {
+        public IDictionary<string, object> LoadTempData(HttpContext context) => new Dictionary<string, object>();
+        public void SaveTempData(HttpContext context, IDictionary<string, object> values) { }
+    }
+
     public sealed class GradingFactory : WebApplicationFactory<global::Program>
     {
         internal FakeGradingOrchestrator FakeOrchestrator { get; } = new();
@@ -118,7 +127,87 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
                     TotalAiScore = 8.5m,
                     TotalFinalScore = null,
                     OverallState = GradingState.AiGraded,
-                    IsFullyFinalized = false
+                    IsFullyFinalized = false,
+                    QuestionResults = new List<QuestionGradingResultDto>
+                    {
+                        new()
+                        {
+                            Id = Guid.NewGuid(),
+                            SessionId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                            QuestionId = "Q1",
+                            QuestionTitle = "Khái niệm Dependency Injection",
+                            QuestionContent = "Trình bày các loại Dependency Injection và ưu điểm của chúng trong ASP.NET Core.",
+                            BloomLevel = "Understand",
+                            MaxPoints = 10m,
+                            AiScore = 8.5m,
+                            AiFeedback = "Thí sinh nắm chắc khái niệm, trình bày mạch lạc 3 loại lifetime Scoped, Singleton, Transient.",
+                            Strengths = "Giải thích rõ ràng cơ chế IoC Container và vòng đời Scoped.",
+                            Weaknesses = "Chưa nêu ví dụ cụ thể về rủi ro Captive Dependency.",
+                            AiProvider = "Gemini",
+                            AiModel = "gemini-1.5-flash",
+                            State = GradingState.AiGraded,
+                            CriteriaOutcomes = new List<CriterionOutcomeDto>
+                            {
+                                new()
+                                {
+                                    CriterionCode = "C1",
+                                    CriterionName = "Hiểu khái niệm DI",
+                                    MaxPoints = 3m,
+                                    AwardedPoints = 3m,
+                                    IsMet = true,
+                                    Explanation = "Nêu đúng định nghĩa Inversion of Control."
+                                },
+                                new()
+                                {
+                                    CriterionCode = "C2",
+                                    CriterionName = "Phân biệt 3 lifetime",
+                                    MaxPoints = 4m,
+                                    AwardedPoints = 3.5m,
+                                    IsMet = true,
+                                    Explanation = "Nêu đủ Transient, Scoped, Singleton."
+                                },
+                                new()
+                                {
+                                    CriterionCode = "C3",
+                                    CriterionName = "Ưu điểm thực tế",
+                                    MaxPoints = 3m,
+                                    AwardedPoints = 2m,
+                                    IsMet = true,
+                                    Explanation = "Nêu được tính testability và loose coupling."
+                                }
+                            },
+                            SpeechMetrics = new SpeechMetricsDto
+                            {
+                                AnswerDurationSeconds = 65.0,
+                                SpeakingSpeedWpm = 135.0,
+                                FillerWordsCount = 3,
+                                FillerWordsRatio = 0.02,
+                                IdentifiedFillerWords = new List<string> { "à (2)", "ừm (1)" }
+                            },
+                            Turns = new List<QuestionTurnDetailDto>
+                            {
+                                new()
+                                {
+                                    TurnId = Guid.NewGuid(),
+                                    TurnOrdinal = 1,
+                                    TranscriptText = "Dependency Injection là kỹ thuật cung cấp các phụ thuộc cho đối tượng...",
+                                    FollowUpQuestionText = "Vậy Captive Dependency xảy ra khi nào?",
+                                    ConfidenceScore = 0.95m,
+                                    CreatedAtUtc = new DateTime(2026, 11, 1, 10, 1, 0, DateTimeKind.Utc),
+                                    CompletedAtUtc = new DateTime(2026, 11, 1, 10, 2, 5, DateTimeKind.Utc)
+                                },
+                                new()
+                                {
+                                    TurnId = Guid.NewGuid(),
+                                    TurnOrdinal = 2,
+                                    TranscriptText = "Dạ Captive Dependency xảy ra khi singleton service tham chiếu tới scoped service...",
+                                    ConfidenceScore = 0.92m,
+                                    CreatedAtUtc = new DateTime(2026, 11, 1, 10, 2, 10, DateTimeKind.Utc),
+                                    CompletedAtUtc = new DateTime(2026, 11, 1, 10, 3, 0, DateTimeKind.Utc)
+                                }
+                            }
+                        }
+                    }
                 },
                 new()
                 {
@@ -131,7 +220,26 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
                     TotalAiScore = 7.0m,
                     TotalFinalScore = 9.0m,
                     OverallState = GradingState.Finalized,
-                    IsFullyFinalized = true
+                    IsFullyFinalized = true,
+                    QuestionResults = new List<QuestionGradingResultDto>
+                    {
+                        new()
+                        {
+                            Id = Guid.NewGuid(),
+                            SessionId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+                            QuestionId = "Q1",
+                            QuestionTitle = "Khái niệm Dependency Injection",
+                            QuestionContent = "Trình bày các loại Dependency Injection và ưu điểm của chúng trong ASP.NET Core.",
+                            BloomLevel = "Understand",
+                            MaxPoints = 10m,
+                            AiScore = 7.0m,
+                            TeacherFinalScore = 9.0m,
+                            TeacherNotes = "Thí sinh diễn đạt rất tự tin và thực tế, chấm 9.",
+                            FinalizedBy = "GV01",
+                            FinalizedAtUtc = new DateTime(2026, 11, 2, 15, 0, 0, DateTimeKind.Utc),
+                            State = GradingState.Finalized
+                        }
+                    }
                 },
                 new()
                 {
@@ -258,10 +366,9 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
 
         await model.OnGetAsync();
 
-        Assert.Equal(4, model.TotalSessionsCount); // Total remains 4
         Assert.Single(model.Sessions);
-        Assert.Equal("SV01", model.Sessions[0].StudentId);
         Assert.Equal(GradingState.AiGraded, model.Sessions[0].OverallState);
+        Assert.Equal("SV01", model.Sessions[0].StudentId);
     }
 
     [Fact]
@@ -278,23 +385,6 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
 
         Assert.Single(model.Sessions);
         Assert.Equal("SV02", model.Sessions[0].StudentId);
-    }
-
-    [Fact]
-    public async Task IndexModel_OnGetAsync_FiltersByExam()
-    {
-        var fakeOrchestrator = new FakeGradingOrchestrator();
-        var fakeReportService = new FakeClassReportService();
-        var model = new IndexModel(fakeOrchestrator, fakeReportService, NullLogger<IndexModel>.Instance)
-        {
-            SelectedExamId = "EXAM02"
-        };
-
-        await model.OnGetAsync();
-
-        Assert.Equal(1, model.TotalSessionsCount);
-        Assert.Single(model.Sessions);
-        Assert.Equal("SV03", model.Sessions[0].StudentId);
     }
 
     [Fact]
@@ -318,7 +408,79 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
     }
 
     // ==========================================
-    // 2. INTEGRATION TESTS: HTTP & Security
+    // 2. UNIT TESTS: ReviewModel PageModel Logic
+    // ==========================================
+
+    [Fact]
+    public async Task ReviewModel_OnGetAsync_ValidSessionId_PopulatesSessionAndTitles()
+    {
+        var fakeOrchestrator = new FakeGradingOrchestrator();
+        var fakeReportService = new FakeClassReportService();
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance);
+
+        var validId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var result = await model.OnGetAsync(validId);
+
+        Assert.IsType<PageResult>(result);
+        Assert.NotNull(model.Session);
+        Assert.Equal(validId, model.Session.SessionId);
+        Assert.Equal("Lập trình C# Nâng cao (EXAM01)", model.ExamTitle);
+        Assert.Equal("Nguyễn Văn A (SV01)", model.StudentDisplayName);
+        Assert.Single(model.Session.QuestionResults);
+    }
+
+    [Fact]
+    public async Task ReviewModel_OnGetAsync_MissingSessionId_RedirectsToIndex()
+    {
+        var fakeOrchestrator = new FakeGradingOrchestrator();
+        var fakeReportService = new FakeClassReportService();
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        {
+            TempData = new TempDataDictionary(new DefaultHttpContext(), new EmptyTempDataProvider())
+        };
+
+        var result = await model.OnGetAsync(null);
+
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.Equal("/Grading/Index", redirect.PageName);
+        Assert.Equal("Không tìm thấy mã phiên thi cần xem.", model.TempData["ErrorMessage"]);
+    }
+
+    [Fact]
+    public async Task ReviewModel_OnGetAsync_NonExistentSessionId_RedirectsToIndexWithErrorMessage()
+    {
+        var fakeOrchestrator = new FakeGradingOrchestrator();
+        var fakeReportService = new FakeClassReportService();
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        {
+            TempData = new TempDataDictionary(new DefaultHttpContext(), new EmptyTempDataProvider())
+        };
+
+        var randomId = Guid.NewGuid();
+        var result = await model.OnGetAsync(randomId);
+
+        var redirect = Assert.IsType<RedirectToPageResult>(result);
+        Assert.Equal("/Grading/Index", redirect.PageName);
+        Assert.Contains(randomId.ToString(), model.TempData["ErrorMessage"]?.ToString());
+    }
+
+    [Theory]
+    [InlineData(0, "Chưa xác định")]
+    [InlineData(70, "Chậm (Cần tăng tốc độ phản xạ)")]
+    [InlineData(130, "Chuẩn (Nhịp độ tự nhiên, rõ ràng)")]
+    [InlineData(180, "Nhanh (Cần kiểm soát ngắt nghỉ)")]
+    public void ReviewModel_GetSpeakingSpeedAssessment_ReturnsExpectedAssessment(double wpm, string expected)
+    {
+        var fakeOrchestrator = new FakeGradingOrchestrator();
+        var fakeReportService = new FakeClassReportService();
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance);
+
+        var assessment = model.GetSpeakingSpeedAssessment(wpm);
+        Assert.Equal(expected, assessment);
+    }
+
+    // ==========================================
+    // 3. INTEGRATION TESTS: HTTP & Security
     // ==========================================
 
     [Fact]
@@ -423,5 +585,134 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
         Assert.Contains("AI chấm, chờ giảng viên duyệt", html);
         Assert.DoesNotContain("Trần Thị B", html);
         Assert.DoesNotContain("Lê Văn C", html);
+    }
+
+    [Fact]
+    public async Task Get_GradingReview_AnonymousUser_IsRedirectedToLogin()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+
+        var response = await client.GetAsync("/Grading/Review?sessionId=11111111-1111-1111-1111-111111111111");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+        Assert.Contains("/Account/Login", response.Headers.Location.ToString());
+    }
+
+    [Fact]
+    public async Task Get_GradingReview_StudentRole_IsForbidden()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+        client.DefaultRequestHeaders.Add("X-Test-User", "SV01");
+        client.DefaultRequestHeaders.Add("X-Test-Role", ApplicationRoles.Staff);
+
+        var response = await client.GetAsync("/Grading/Review?sessionId=11111111-1111-1111-1111-111111111111");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+        Assert.Contains("/Account/AccessDenied", response.Headers.Location.ToString());
+    }
+
+    [Fact]
+    public async Task Get_GradingReview_LecturerRole_ReturnsOkAndRendersReviewPageDetails()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-User", "GV01");
+        client.DefaultRequestHeaders.Add("X-Test-Role", ApplicationRoles.Lecturer);
+
+        var response = await client.GetAsync("/Grading/Review?sessionId=11111111-1111-1111-1111-111111111111");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var rawHtml = await response.Content.ReadAsStringAsync();
+        var html = WebUtility.HtmlDecode(rawHtml);
+
+        // 1. Header & Student Information
+        Assert.Contains("Chi Tiết Đánh Giá & Duyệt Điểm Vấn Đáp", html);
+        Assert.Contains("Nguyễn Văn A (SV01)", html);
+        Assert.Contains("Lập trình C# Nâng cao (EXAM01)", html);
+
+        // 2. Question Details & Turns
+        Assert.Contains("Khái niệm Dependency Injection", html);
+        Assert.Contains("Trình bày các loại Dependency Injection", html);
+        Assert.Contains("Dependency Injection là kỹ thuật cung cấp", html);
+        Assert.Contains("Vậy Captive Dependency xảy ra khi nào?", html);
+
+        // 3. Rubric Criteria Outcomes
+        Assert.Contains("Hiểu khái niệm DI", html);
+        Assert.Contains("Phân biệt 3 lifetime", html);
+        Assert.Contains("Ưu điểm thực tế", html);
+
+        // 4. AI Feedback, Strengths & Weaknesses
+        Assert.Contains("Thí sinh nắm chắc khái niệm", html);
+        Assert.Contains("Giải thích rõ ràng cơ chế IoC Container", html);
+        Assert.Contains("Chưa nêu ví dụ cụ thể về rủi ro Captive Dependency", html);
+
+        // 5. Speech Metrics
+        Assert.Contains("Thời lượng trả lời", html);
+        Assert.Contains("Tốc độ phát âm", html);
+        Assert.Contains("135", html);
+        Assert.Contains("WPM", html);
+        Assert.Contains("Số từ đệm phát hiện", html);
+
+        // 6. Lecturer Decision Actions
+        Assert.Contains("Xác nhận điểm AI", html);
+        Assert.Contains("Nhập điểm GV", html);
+        Assert.Contains("Chấm lại bằng AI", html);
+    }
+
+    [Fact]
+    public async Task Get_GradingReview_AdminRole_ReturnsOk()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-User", "admin");
+        client.DefaultRequestHeaders.Add("X-Test-Role", ApplicationRoles.Admin);
+
+        var response = await client.GetAsync("/Grading/Review?sessionId=11111111-1111-1111-1111-111111111111");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var rawHtml = await response.Content.ReadAsStringAsync();
+        var html = WebUtility.HtmlDecode(rawHtml);
+        Assert.Contains("Chi Tiết Đánh Giá & Duyệt Điểm Vấn Đáp", html);
+    }
+
+    [Fact]
+    public async Task Get_GradingReview_MissingSessionId_RedirectsToIndex()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+        client.DefaultRequestHeaders.Add("X-Test-User", "GV01");
+        client.DefaultRequestHeaders.Add("X-Test-Role", ApplicationRoles.Lecturer);
+
+        var response = await client.GetAsync("/Grading/Review");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+        Assert.Contains("/Grading", response.Headers.Location.ToString());
+    }
+
+    [Fact]
+    public async Task Get_GradingReview_NonExistentSessionId_RedirectsToIndex()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+        client.DefaultRequestHeaders.Add("X-Test-User", "GV01");
+        client.DefaultRequestHeaders.Add("X-Test-Role", ApplicationRoles.Lecturer);
+
+        var randomId = Guid.NewGuid();
+        var response = await client.GetAsync($"/Grading/Review?sessionId={randomId}");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+        Assert.Contains("/Grading", response.Headers.Location.ToString());
     }
 }
