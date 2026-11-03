@@ -52,6 +52,10 @@ public class QuestionResultDto
     public GradingState GradingState { get; set; } = GradingState.Graded;
     public ExamEvaluationMode EvaluationMode { get; set; } = ExamEvaluationMode.Score;
 
+    // Trạng thái phê duyệt điểm (Nhóm 4 - HITL)
+    public bool IsFinalized { get; set; }
+    public bool IsAiGraded { get; set; }
+
     // Lõi phỏng vấn AI & Transcript hội thoại (Nhóm 3)
     public string StudentInitialAnswerTranscript { get; set; } = string.Empty; // STT câu trả lời ban đầu
     public string AiFollowUpQuestion { get; set; } = string.Empty; // Câu hỏi hỏi xoáy / làm rõ của AI
@@ -89,6 +93,10 @@ public class AttemptSnapshotDto
     public decimal NormalizedScore => TotalMaxScore > 0 ? Math.Round((TotalEarnedScore / TotalMaxScore) * 10.0m, 2) : 0m;
 
     public bool IsPassed { get; set; }
+
+    // Trạng thái phê duyệt điểm (Nhóm 4 - HITL)
+    public bool IsFullyFinalized => QuestionResults.Count > 0 && QuestionResults.All(q => q.IsFinalized);
+    public bool IsAiGraded => !IsFullyFinalized && QuestionResults.Any(q => q.IsAiGraded || q.AiSuggestedScore > 0);
 }
 
 public class StudentReportDto

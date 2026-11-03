@@ -429,6 +429,10 @@ public sealed class ExamReportRepository : IExamReportRepository
         questionResult.Strengths = entity.Strengths ?? string.Empty;
         questionResult.Weaknesses = entity.Weaknesses ?? string.Empty;
 
+        // Trạng thái phê duyệt (Nhóm 4 - HITL)
+        questionResult.IsFinalized = entity.GradingState == 2 || entity.TeacherFinalScore.HasValue;
+        questionResult.IsAiGraded = !questionResult.IsFinalized && (entity.GradingState == 1 || entity.AiScore.HasValue);
+
         // Trạng thái chấm của câu
         if (examState == ExamState.Abandoned || entity.GradingState == 3)
         {
@@ -490,5 +494,7 @@ public sealed class ExamReportRepository : IExamReportRepository
         questionResult.Strengths = grading.Strengths;
         questionResult.Weaknesses = grading.Weaknesses;
         questionResult.AiFeedback = grading.Feedback;
+        questionResult.IsFinalized = false;
+        questionResult.IsAiGraded = true;
     }
 }

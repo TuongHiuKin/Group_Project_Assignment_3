@@ -91,6 +91,20 @@ public class ClassReportService : IClassReportService
                 ? (isPassed ? "ĐẠT" : "CHƯA ĐẠT")
                 : "Chưa chấm";
 
+            string note;
+            if (studentGradedAttempts.Count < group.Count())
+            {
+                note = "Có lượt thi chờ chấm / bỏ dở";
+            }
+            else if (studentGradedAttempts.Any(a => !a.IsFullyFinalized && a.IsAiGraded))
+            {
+                note = "AI chấm, chờ giảng viên duyệt";
+            }
+            else
+            {
+                note = "Điểm chính thức";
+            }
+
             gradeExportRows.Add(new ClassGradeExportRowDto
             {
                 StudentId = studentId,
@@ -100,7 +114,7 @@ public class ClassReportService : IClassReportService
                 Attempt2Score = att2Str,
                 AverageScore = avgScore.HasValue ? $"{avgScore.Value:0.0}" : "Chưa chấm",
                 ResultStatus = resultStatus,
-                Note = studentGradedAttempts.Count < group.Count() ? "Có lượt thi chờ chấm / bỏ dở" : "Đã hoàn thành"
+                Note = note
             });
         }
 
