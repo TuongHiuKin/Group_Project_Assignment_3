@@ -1091,6 +1091,124 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
     }
 
     [Fact]
+    public async Task Get_GradingIndex_ExplicitStudentRole_IsForbidden()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+        client.DefaultRequestHeaders.Add("X-Test-User", "SV01");
+        client.DefaultRequestHeaders.Add("X-Test-Role", "Student");
+
+        var response = await client.GetAsync("/Grading/Index");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+        Assert.Contains("/Account/AccessDenied", response.Headers.Location.ToString());
+    }
+
+    [Fact]
+    public async Task Get_GradingReview_ExplicitStudentRole_IsForbidden()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+        client.DefaultRequestHeaders.Add("X-Test-User", "SV01");
+        client.DefaultRequestHeaders.Add("X-Test-Role", "Student");
+
+        var response = await client.GetAsync("/Grading/Review?sessionId=11111111-1111-1111-1111-111111111111");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+        Assert.Contains("/Account/AccessDenied", response.Headers.Location.ToString());
+    }
+
+    [Fact]
+    public async Task Post_GradingReview_OverrideScore_NegativeScore_RejectedAndNotSaved()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+        client.DefaultRequestHeaders.Add("X-Test-User", "GV01");
+        client.DefaultRequestHeaders.Add("X-Test-Role", ApplicationRoles.Lecturer);
+
+        var sessionId = "11111111-1111-1111-1111-111111111111";
+        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["questionId"] = "Q1",
+            ["finalScore"] = "-2.5",
+            ["maxPoints"] = "10"
+        });
+
+        var response = await client.PostAsync($"/Grading/Review?handler=OverrideScore&sessionId={sessionId}", content);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var session = await _factory.FakeOrchestrator.GetSessionGradingAsync(Guid.Parse(sessionId));
+        Assert.NotNull(session);
+        var q1 = session.QuestionResults.First(q => q.QuestionId == "Q1");
+        Assert.Null(q1.TeacherFinalScore); // Not saved
+    }
+
+    [Fact]
+    public async Task Post_GradingReview_OverrideScore_ExceedingMaxScore_RejectedAndNotSaved()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+        client.DefaultRequestHeaders.Add("X-Test-User", "GV01");
+        client.DefaultRequestHeaders.Add("X-Test-Role", ApplicationRoles.Lecturer);
+
+        var sessionId = "11111111-1111-1111-1111-111111111111";
+        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["questionId"] = "Q1",
+            ["finalScore"] = "15.0",
+            ["maxPoints"] = "10"
+        });
+
+        var response = await client.PostAsync($"/Grading/Review?handler=OverrideScore&sessionId={sessionId}", content);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var session = await _factory.FakeOrchestrator.GetSessionGradingAsync(Guid.Parse(sessionId));
+        Assert.NotNull(session);
+        var q1 = session.QuestionResults.First(q => q.QuestionId == "Q1");
+        Assert.Null(q1.TeacherFinalScore); // Not saved
+    }
+
+    [Fact]
+    public async Task Post_GradingReview_OverrideScore_AlreadyFinalizedEmptyReason_RejectedAndNotSaved()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+        client.DefaultRequestHeaders.Add("X-Test-User", "GV01");
+        client.DefaultRequestHeaders.Add("X-Test-Role", ApplicationRoles.Lecturer);
+
+        // Session 2 is already finalized with score 9.0
+        var sessionId = "22222222-2222-2222-2222-222222222222";
+        var content = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["questionId"] = "Q1",
+            ["finalScore"] = "6.0",
+            ["isAlreadyFinalized"] = "true",
+            ["changeReason"] = "", // Empty reason!
+            ["maxPoints"] = "10"
+        });
+
+        var response = await client.PostAsync($"/Grading/Review?handler=OverrideScore&sessionId={sessionId}", content);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var session = await _factory.FakeOrchestrator.GetSessionGradingAsync(Guid.Parse(sessionId));
+        Assert.NotNull(session);
+        var q1 = session.QuestionResults.First(q => q.QuestionId == "Q1");
+        Assert.Equal(9.0m, q1.TeacherFinalScore); // Must remain 9.0!
+    }
+
+    [Fact]
     public async Task Post_GradingReview_RegradeQuestion_LecturerRole_NotFinalized_SucceedsAndRedirects()
     {
         var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
