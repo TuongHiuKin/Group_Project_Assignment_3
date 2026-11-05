@@ -10,4 +10,5 @@ public class VivaQuestion
     public string? AudioUrl { get; set; }
 
     public ICollection<VivaSessionTurn> Turns { get; set; } = new List<VivaSessionTurn>();
+    public ICollection<VivaGradingResult> GradingResults { get; set; } = new List<VivaGradingResult>();
 }
