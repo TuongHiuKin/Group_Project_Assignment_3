@@ -1,9 +1,5 @@
 namespace AIVES.BLL.Models.Grading;
 
-// Shared Group 4 contracts copied verbatim from docs/G4-CONTRACTS.md §3.2–3.3.
-// Owned by the Tech Lead; added here so the background queue and realtime events (RT-01..RT-06) compile
-// before LEAD-03 lands. If the Lead's version differs, the Lead's version wins.
-
 public enum GradingState : byte
 {
     Pending = 0,    // Queued or awaiting grading
@@ -62,6 +58,7 @@ public sealed class QuestionGradingResultDto
     // Concurrency Token (Base64)
     public string? RowVersion { get; set; }
 
+    // Calculated Property for Effective Score
     public decimal? EffectiveScore => TeacherFinalScore ?? AiScore;
     public bool IsFinalized => State == GradingState.Finalized;
 }
@@ -92,4 +89,37 @@ public sealed class FinalizeScoreRequestDto
     public string? TeacherNotes { get; set; }
     public string? ChangeReason { get; set; }
     public string? ExpectedRowVersion { get; set; }
+}
+
+public sealed class GradeChangeLogDto
+{
+    public long Id { get; set; }
+    public Guid GradingResultId { get; set; }
+    public decimal? OldScore { get; set; }
+    public decimal NewScore { get; set; }
+    public string ChangedBy { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+    public DateTime ChangedAtUtc { get; set; }
+}
+
+public sealed class GradingInputDto
+{
+    public Guid SessionId { get; set; }
+    public string QuestionId { get; set; } = string.Empty;
+    public string QuestionText { get; set; } = string.Empty;
+    public string? BloomLevel { get; set; }
+    public decimal MaxPoints { get; set; } = 10m;
+    public string StudentAnswerTranscript { get; set; } = string.Empty;
+    public List<string> FollowUpTurns { get; set; } = new();
+    public List<RubricCriterionDto> RubricCriteria { get; set; } = new();
+}
+
+public sealed class RubricCriterionDto
+{
+    public string CriterionCode { get; set; } = string.Empty;
+    public string CriterionName { get; set; } = string.Empty;
+    public decimal MaxPoints { get; set; }
+    public decimal Weight { get; set; } = 1.0m;
+    public string? Description { get; set; }
+    public List<string> Keywords { get; set; } = new();
 }

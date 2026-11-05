@@ -16,6 +16,8 @@ public class AIVESDbContext : DbContext
     public DbSet<VivaQuestion> VivaQuestions => Set<VivaQuestion>();
     public DbSet<VivaSession> VivaSessions => Set<VivaSession>();
     public DbSet<VivaSessionTurn> VivaSessionTurns => Set<VivaSessionTurn>();
+    public DbSet<VivaGradingResult> VivaGradingResults => Set<VivaGradingResult>();
+    public DbSet<VivaGradeChangeLog> VivaGradeChangeLogs => Set<VivaGradeChangeLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -152,6 +154,58 @@ public class AIVESDbContext : DbContext
             entity.HasIndex(x => new { x.SessionId, x.TurnOrdinal }).IsUnique()
                 .HasDatabaseName("UQ_VivaSessionTurn_SessionId_TurnOrdinal");
             entity.HasIndex(x => x.QuestionId).HasDatabaseName("IX_VivaSessionTurn_QuestionId");
+        });
+
+        modelBuilder.Entity<VivaGradingResult>(entity =>
+        {
+            entity.ToTable("VivaGradingResult");
+            entity.HasKey(x => x.Id).HasName("PK_VivaGradingResult");
+            entity.Property(x => x.Id).ValueGeneratedNever();
+            entity.Property(x => x.QuestionId).HasMaxLength(50).IsUnicode(false).IsRequired();
+            entity.Property(x => x.AiScore).HasPrecision(5, 2);
+            entity.Property(x => x.AiFeedback).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.Strengths).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.Weaknesses).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.CriteriaOutcomesJson).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.AiProvider).HasMaxLength(100);
+            entity.Property(x => x.AiModel).HasMaxLength(100);
+            entity.Property(x => x.GradingState).HasColumnType("tinyint");
+            entity.Property(x => x.TeacherFinalScore).HasPrecision(5, 2);
+            entity.Property(x => x.TeacherNotes).HasColumnType("nvarchar(max)");
+            entity.Property(x => x.FinalizedBy).HasMaxLength(100);
+            entity.Property(x => x.FinalizedAtUtc).HasPrecision(3);
+            entity.Property(x => x.RowVersion).IsRowVersion();
+
+            entity.HasOne(x => x.Session).WithMany(x => x.GradingResults).HasForeignKey(x => x.SessionId)
+                .OnDelete(DeleteBehavior.Cascade).HasConstraintName("FK_VivaGradingResult_VivaSession");
+            entity.HasOne(x => x.Question).WithMany(x => x.GradingResults).HasForeignKey(x => x.QuestionId)
+                .OnDelete(DeleteBehavior.ClientNoAction).HasConstraintName("FK_VivaGradingResult_VivaQuestion");
+
+            entity.HasIndex(x => new { x.SessionId, x.QuestionId }).IsUnique()
+                .HasDatabaseName("UQ_VivaGradingResult_SessionId_QuestionId");
+            entity.HasIndex(x => x.QuestionId).HasDatabaseName("IX_VivaGradingResult_QuestionId");
+        });
+
+        modelBuilder.Entity<VivaGradeChangeLog>(entity =>
+        {
+            entity.ToTable("VivaGradeChangeLog", table =>
+            {
+                table.HasCheckConstraint("CK_VivaGradeChangeLog_Reason_NotBlank", "LEN(LTRIM(RTRIM([Reason]))) > 0");
+            });
+            entity.HasKey(x => x.Id).HasName("PK_VivaGradeChangeLog");
+            entity.Property(x => x.Id).UseIdentityColumn();
+            entity.Property(x => x.OldScore).HasPrecision(5, 2);
+            entity.Property(x => x.NewScore).HasPrecision(5, 2).IsRequired();
+            entity.Property(x => x.ChangedBy).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Reason).HasColumnType("nvarchar(max)").IsRequired();
+            entity.Property(x => x.ChangedAtUtc).HasPrecision(3);
+
+            entity.HasOne(x => x.GradingResult).WithMany(x => x.ChangeLogs).HasForeignKey(x => x.GradingResultId)
+                .OnDelete(DeleteBehavior.Cascade).HasConstraintName("FK_VivaGradeChangeLog_VivaGradingResult");
+
+            entity.HasIndex(x => x.GradingResultId).HasDatabaseName("IX_VivaGradeChangeLog_GradingResultId");
+            entity.HasIndex(x => new { x.GradingResultId, x.ChangedAtUtc }).IsDescending(false, true)
+                .HasDatabaseName("IX_VivaGradeChangeLog_GradingResultId_ChangedAtUtc");
         });
     }
 }
