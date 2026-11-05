@@ -1,37 +1,48 @@
-﻿using AIVES.BLL.Interfaces.ExamReporting;
+using System.Text.Json;
+using AIVES.BLL.Interfaces.ExamReporting;
 using AIVES.BLL.Models.ExamReporting;
 using AIVES.BLL.Models.VivaInterview;
 using AIVES.BLL.Services.ExamReporting;
 using AIVES.DAL.Entities;
 using AIVES.DAL.Repositories.Interfaces;
+using CriterionOutcomeDto = AIVES.BLL.Models.Grading.CriterionOutcomeDto;
 
 namespace AIVES.BLL.Repositories.ExamReporting;
 
 /// <summary>
-/// Real Exam Report repository backed by SQL Server via IVivaSessionRepository, IVivaQuestionRepository, and ISystemAccountRepository.
-/// Groups sessions by ExamId since SystemAccount does not have a ClassId column in Assignment 2.
-/// Completed turns are graded by <see cref="IRubricGradingService"/> (keyword rubric, no AI call).
+/// Real Exam Report repository backed by SQL Server via IVivaSessionRepository, IVivaQuestionRepository,
+/// ISystemAccountRepository, and IVivaGradingRepository.
+/// Reads persisted VivaGradingResults (AI/Teacher finalized scores) when available.
+/// Falls back to <see cref="IRubricGradingService"/> keyword evaluation if not yet persisted (for backwards compatibility).
 /// </summary>
 public sealed class ExamReportRepository : IExamReportRepository
 {
     /// <summary>Ngưỡng đạt duy nhất dùng cho ExamSettings và chấm Rubric (DEC-03).</summary>
     public const decimal DefaultPassThresholdScore = 6.0m;
 
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly IVivaSessionRepository _sessionRepo;
     private readonly IVivaQuestionRepository _questionRepo;
     private readonly ISystemAccountRepository _accountRepo;
     private readonly IRubricGradingService _gradingService;
+    private readonly IVivaGradingRepository? _gradingRepo;
 
     public ExamReportRepository(
         IVivaSessionRepository sessionRepo,
         IVivaQuestionRepository questionRepo,
         ISystemAccountRepository accountRepo,
-        IRubricGradingService? gradingService = null)
+        IRubricGradingService? gradingService = null,
+        IVivaGradingRepository? gradingRepo = null)
     {
         _sessionRepo = sessionRepo ?? throw new ArgumentNullException(nameof(sessionRepo));
         _questionRepo = questionRepo ?? throw new ArgumentNullException(nameof(questionRepo));
         _accountRepo = accountRepo ?? throw new ArgumentNullException(nameof(accountRepo));
         _gradingService = gradingService ?? new RubricGradingService();
+        _gradingRepo = gradingRepo;
     }
 
     public async Task<List<AttemptSnapshotDto>> GetStudentAttemptsAsync(string studentId, string examId, CancellationToken ct = default)
@@ -50,8 +61,9 @@ public sealed class ExamReportRepository : IExamReportRepository
         var questions = await _questionRepo.GetQuestionsByExamAsync(examId, ct);
         var questionMap = questions.ToDictionary(q => q.QuestionId, q => q, StringComparer.OrdinalIgnoreCase);
         var studentName = await ResolveStudentNameAsync(studentId, ct);
+        var gradingMap = await LoadGradingResultsMapAsync(sessions, examId, ct);
 
-        return MapSessionsToAttempts(sessions, questionMap, studentId, studentName);
+        return MapSessionsToAttempts(sessions, questionMap, studentId, studentName, gradingMap);
     }
 
     public async Task<List<AttemptSnapshotDto>> GetClassAttemptsAsync(string classId, string examId, CancellationToken ct = default)
@@ -82,6 +94,8 @@ public sealed class ExamReportRepository : IExamReportRepository
             }
         }
 
+        var gradingMap = await LoadGradingResultsMapAsync(sessions, effectiveExamId, ct);
+
         var result = new List<AttemptSnapshotDto>();
         foreach (var studentGroup in sessions.GroupBy(s => s.StudentId, StringComparer.OrdinalIgnoreCase))
         {
@@ -91,7 +105,7 @@ public sealed class ExamReportRepository : IExamReportRepository
                 : sid;
 
             var ordered = studentGroup.OrderBy(s => s.StartedAtUtc).ToList();
-            var mapped = MapSessionsToAttempts(ordered, questionMap, sid, sname, classOverride: string.IsNullOrWhiteSpace(classId) ? effectiveExamId : classId);
+            var mapped = MapSessionsToAttempts(ordered, questionMap, sid, sname, gradingMap, classOverride: string.IsNullOrWhiteSpace(classId) ? effectiveExamId : classId);
             result.AddRange(mapped);
         }
 
@@ -196,11 +210,62 @@ public sealed class ExamReportRepository : IExamReportRepository
         return studentId;
     }
 
+    private async Task<Dictionary<(Guid SessionId, string QuestionId), VivaGradingResult>> LoadGradingResultsMapAsync(
+        List<VivaSession> sessions,
+        string examId,
+        CancellationToken ct)
+    {
+        var map = new Dictionary<(Guid SessionId, string QuestionId), VivaGradingResult>();
+        if (_gradingRepo == null || sessions.Count == 0)
+        {
+            return map;
+        }
+
+        try
+        {
+            var examResults = await _gradingRepo.GetByExamIdAsync(examId, ct);
+            if (examResults != null && examResults.Count > 0)
+            {
+                foreach (var r in examResults)
+                {
+                    map[(r.SessionId, r.QuestionId)] = r;
+                }
+                return map;
+            }
+        }
+        catch
+        {
+            // If GetByExamIdAsync is not implemented or throws, fall back to per-session lookup
+        }
+
+        foreach (var session in sessions)
+        {
+            try
+            {
+                var sessionResults = await _gradingRepo.GetBySessionIdAsync(session.SessionId, ct);
+                if (sessionResults != null)
+                {
+                    foreach (var r in sessionResults)
+                    {
+                        map[(r.SessionId, r.QuestionId)] = r;
+                    }
+                }
+            }
+            catch
+            {
+                // Continue with next session
+            }
+        }
+
+        return map;
+    }
+
     private List<AttemptSnapshotDto> MapSessionsToAttempts(
         List<VivaSession> orderedSessions,
         Dictionary<string, VivaQuestion> questionMap,
         string studentId,
         string studentName,
+        Dictionary<(Guid SessionId, string QuestionId), VivaGradingResult> gradingMap,
         string? classOverride = null)
     {
         var result = new List<AttemptSnapshotDto>(orderedSessions.Count);
@@ -218,9 +283,11 @@ public sealed class ExamReportRepository : IExamReportRepository
 
             var orderedTurns = session.Turns.OrderBy(t => t.TurnOrdinal).ToList();
             var questionResults = new List<QuestionResultDto>();
+            var processedQuestions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var qGroup in orderedTurns.GroupBy(t => t.QuestionId, StringComparer.OrdinalIgnoreCase))
             {
+                processedQuestions.Add(qGroup.Key);
                 var turn1 = qGroup.First();
                 var turn2 = qGroup.Skip(1).FirstOrDefault();
 
@@ -243,22 +310,59 @@ public sealed class ExamReportRepository : IExamReportRepository
                     StudentFollowUpAnswerTranscript = turn2?.TranscriptText ?? string.Empty
                 };
 
-                var answerTranscript = string.Join(" ", qGroup
-                    .Select(t => t.TranscriptText)
-                    .Where(t => !string.IsNullOrWhiteSpace(t)));
-
-                // Chỉ chấm khi phiên Completed và đã có transcript; còn lại giữ "Chưa chấm".
-                if (examState == ExamState.Completed && !string.IsNullOrWhiteSpace(answerTranscript))
+                // Nhóm 4: Đọc kết quả đã lưu từ VivaGradingResult nếu có
+                if (gradingMap.TryGetValue((session.SessionId, qGroup.Key), out var persistedResult) && persistedResult != null)
                 {
-                    var questionText = string.Join(" ",
-                        qEntity?.Title, qEntity?.Content, turn1.FollowUpQuestionText);
-                    var grading = _gradingService.Grade(qGroup.Key, questionText, answerTranscript, DefaultPassThresholdScore);
-                    if (grading != null)
+                    ApplyPersistedGrading(questionResult, persistedResult, examState);
+                }
+                else
+                {
+                    // Fallback chấm runtime bằng RubricGradingService (tương thích Nhóm 6)
+                    var answerTranscript = string.Join(" ", qGroup
+                        .Select(t => t.TranscriptText)
+                        .Where(t => !string.IsNullOrWhiteSpace(t)));
+
+                    if (examState == ExamState.Completed && !string.IsNullOrWhiteSpace(answerTranscript))
                     {
-                        ApplyGrading(questionResult, grading);
+                        var questionText = string.Join(" ",
+                            qEntity?.Title, qEntity?.Content, turn1.FollowUpQuestionText);
+                        var grading = _gradingService.Grade(qGroup.Key, questionText, answerTranscript, DefaultPassThresholdScore);
+                        if (grading != null)
+                        {
+                            ApplyGrading(questionResult, grading);
+                        }
                     }
                 }
 
+                questionResults.Add(questionResult);
+            }
+
+            // Bổ sung các câu hỏi có kết quả chấm trong DB nhưng không xuất hiện trong Turns của session
+            var additionalPersisted = gradingMap
+                .Where(kvp => kvp.Key.SessionId == session.SessionId && !processedQuestions.Contains(kvp.Key.QuestionId))
+                .Select(kvp => kvp.Value)
+                .OrderBy(r => r.QuestionId)
+                .ToList();
+
+            foreach (var persistedResult in additionalPersisted)
+            {
+                var qTitle = questionMap.TryGetValue(persistedResult.QuestionId, out var qEntity)
+                    ? (!string.IsNullOrWhiteSpace(qEntity.Content) ? qEntity.Content : qEntity.Title)
+                    : (persistedResult.Question != null ? persistedResult.Question.Title : $"Câu hỏi {persistedResult.QuestionId}");
+
+                var questionResult = new QuestionResultDto
+                {
+                    QuestionId = persistedResult.QuestionId,
+                    QuestionTitle = qTitle,
+                    CognitiveLevel = _gradingService.GetRubric(persistedResult.QuestionId)?.BloomLevel is { Length: > 0 } bloom ? bloom : "Vấn đáp AI",
+                    EarnedScore = 0m,
+                    MaxScore = 10.0m,
+                    PassThresholdScore = DefaultPassThresholdScore,
+                    GradingState = examState == ExamState.Abandoned ? GradingState.Failed : GradingState.Pending,
+                    IsPassed = false
+                };
+
+                ApplyPersistedGrading(questionResult, persistedResult, examState);
                 questionResults.Add(questionResult);
             }
 
@@ -266,6 +370,7 @@ public sealed class ExamReportRepository : IExamReportRepository
             {
                 ExamState.Abandoned => GradingState.Failed,
                 ExamState.Completed when questionResults.Count > 0 && questionResults.All(q => q.GradingState == GradingState.Graded) => GradingState.Graded,
+                ExamState.Completed when questionResults.Any(q => q.GradingState == GradingState.Failed) => GradingState.Failed,
                 _ => GradingState.Pending
             };
 
@@ -290,6 +395,92 @@ public sealed class ExamReportRepository : IExamReportRepository
         return result;
     }
 
+    private static void ApplyPersistedGrading(
+        QuestionResultDto questionResult,
+        VivaGradingResult entity,
+        ExamState examState)
+    {
+        // G4: EarnedScore = TeacherFinalScore ?? AiScore ?? 0m
+        if (entity.TeacherFinalScore.HasValue)
+        {
+            questionResult.EarnedScore = entity.TeacherFinalScore.Value;
+        }
+        else if (entity.AiScore.HasValue)
+        {
+            questionResult.EarnedScore = entity.AiScore.Value;
+        }
+        else
+        {
+            questionResult.EarnedScore = 0m;
+        }
+
+        if (entity.TeacherFinalScore.HasValue)
+        {
+            questionResult.TeacherFinalScore = entity.TeacherFinalScore.Value;
+        }
+
+        if (entity.AiScore.HasValue)
+        {
+            questionResult.AiSuggestedScore = entity.AiScore.Value;
+        }
+
+        questionResult.TeacherNotes = entity.TeacherNotes ?? string.Empty;
+        questionResult.AiFeedback = entity.AiFeedback ?? string.Empty;
+        questionResult.Strengths = entity.Strengths ?? string.Empty;
+        questionResult.Weaknesses = entity.Weaknesses ?? string.Empty;
+
+        // Trạng thái phê duyệt (Nhóm 4 - HITL)
+        questionResult.IsFinalized = entity.GradingState == 2 || entity.TeacherFinalScore.HasValue;
+        questionResult.IsAiGraded = !questionResult.IsFinalized && (entity.GradingState == 1 || entity.AiScore.HasValue);
+
+        // Trạng thái chấm của câu
+        if (examState == ExamState.Abandoned || entity.GradingState == 3)
+        {
+            questionResult.GradingState = GradingState.Failed;
+            questionResult.IsPassed = false;
+        }
+        else if (entity.TeacherFinalScore.HasValue || entity.AiScore.HasValue || entity.GradingState == 1 || entity.GradingState == 2)
+        {
+            questionResult.GradingState = GradingState.Graded;
+            questionResult.IsPassed = questionResult.EarnedScore >= questionResult.PassThresholdScore;
+        }
+        else
+        {
+            questionResult.GradingState = GradingState.Pending;
+            questionResult.IsPassed = false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(entity.CriteriaOutcomesJson))
+        {
+            try
+            {
+                var criteriaList = JsonSerializer.Deserialize<List<CriterionOutcomeDto>>(entity.CriteriaOutcomesJson, JsonOptions);
+                if (criteriaList != null && criteriaList.Count > 0)
+                {
+                    questionResult.CriteriaOutcomes = criteriaList.ToDictionary(
+                        c => !string.IsNullOrWhiteSpace(c.CriterionName) ? c.CriterionName : c.CriterionCode,
+                        c => c.IsMet,
+                        StringComparer.OrdinalIgnoreCase);
+                }
+            }
+            catch
+            {
+                try
+                {
+                    var dict = JsonSerializer.Deserialize<Dictionary<string, bool>>(entity.CriteriaOutcomesJson, JsonOptions);
+                    if (dict != null)
+                    {
+                        questionResult.CriteriaOutcomes = dict;
+                    }
+                }
+                catch
+                {
+                    // Ignore malformed json
+                }
+            }
+        }
+    }
+
     private static void ApplyGrading(QuestionResultDto questionResult, RubricGradingResult grading)
     {
         questionResult.EarnedScore = grading.EarnedScore;
@@ -303,5 +494,7 @@ public sealed class ExamReportRepository : IExamReportRepository
         questionResult.Strengths = grading.Strengths;
         questionResult.Weaknesses = grading.Weaknesses;
         questionResult.AiFeedback = grading.Feedback;
+        questionResult.IsFinalized = false;
+        questionResult.IsAiGraded = true;
     }
 }

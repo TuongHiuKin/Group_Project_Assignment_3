@@ -402,7 +402,20 @@
                                             <span class="badge tag-pink rounded-pill px-3">Chưa chấm</span>
                                         }
                                     </td>
-                                    <td class="text-muted small">@row.Note</td>
+                                    <td>
+                                        @if (row.Note == "AI chấm, chờ giảng viên duyệt")
+                                        {
+                                            <span class="badge bg-warning text-dark"><i class="bi bi-robot me-1"></i>AI chấm, chờ giảng viên duyệt</span>
+                                        }
+                                        else if (row.Note == "Điểm chính thức")
+                                        {
+                                            <span class="badge bg-success text-white"><i class="bi bi-shield-check me-1"></i>Điểm chính thức</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted small">@row.Note</span>
+                                        }
+                                    </td>
                                     <td class="text-center">
                                         @* No attemptOrdinal: StudentDetail then selects the newest attempt by default. *@
                                         <a asp-page="/ClassReports/StudentDetail"

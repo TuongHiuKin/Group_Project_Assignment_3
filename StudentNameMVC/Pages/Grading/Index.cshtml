@@ -1,0 +1,260 @@
+@page
+@model StudentNameMVC.Pages.Grading.IndexModel
+@using AIVES.BLL.Models.Grading
+@{
+    ViewData["Title"] = "Chấm thi Vấn đáp AI";
+    var sessions = Model.Sessions;
+}
+
+<div class="viva-exam-shell">
+    <!-- 1. Header Card -->
+    <div class="viva-header-card mb-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <span class="badge tag-purple">NHÓM 4 AI GRADING</span>
+                    <span class="badge tag-cyan">HUMAN-IN-THE-LOOP (HITL)</span>
+                </div>
+                <h3 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;">
+                    <i class="bi bi-clipboard-check text-primary me-2"></i>Danh Sách Bài Thi Cần Chấm & Duyệt Điểm
+                </h3>
+                <p class="text-secondary small mb-0">
+                    Hệ thống khảo thí thông minh AIVES · AI chấm điểm từng câu hỏi theo chuẩn Rubric, giảng viên giữ quyền xác nhận hoặc ghi đè điểm chính thức.
+                </p>
+            </div>
+
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <a asp-page="/Grading/Index" class="btn btn-outline-secondary rounded-pill px-3 fw-semibold">
+                    <i class="bi bi-arrow-clockwise me-1"></i> Làm mới
+                </a>
+            </div>
+        </div>
+    </div>
+
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show border-0 rounded-4 shadow-sm mb-4" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- 2. Metric Counters Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-4 col-xl">
+            <div class="card border-0 rounded-4 shadow-sm p-3 h-100 bg-white">
+                <div class="text-secondary small fw-semibold">Tất cả bài thi</div>
+                <div class="fs-3 fw-bold text-dark mt-1">@Model.TotalSessionsCount</div>
+                <div class="text-muted small mt-1"><i class="bi bi-collection me-1"></i>Tổng số lượt thi</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl">
+            <div class="card border-0 rounded-4 shadow-sm p-3 h-100 bg-white">
+                <div class="text-secondary small fw-semibold">Chờ chấm điểm</div>
+                <div class="fs-3 fw-bold text-secondary mt-1">@Model.PendingCount</div>
+                <div class="text-muted small mt-1"><i class="bi bi-hourglass-split me-1"></i>Đang trong hàng đợi</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl">
+            <div class="card border-0 rounded-4 shadow-sm p-3 h-100 bg-white">
+                <div class="text-warning-emphasis small fw-semibold">AI đã chấm (Chờ duyệt)</div>
+                <div class="fs-3 fw-bold text-warning mt-1">@Model.AiGradedCount</div>
+                <div class="text-muted small mt-1"><i class="bi bi-robot me-1"></i>Cần giảng viên chốt</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl">
+            <div class="card border-0 rounded-4 shadow-sm p-3 h-100 bg-white">
+                <div class="text-success small fw-semibold">Điểm chính thức</div>
+                <div class="fs-3 fw-bold text-success mt-1">@Model.FinalizedCount</div>
+                <div class="text-muted small mt-1"><i class="bi bi-check2-circle me-1"></i>Đã duyệt hoàn tất</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-xl">
+            <div class="card border-0 rounded-4 shadow-sm p-3 h-100 bg-white">
+                <div class="text-danger small fw-semibold">Cần chấm lại</div>
+                <div class="fs-3 fw-bold text-danger mt-1">@Model.FailedCount</div>
+                <div class="text-muted small mt-1"><i class="bi bi-exclamation-circle me-1"></i>Lỗi hoặc AI timeout</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Filter Card -->
+    <div class="viva-panel-card p-4 mb-4">
+        <form method="get" asp-page="/Grading/Index" class="row g-3 align-items-end">
+            <div class="col-12 col-md-4">
+                <label class="form-label fw-bold small text-secondary mb-1">
+                    <i class="bi bi-journal-text me-1"></i>Kỳ thi / Đề thi:
+                </label>
+                <select name="SelectedExamId" class="form-select rounded-3">
+                    <option value="" selected="@(string.IsNullOrEmpty(Model.SelectedExamId))">-- Tất cả đề thi --</option>
+                    @foreach (var exam in Model.AvailableExams)
+                    {
+                        <option value="@exam.ExamId" selected="@(exam.ExamId == Model.SelectedExamId)">
+                            @exam.ExamTitle (@exam.ExamId)
+                        </option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-12 col-md-4">
+                <label class="form-label fw-bold small text-secondary mb-1">
+                    <i class="bi bi-funnel me-1"></i>Trạng thái chấm điểm:
+                </label>
+                <select name="SelectedState" class="form-select rounded-3">
+                    <option value="" selected="@(!Model.SelectedState.HasValue)">-- Tất cả trạng thái --</option>
+                    <option value="0" selected="@(Model.SelectedState == GradingState.Pending)">Chờ chấm điểm (Pending)</option>
+                    <option value="1" selected="@(Model.SelectedState == GradingState.AiGraded)">AI chấm, chờ giảng viên duyệt (AiGraded)</option>
+                    <option value="2" selected="@(Model.SelectedState == GradingState.Finalized)">Điểm chính thức (Finalized)</option>
+                    <option value="3" selected="@(Model.SelectedState == GradingState.Failed)">Cần chấm lại (Failed)</option>
+                </select>
+            </div>
+
+            <div class="col-12 col-md-4">
+                <label class="form-label fw-bold small text-secondary mb-1">
+                    <i class="bi bi-search me-1"></i>Tìm kiếm sinh viên:
+                </label>
+                <div class="input-group">
+                    <input type="text" name="SearchKeyword" value="@Model.SearchKeyword" class="form-control rounded-start-3" placeholder="Nhập MSSV, họ tên..." />
+                    <button type="submit" class="btn btn-primary rounded-end-3 px-3">
+                        <i class="bi bi-funnel-fill me-1"></i> Lọc
+                    </button>
+                    @if (!string.IsNullOrEmpty(Model.SelectedExamId) || Model.SelectedState.HasValue || !string.IsNullOrEmpty(Model.SearchKeyword))
+                    {
+                        <a asp-page="/Grading/Index" class="btn btn-outline-secondary ms-2 rounded-3" title="Xóa bộ lọc">
+                            <i class="bi bi-x-circle"></i>
+                        </a>
+                    }
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- 4. Table of Sessions -->
+    <div class="viva-panel-card shadow-sm">
+        <div class="viva-panel-header">
+            <div class="d-flex align-items-center gap-2">
+                <span class="fw-bold text-dark">Danh sách bài nộp thi vấn đáp</span>
+                <span class="badge bg-light text-secondary border">@sessions.Count bài thi</span>
+            </div>
+            <div class="text-secondary small">
+                Cập nhật tự động thời gian thực qua SignalR
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" id="gradingTable">
+                <thead class="table-light text-secondary small text-uppercase">
+                    <tr>
+                        <th class="ps-4" style="width: 50px;">#</th>
+                        <th>Sinh viên</th>
+                        <th>Đề thi</th>
+                        <th>Thời gian hoàn thành</th>
+                        <th class="text-center">Trạng thái chấm</th>
+                        <th class="text-center">Điểm AI</th>
+                        <th class="text-center">Điểm chính thức</th>
+                        <th class="pe-4 text-end" style="min-width: 150px;">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (sessions.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center py-5">
+                                <div class="text-muted">
+                                    <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary"></i>
+                                    <div class="fw-semibold">Không tìm thấy bài thi nào phù hợp với bộ lọc</div>
+                                    <div class="small mt-1">Vui lòng thay đổi tiêu chí lọc hoặc thử lại sau.</div>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        var stt = 1;
+                        foreach (var item in sessions)
+                        {
+                            <tr id="grading-row-@item.SessionId"
+                                data-session-id="@item.SessionId"
+                                data-exam-id="@item.ExamId"
+                                data-grading-state="@((byte)item.OverallState)">
+                                <td class="ps-4 text-muted fw-semibold">@(stt++)</td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="avatar-circle-sm bg-light text-primary fw-bold rounded-circle d-flex align-items-center justify-content-center" style="width: 36px; height: 36px;">
+                                            <i class="bi bi-person"></i>
+                                        </div>
+                                        <div>
+                                            <div class="fw-bold text-dark">@item.StudentName</div>
+                                            <div class="text-muted small">MSSV: @item.StudentId</div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold text-dark">@Model.GetExamTitle(item.ExamId)</div>
+                                    <div class="text-muted small">Mã: @item.ExamId</div>
+                                </td>
+                                <td>
+                                    <div class="text-dark small">
+                                        <i class="bi bi-clock me-1 text-secondary"></i>@item.SessionCompletedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                                    </div>
+                                </td>
+                                <td class="text-center" data-cell="state">
+                                    @switch (item.OverallState)
+                                    {
+                                        case GradingState.Pending:
+                                            <span class="badge bg-secondary px-3 py-2 rounded-pill">
+                                                <i class="bi bi-hourglass-split me-1"></i>Chờ chấm điểm
+                                            </span>
+                                            break;
+                                        case GradingState.AiGraded:
+                                            <span class="badge bg-warning text-dark px-3 py-2 rounded-pill">
+                                                <i class="bi bi-robot me-1"></i>AI chấm, chờ giảng viên duyệt
+                                            </span>
+                                            break;
+                                        case GradingState.Finalized:
+                                            <span class="badge bg-success px-3 py-2 rounded-pill">
+                                                <i class="bi bi-check-circle-fill me-1"></i>Điểm chính thức
+                                            </span>
+                                            break;
+                                        case GradingState.Failed:
+                                            <span class="badge bg-danger px-3 py-2 rounded-pill">
+                                                <i class="bi bi-exclamation-triangle-fill me-1"></i>Cần chấm lại
+                                            </span>
+                                            break;
+                                    }
+                                </td>
+                                <td class="text-center" data-cell="ai-score">
+                                    @if (item.TotalAiScore.HasValue)
+                                    {
+                                        <span class="fw-bold text-primary">@item.TotalAiScore.Value.ToString("0.##")</span>
+                                        <span class="text-muted small">/@item.TotalMaxScore.ToString("0.##")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
+                                <td class="text-center" data-cell="final-score">
+                                    @if (item.OverallState == GradingState.Finalized && item.EffectiveTotalScore.HasValue)
+                                    {
+                                        <span class="fw-bold text-success fs-6">@item.EffectiveTotalScore.Value.ToString("0.##")</span>
+                                        <span class="text-muted small">/@item.TotalMaxScore.ToString("0.##")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small fst-italic">Chưa chốt</span>
+                                    }
+                                </td>
+                                <td class="pe-4 text-end">
+                                    <a href="/Grading/Review?sessionId=@item.SessionId" class="btn btn-sm btn-outline-primary rounded-pill px-3 fw-semibold">
+                                        <i class="bi bi-pencil-square me-1"></i>Xem & Chấm
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

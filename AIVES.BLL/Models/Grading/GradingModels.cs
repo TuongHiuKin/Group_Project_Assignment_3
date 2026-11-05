@@ -27,6 +27,19 @@ public sealed class SpeechMetricsDto
     public List<string> IdentifiedFillerWords { get; set; } = new();
 }
 
+public sealed class QuestionTurnDetailDto
+{
+    public Guid TurnId { get; set; }
+    public int TurnOrdinal { get; set; }
+    public string? AudioUrl { get; set; }
+    public string? TranscriptText { get; set; }
+    public decimal? ConfidenceScore { get; set; }
+    public string? FollowUpQuestionText { get; set; }
+    public string? FollowUpAudioUrl { get; set; }
+    public DateTime CreatedAtUtc { get; set; }
+    public DateTime? CompletedAtUtc { get; set; }
+}
+
 public sealed class QuestionGradingResultDto
 {
     public Guid Id { get; set; }
@@ -49,6 +62,11 @@ public sealed class QuestionGradingResultDto
     // Supplementary Signal
     public SpeechMetricsDto? SpeechMetrics { get; set; }
 
+    // Content & Turns (for Review UI)
+    public string? QuestionContent { get; set; }
+    public string? StudentAnswerTranscript { get; set; }
+    public List<QuestionTurnDetailDto> Turns { get; set; } = new();
+
     // Teacher Finalization
     public decimal? TeacherFinalScore { get; set; }
     public string? TeacherNotes { get; set; }
@@ -57,6 +75,9 @@ public sealed class QuestionGradingResultDto
 
     // Concurrency Token (Base64)
     public string? RowVersion { get; set; }
+
+    // Audit Change Logs (for UI-04)
+    public List<GradeChangeLogDto> ChangeLogs { get; set; } = new();
 
     // Calculated Property for Effective Score
     public decimal? EffectiveScore => TeacherFinalScore ?? AiScore;
@@ -79,6 +100,8 @@ public sealed class SessionGradingSummaryDto
     public GradingState OverallState { get; set; }
     public bool IsFullyFinalized { get; set; }
     public List<QuestionGradingResultDto> QuestionResults { get; set; } = new();
+
+    public List<GradeChangeLogDto> AllChangeLogs => QuestionResults.SelectMany(q => q.ChangeLogs).OrderByDescending(l => l.ChangedAtUtc).ToList();
 }
 
 public sealed class FinalizeScoreRequestDto
@@ -95,6 +118,8 @@ public sealed class GradeChangeLogDto
 {
     public long Id { get; set; }
     public Guid GradingResultId { get; set; }
+    public string? QuestionId { get; set; }
+    public string? QuestionTitle { get; set; }
     public decimal? OldScore { get; set; }
     public decimal NewScore { get; set; }
     public string ChangedBy { get; set; } = string.Empty;

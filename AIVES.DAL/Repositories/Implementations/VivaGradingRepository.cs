@@ -15,6 +15,7 @@ public sealed class VivaGradingRepository(AIVESDbContext context) : IVivaGrading
     public Task<List<VivaGradingResult>> GetBySessionIdAsync(Guid sessionId, CancellationToken ct = default) =>
         context.VivaGradingResults.AsNoTracking()
             .Include(x => x.Question)
+            .Include(x => x.ChangeLogs)
             .Where(x => x.SessionId == sessionId)
             .OrderBy(x => x.QuestionId)
             .ToListAsync(ct);
@@ -22,12 +23,14 @@ public sealed class VivaGradingRepository(AIVESDbContext context) : IVivaGrading
     public Task<VivaGradingResult?> GetByQuestionAsync(Guid sessionId, string questionId, CancellationToken ct = default) =>
         context.VivaGradingResults.AsNoTracking()
             .Include(x => x.Question)
+            .Include(x => x.ChangeLogs)
             .SingleOrDefaultAsync(x => x.SessionId == sessionId && x.QuestionId == questionId, ct);
 
     public Task<List<VivaGradingResult>> GetByExamIdAsync(string examId, CancellationToken ct = default) =>
         context.VivaGradingResults.AsNoTracking()
             .Include(x => x.Session)
             .Include(x => x.Question)
+            .Include(x => x.ChangeLogs)
             .Where(x => x.Session != null && x.Session.ExamId == examId)
             .OrderBy(x => x.SessionId)
             .ThenBy(x => x.QuestionId)
