@@ -1,5 +1,13 @@
 namespace AIVES.BLL.Models.Grading;
 
+public enum GradingState : byte
+{
+    Pending = 0,    // Queued or awaiting grading
+    AiGraded = 1,   // Graded by AI/fallback, awaiting instructor review
+    Finalized = 2,  // Confirmed or overridden by teacher (Official)
+    Failed = 3      // AI evaluation failed and pending manual review/regrade
+}
+
 public sealed class CriterionOutcomeDto
 {
     public string CriterionCode { get; set; } = string.Empty;
@@ -115,4 +123,3 @@ public sealed class RubricCriterionDto
     public string? Description { get; set; }
     public List<string> Keywords { get; set; } = new();
 }
-
