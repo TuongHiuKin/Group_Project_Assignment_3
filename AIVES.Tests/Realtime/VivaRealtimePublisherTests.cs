@@ -1,4 +1,5 @@
 using AIVES.BLL.Interfaces.VivaInterview;
+using AIVES.BLL.Models.Grading;
 using AIVES.BLL.Models.VivaInterview;
 using AIVES.BLL.Services.VivaInterview;
 using Microsoft.AspNetCore.SignalR;
@@ -20,6 +21,9 @@ public sealed class VivaRealtimePublisherTests
         public Task TimeRemainingChanged(VivaTimeRemainingDto timer) => Record(timer);
         public Task SessionCompleted(VivaSessionStatusDto status) => Record(status);
         public Task VivaError(VivaErrorDto error) => Record(error);
+        public Task GradingStarted(GradingStartedDto started) => Record(started);
+        public Task GradingCompleted(GradingCompletedDto completed) => Record(completed);
+        public Task GradingFailed(GradingFailedDto failed) => Record(failed);
     }
     // Every non-group send fails, so the test also detects accidental broadcasting.
     private sealed class GroupClients(Client client) : IHubClients<IVivaClientEvents>
