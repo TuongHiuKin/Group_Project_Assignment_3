@@ -1,0 +1,151 @@
+<mxfile host="app.diagrams.net">
+  <diagram id="aives-arch" name="AIVES Architecture">
+    <mxGraphModel dx="1386" dy="870" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="880" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="c2" parent="1" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#94a3b8;strokeWidth=2;fontSize=15;" value="&lt;b&gt;Trình duyệt (người dùng)&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot; color=&quot;#64748b&quot;&gt;HTML, Bootstrap, SignalR client&lt;/font&gt;" vertex="1">
+          <mxGeometry height="64" width="640" x="250" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="c3" parent="1" style="rounded=1;arcSize=3;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;strokeWidth=3;verticalAlign=top;fontStyle=1;fontSize=16;fontColor=#1d4ed8;" value="Presentation Layer (StudentNameMVC)" vertex="1">
+          <mxGeometry height="150" width="640" x="250" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="c4" parent="1" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#64748b;fontSize=14;fontColor=#1e293b;" value="&lt;b&gt;Razor Pages&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:11px&#39; color=&#39;#64748b&#39;&gt;Viva, Admin AI,&lt;br&gt;Account (đang chuyển)&lt;/font&gt;" vertex="1">
+          <mxGeometry height="90" width="180" x="270" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="c5" parent="1" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#64748b;fontSize=14;fontColor=#1e293b;" value="&lt;b&gt;SignalR Hub&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:11px&#39; color=&#39;#64748b&#39;&gt;VivaHub + Timer&lt;br&gt;đẩy sự kiện real-time&lt;/font&gt;" vertex="1">
+          <mxGeometry height="90" width="200" x="465" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="c6" parent="1" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#64748b;fontSize=14;fontColor=#1e293b;" value="&lt;b&gt;Controllers (cũ)&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:11px&#39; color=&#39;#64748b&#39;&gt;MVC bỏ dần&lt;br&gt;sang Razor Pages&lt;/font&gt;" vertex="1">
+          <mxGeometry height="90" width="190" x="680" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="c7" parent="1" style="rounded=1;arcSize=3;whiteSpace=wrap;html=1;fillColor=#d1fae5;strokeColor=#10b981;strokeWidth=3;verticalAlign=top;fontStyle=1;fontSize=16;fontColor=#047857;" value="Business Layer (AIVES.BLL)" vertex="1">
+          <mxGeometry height="150" width="640" x="250" y="340" as="geometry" />
+        </mxCell>
+        <mxCell id="c8" parent="1" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#64748b;fontSize=14;fontColor=#1e293b;" value="&lt;b&gt;Viva Service&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:11px&#39; color=&#39;#64748b&#39;&gt;phiên thi, đồng hồ,&lt;br&gt;follow-up&lt;/font&gt;" vertex="1">
+          <mxGeometry height="90" width="180" x="270" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="c9" parent="1" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#64748b;fontSize=14;fontColor=#1e293b;" value="&lt;b&gt;Interfaces&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:11px&#39; color=&#39;#64748b&#39;&gt;DTOs, Models&lt;br&gt;Service Result&lt;/font&gt;" vertex="1">
+          <mxGeometry height="90" width="200" x="465" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="c10" parent="1" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#64748b;fontSize=14;fontColor=#1e293b;" value="&lt;b&gt;AI Providers&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:11px&#39; color=&#39;#64748b&#39;&gt;STT, TTS, LLM&lt;br&gt;OpenAI / Gemini&lt;/font&gt;" vertex="1">
+          <mxGeometry height="90" width="190" x="680" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="c11" parent="1" style="rounded=1;arcSize=3;whiteSpace=wrap;html=1;fillColor=#fee2e2;strokeColor=#ef4444;strokeWidth=3;verticalAlign=top;fontStyle=1;fontSize=16;fontColor=#b91c1c;" value="Data Access Layer (AIVES.DAL)" vertex="1">
+          <mxGeometry height="150" width="640" x="250" y="550" as="geometry" />
+        </mxCell>
+        <mxCell id="c12" parent="1" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#64748b;fontSize=14;fontColor=#1e293b;" value="&lt;b&gt;Repositories&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:11px&#39; color=&#39;#64748b&#39;&gt;Account, Viva, Report&lt;/font&gt;" vertex="1">
+          <mxGeometry height="90" width="180" x="270" y="590" as="geometry" />
+        </mxCell>
+        <mxCell id="c13" parent="1" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#64748b;fontSize=14;fontColor=#1e293b;" value="&lt;b&gt;Entity Models&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:11px&#39; color=&#39;#64748b&#39;&gt;SystemAccount, VivaSession,&lt;br&gt;VivaSessionTurn&lt;/font&gt;" vertex="1">
+          <mxGeometry height="90" width="200" x="465" y="590" as="geometry" />
+        </mxCell>
+        <mxCell id="c14" parent="1" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#64748b;fontSize=14;fontColor=#1e293b;" value="&lt;b&gt;AppDbContext&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:11px&#39; color=&#39;#64748b&#39;&gt;EF Core&lt;br&gt;(Database First)&lt;/font&gt;" vertex="1">
+          <mxGeometry height="90" width="190" x="680" y="590" as="geometry" />
+        </mxCell>
+        <mxCell id="c15" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=16;fontColor=#1d4ed8;" value="&lt;b&gt;Web App&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:11px&#39; color=&#39;#64748b&#39;&gt;startup project&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="190" x="30" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="c16" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=16;fontColor=#1d4ed8;" value="&lt;b&gt;.dll&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:11px&#39; color=&#39;#64748b&#39;&gt;Class Library projects&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="190" x="30" y="410" as="geometry" />
+        </mxCell>
+        <mxCell id="c17" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=16;fontColor=#1d4ed8;" value="&lt;b&gt;Data&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:11px&#39; color=&#39;#64748b&#39;&gt;AIVES.DAL&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="190" x="30" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="c18" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#f59e0b;strokeWidth=2;fontSize=15;" value="&lt;b&gt;AI bên ngoài&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:12px&#39; color=&#39;#64748b&#39;&gt;OpenAI / Gemini (HTTPS)&lt;/font&gt;" vertex="1">
+          <mxGeometry height="90" width="200" x="960" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="c19" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#e2e8f0;strokeColor=#64748b;strokeWidth=1.5;fontSize=15;" value="&lt;b&gt;SQL Server&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:12px&#39; color=&#39;#64748b&#39;&gt;AIVES (DB)&lt;/font&gt;" vertex="1">
+          <mxGeometry height="110" width="180" x="970" y="585" as="geometry" />
+        </mxCell>
+        <mxCell id="c21" edge="1" parent="1" source="c3" style="endArrow=block;endFill=1;html=1;strokeWidth=2;strokeColor=#1e293b;rounded=0;fontSize=11;dashed=1;entryX=0.587;entryY=1.041;entryDx=0;entryDy=0;entryPerimeter=0;exitX=0.582;exitY=-0.026;exitDx=0;exitDy=0;exitPerimeter=0;" target="c2" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="625.68" y="120" as="sourcePoint" />
+            <mxPoint x="500" y="84" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c24" edge="1" parent="1" style="endArrow=block;endFill=1;html=1;strokeWidth=2;strokeColor=#1e293b;rounded=0;fontSize=11;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="500" y="280" as="sourcePoint" />
+            <mxPoint x="500" y="340" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c25" edge="1" parent="1" style="endArrow=block;endFill=1;html=1;strokeWidth=2;strokeColor=#1e293b;rounded=0;fontSize=11;dashed=1;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="640" y="340" as="sourcePoint" />
+            <mxPoint x="640" y="280" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c28" edge="1" parent="1" style="endArrow=block;endFill=1;html=1;strokeWidth=2;strokeColor=#1e293b;rounded=0;fontSize=11;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="510" y="490" as="sourcePoint" />
+            <mxPoint x="510" y="550" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c29" edge="1" parent="1" style="endArrow=block;endFill=1;html=1;strokeWidth=2;strokeColor=#1e293b;rounded=0;fontSize=11;dashed=1;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="640" y="550" as="sourcePoint" />
+            <mxPoint x="640" y="490" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c30" edge="1" parent="1" style="endArrow=block;endFill=1;html=1;strokeWidth=2;strokeColor=#1e293b;rounded=0;fontSize=11;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="870" y="410" as="sourcePoint" />
+            <mxPoint x="960" y="410" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c31" edge="1" parent="1" style="endArrow=block;endFill=1;html=1;strokeWidth=2;strokeColor=#1e293b;rounded=0;fontSize=11;dashed=1;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="960" y="445" as="sourcePoint" />
+            <mxPoint x="870" y="445" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c32" edge="1" parent="1" style="endArrow=block;endFill=1;html=1;strokeWidth=2;strokeColor=#1e293b;rounded=0;fontSize=11;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="870" y="625" as="sourcePoint" />
+            <mxPoint x="970" y="625" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c33" edge="1" parent="1" style="endArrow=block;endFill=1;html=1;strokeWidth=2;strokeColor=#1e293b;rounded=0;fontSize=11;dashed=1;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="970" y="660" as="sourcePoint" />
+            <mxPoint x="870" y="660" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c34" parent="1" style="rounded=1;arcSize=5;html=1;fillColor=#f8fafc;strokeColor=#94a3b8;align=left;verticalAlign=top;spacingLeft=16;spacingTop=6;fontSize=14;" value="&lt;b&gt;Legends&lt;/b&gt;" vertex="1">
+          <mxGeometry height="110" width="240" x="920" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="c35" edge="1" parent="1" style="endArrow=block;endFill=1;html=1;strokeWidth=2;strokeColor=#1e293b;rounded=0;fontSize=11;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="940" y="70" as="sourcePoint" />
+            <mxPoint x="1000" y="70" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c36" parent="1" style="text;html=1;align=left;fontSize=13;fontColor=#475569;" value=": Request" vertex="1">
+          <mxGeometry height="24" width="120" x="1010" y="58" as="geometry" />
+        </mxCell>
+        <mxCell id="c37" edge="1" parent="1" style="endArrow=block;endFill=1;html=1;strokeWidth=2;strokeColor=#1e293b;rounded=0;fontSize=11;dashed=1;" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="940" y="100" as="sourcePoint" />
+            <mxPoint x="1000" y="100" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="c38" parent="1" style="text;html=1;align=left;fontSize=13;fontColor=#475569;" value=": Response" vertex="1">
+          <mxGeometry height="24" width="120" x="1010" y="88" as="geometry" />
+        </mxCell>
+        <mxCell id="c39" parent="1" style="rounded=1;arcSize=5;html=1;fillColor=#f8fafc;strokeColor=#94a3b8;align=left;verticalAlign=top;spacingLeft=16;spacingTop=6;fontSize=14;" value="&lt;b&gt;Project references&lt;/b&gt;&lt;br&gt;&lt;font style=&#39;font-size:13px&#39; color=&#39;#475569&#39;&gt;Web → BLL&lt;br&gt;BLL → DAL&lt;/font&gt;" vertex="1">
+          <mxGeometry height="100" width="240" x="920" y="720" as="geometry" />
+        </mxCell>
+        <mxCell id="c40" parent="1" style="text;html=1;align=left;fontSize=12;fontColor=#64748b;" value="Request đi xuống, Response đi ngược lên. SignalR cho phép server chủ động đẩy lên trình duyệt." vertex="1">
+          <mxGeometry height="30" width="880" x="30" y="820" as="geometry" />
+        </mxCell>
+        <mxCell id="B6hS-LVDRV31eke25-lz-1" edge="1" parent="1" style="endArrow=block;endFill=1;html=1;strokeWidth=2;strokeColor=#1e293b;rounded=0;fontSize=11;entryX=0.39;entryY=-0.011;entryDx=0;entryDy=0;entryPerimeter=0;" target="c3" value="">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="500" y="82" as="sourcePoint" />
+            <mxPoint x="500" y="142" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

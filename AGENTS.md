@@ -99,3 +99,37 @@ Only the Tech Lead is authorized to modify or approve modifications to:
   - Never commit, push, create a PR, or merge automatically.
   - Never run destructive git commands (`git reset --hard`, `git clean -fd`, `git checkout -- .`, force-push).
   - Unit tests (`dotnet test`) must pass with 0 errors before submitting any PR.
+
+---
+
+## 7. Build, Test & Run Commands
+
+* **Build Solution:**
+  `dotnet build AIVESSystem.sln`
+* **Run All Tests:**
+  `dotnet test AIVESSystem.sln`
+* **Run Unit/Integration Test Project:**
+  `dotnet test AIVES.Tests/AIVES.Tests.csproj`
+* **Run E2E Test Project:**
+  `dotnet test AIVES.E2E/AIVES.E2E.csproj`
+* **Run Screenshot Tests:**
+  `dotnet test AIVES.E2E/AIVES.E2E.csproj --filter Category=Screenshot`
+* **Run Web Application:**
+  `dotnet run --project StudentNameMVC/StudentNameMVC.csproj`
+
+* **Test Folders:**
+  - `AIVES.Tests/` (Unit, Integration, Architecture, Realtime, Razor Pages tests)
+  - `AIVES.E2E/` (Playwright E2E browser tests & Screenshot capture suite)
+
+* **Local Directory Resolution:**
+  `LOCAL_DIR = <main repo>/.local`, resolved via git common dir (works from worktrees):
+  Parent of `git rev-parse --path-format=absolute --git-common-dir` joined with `.local`.
+
+* **Screens (Route List):**
+  - `/` (Home page)
+  - `/Account/Login` (Authentication)
+  - `/Viva/Exam/{sessionId}` (Interactive viva interview room)
+  - `/Grading/Index` (Lecturer grading overview & session queue)
+  - `/Grading/Review/{sessionId}` (Lecturer score review, audit logs & override)
+  - `/Reports/Student` (Student viva exam score & rubric feedback report)
+  - `/Reports/Class` (Class-level grading aggregation report)
