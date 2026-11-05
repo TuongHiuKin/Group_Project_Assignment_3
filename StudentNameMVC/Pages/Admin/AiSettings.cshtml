@@ -97,9 +97,11 @@
                                     var sttP = Model.Configuration.FindProfile(Model.Configuration.Routing.Stt.ProfileId);
                                     var ttsP = Model.Configuration.FindProfile(Model.Configuration.Routing.Tts.ProfileId);
                                     var llmP = Model.Configuration.FindProfile(Model.Configuration.Routing.Llm.ProfileId);
+                                    var gradingP = Model.Configuration.FindProfile(Model.Configuration.Routing.Grading.ProfileId);
                                     var sttIsMock = sttP == null || !sttP.CustomCapabilities.HasFlag(AiCapability.SpeechToText);
                                     var ttsIsMock = ttsP == null || !ttsP.CustomCapabilities.HasFlag(AiCapability.TextToSpeech);
                                     var llmIsMock = llmP == null || !llmP.CustomCapabilities.HasFlag(AiCapability.FollowUpLlm);
+                                    var gradingIsMock = gradingP == null || !gradingP.CustomCapabilities.HasFlag(AiCapability.Grading);
                                 }
                                 <span class="badge @(sttIsMock ? "bg-warning text-dark border" : "bg-light text-dark border")">
                                     <i class="bi bi-mic me-1 text-primary"></i>STT: <strong>@(sttP?.Name ?? "Mock")</strong> (@(Model.Configuration.Routing.Stt.Model ?? "default"))
@@ -110,13 +112,16 @@
                                 <span class="badge @(llmIsMock ? "bg-warning text-dark border" : "bg-light text-dark border")">
                                     <i class="bi bi-chat-dots me-1 text-info"></i>LLM: <strong>@(llmP?.Name ?? "Mock")</strong> (@(Model.Configuration.Routing.Llm.Model ?? "default"))
                                 </span>
+                                <span class="badge @(gradingIsMock ? "bg-warning text-dark border" : "bg-light text-dark border")">
+                                    <i class="bi bi-award me-1 text-warning"></i>Grading: <strong>@(gradingP?.Name ?? "Mock")</strong> (@(Model.Configuration.Routing.Grading.Model ?? "default"))
+                                </span>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            @if (Model.Configuration.UseRealAi && (sttIsMock || ttsIsMock || llmIsMock))
+            @if (Model.Configuration.UseRealAi && (sttIsMock || ttsIsMock || llmIsMock || gradingIsMock))
             {
                 <div class="alert alert-warning d-flex align-items-start shadow-sm mb-4" role="alert">
                     <i class="bi bi-exclamation-triangle-fill fs-4 me-3 text-warning flex-shrink-0 mt-1"></i>
@@ -135,6 +140,10 @@
                             @if (llmIsMock)
                             {
                                 <li><strong>LLM Follow-up:</strong> Đang dùng Mock (@(llmP == null ? "chưa gán nhà cung cấp" : $"hồ sơ '{llmP.Name}' không bật LLM")).</li>
+                            }
+                            @if (gradingIsMock)
+                            {
+                                <li><strong>AI Grading:</strong> Đang dùng Mock (@(gradingP == null ? "chưa gán nhà cung cấp" : $"hồ sơ '{gradingP.Name}' không bật Grading")).</li>
                             }
                         </ul>
                     </div>
@@ -295,6 +304,45 @@
                             </div>
                         </div>
 
+                        <!-- Routing: Grading -->
+                        <div class="row align-items-center mb-4">
+                            <div class="col-md-3">
+                                <label class="fw-bold mb-0">
+                                    <i class="bi bi-award text-warning me-1"></i>Chấm điểm (AI Grading):
+                                </label>
+                                <div class="text-muted small">Chấm điểm câu trả lời theo rubric tiêu chí</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Nhà cung cấp:</label>
+                                <select class="form-select" name="RoutingInput.GradingProfileId" id="gradingProfileSelect" onchange="onRoutingProfileChange('grading')">
+                                    <option value="">-- Dùng Mock (Mô phỏng) --</option>
+                                    @foreach (var p in Model.Configuration.Profiles.Where(p => p.CustomCapabilities.HasFlag(AiCapability.Grading)))
+                                    {
+                                        <option value="@p.Id" data-kind="@p.Kind" selected="@(p.Id == Model.RoutingInput.GradingProfileId)">
+                                            @p.Name (@p.Kind)
+                                        </option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Tên Model:</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" name="RoutingInput.GradingModel" id="gradingModelInput"
+                                           value="@Model.RoutingInput.GradingModel" placeholder="gpt-4o-mini hoặc gemini-3.8-flash" list="gradingModelDatalist" />
+                                    <button class="btn btn-outline-secondary" type="button" onclick="fetchModels('gradingProfileSelect', 'gradingModelDatalist')">
+                                        <i class="bi bi-arrow-repeat"></i>
+                                    </button>
+                                </div>
+                                <datalist id="gradingModelDatalist">
+                                    <option value="gpt-4o-mini" />
+                                    <option value="gpt-4o" />
+                                    <option value="gemini-3.8-flash" />
+                                    <option value="gemini-1.5-flash" />
+                                    <option value="deepseek-chat" />
+                                </datalist>
+                            </div>
+                        </div>
+
                         <div class="d-flex justify-content-end">
                             <button type="submit" class="btn btn-primary px-4">
                                 <i class="bi bi-save me-1"></i>Lưu thiết lập định tuyến
@@ -388,6 +436,10 @@
                                                 {
                                                     <span class="badge bg-info-subtle text-info border border-info-subtle" title="Sinh câu hỏi phụ">LLM</span>
                                                 }
+                                                @if (p.CustomCapabilities.HasFlag(AiCapability.Grading))
+                                                {
+                                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle" title="Chấm điểm AI">Grading</span>
+                                                }
                                             </div>
                                         </td>
                                         <td class="text-end pe-3">
@@ -407,7 +459,8 @@
                                                             organizationId = p.OrganizationId,
                                                             enableStt = p.CustomCapabilities.HasFlag(AiCapability.SpeechToText),
                                                             enableTts = p.CustomCapabilities.HasFlag(AiCapability.TextToSpeech),
-                                                            enableLlm = p.CustomCapabilities.HasFlag(AiCapability.FollowUpLlm)
+                                                            enableLlm = p.CustomCapabilities.HasFlag(AiCapability.FollowUpLlm),
+                                                            enableGrading = p.CustomCapabilities.HasFlag(AiCapability.Grading)
                                                         })))'>
                                                     <i class="bi bi-pencil"></i>
                                                 </button>
@@ -504,6 +557,10 @@
                                 <input class="form-check-input" type="checkbox" id="modalEnableLlm" name="ProfileInput.EnableLlm" value="true" checked />
                                 <label class="form-check-label" for="modalEnableLlm">LLM</label>
                             </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="modalEnableGrading" name="ProfileInput.EnableGrading" value="true" checked />
+                                <label class="form-check-label" for="modalEnableGrading">Grading</label>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -529,6 +586,7 @@
             document.getElementById('modalEnableStt').checked = true;
             document.getElementById('modalEnableTts').checked = true;
             document.getElementById('modalEnableLlm').checked = true;
+            document.getElementById('modalEnableGrading').checked = true;
             onKindChange();
         }
 
@@ -543,6 +601,7 @@
             document.getElementById('modalEnableStt').checked = p.enableStt;
             document.getElementById('modalEnableTts').checked = p.enableTts;
             document.getElementById('modalEnableLlm').checked = p.enableLlm;
+            document.getElementById('modalEnableGrading').checked = p.enableGrading !== undefined ? p.enableGrading : true;
             onKindChange();
             const modal = new bootstrap.Modal(document.getElementById('profileModal'));
             modal.show();
@@ -624,6 +683,21 @@
                         input.value = 'gpt-4o-mini';
                     }
                 }
+            } else if (cap === 'grading') {
+                const sel = document.getElementById('gradingProfileSelect');
+                const input = document.getElementById('gradingModelInput');
+                if (!sel || !input) return;
+                const opt = sel.options[sel.selectedIndex];
+                const kind = opt ? opt.getAttribute('data-kind') : '';
+                if (kind === '@AiProviderKinds.Gemini') {
+                    if (!input.value || isLikelyOpenAiModel(input.value)) {
+                        input.value = '@GeminiModels.DefaultGrading';
+                    }
+                } else if (kind === '@AiProviderKinds.OpenAi' || kind === '@AiProviderKinds.OpenAiCompatible') {
+                    if (!input.value || isLikelyGeminiModel(input.value)) {
+                        input.value = 'gpt-4o-mini';
+                    }
+                }
             }
         }
 
@@ -644,6 +718,7 @@
             onRoutingProfileChange('stt');
             onRoutingProfileChange('tts');
             onRoutingProfileChange('llm');
+            onRoutingProfileChange('grading');
         });
 
         async function fetchModels(profileSelectId, datalistId) {

@@ -670,6 +670,115 @@ public class ExamReportingTests
         // Normalized score = (9.0 + 8.0) / 20.0 * 10 = 8.5
         Assert.Equal(8.5m, attempt.NormalizedScore);
         Assert.True(attempt.IsPassed);
+
+        // Group 4 Badge Flags
+        Assert.True(q1.IsFinalized);
+        Assert.False(q1.IsAiGraded);
+        Assert.False(q2.IsFinalized);
+        Assert.True(q2.IsAiGraded);
+        Assert.False(attempt.IsFullyFinalized);
+        Assert.True(attempt.IsAiGraded);
+    }
+
+    [Fact]
+    public async Task ExamReportRepository_AllQuestionsFinalized_Sets_IsFullyFinalized_True()
+    {
+        var sessionId = Guid.NewGuid();
+        var session = new VivaSession
+        {
+            SessionId = sessionId,
+            ExamId = "EXAM01",
+            StudentId = "SV01",
+            State = (byte)VivaSessionState.Completed,
+            StartedAtUtc = DateTime.UtcNow.AddMinutes(-10),
+            CompletedAtUtc = DateTime.UtcNow,
+            Turns = new List<VivaSessionTurn>
+            {
+                new() { TurnId = Guid.NewGuid(), SessionId = sessionId, QuestionId = "Q1", TurnOrdinal = 1, TranscriptText = "Trả lời câu 1" }
+            }
+        };
+
+        var gradingResults = new List<VivaGradingResult>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                SessionId = sessionId,
+                QuestionId = "Q1",
+                AiScore = 8.0m,
+                TeacherFinalScore = 8.5m,
+                GradingState = 2, // Finalized
+                Session = session
+            }
+        };
+
+        var sessionRepo = new StubSessionRepo([session]);
+        var questionRepo = new StubQuestionRepo([
+            new VivaQuestion { QuestionId = "Q1", ExamId = "EXAM01", Title = "Câu 1", Content = "Nội dung câu 1" }
+        ]);
+        var accountRepo = new StubAccountRepo([
+            new SystemAccount { AccountId = 1, AccountName = "SV 1", AccountEmail = "SV01", AccountRole = 1 }
+        ]);
+        var gradingRepo = new StubGradingRepo(gradingResults);
+
+        var repo = new ExamReportRepository(sessionRepo, questionRepo, accountRepo, gradingRepo: gradingRepo);
+        var attempts = await repo.GetStudentAttemptsAsync("SV01", "EXAM01");
+
+        var attempt = Assert.Single(attempts);
+        Assert.True(attempt.IsFullyFinalized);
+        Assert.False(attempt.IsAiGraded);
+        var q1 = Assert.Single(attempt.QuestionResults);
+        Assert.True(q1.IsFinalized);
+        Assert.False(q1.IsAiGraded);
+    }
+
+    [Fact]
+    public async Task ClassReportService_WithAiGradedAttempts_SetsAiChamNote()
+    {
+        var sessionId = Guid.NewGuid();
+        var session = new VivaSession
+        {
+            SessionId = sessionId,
+            ExamId = "EXAM01",
+            StudentId = "SV01",
+            State = (byte)VivaSessionState.Completed,
+            StartedAtUtc = DateTime.UtcNow.AddMinutes(-10),
+            CompletedAtUtc = DateTime.UtcNow,
+            Turns = new List<VivaSessionTurn>
+            {
+                new() { TurnId = Guid.NewGuid(), SessionId = sessionId, QuestionId = "Q1", TurnOrdinal = 1, TranscriptText = "Trả lời câu 1" }
+            }
+        };
+
+        var gradingResults = new List<VivaGradingResult>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                SessionId = sessionId,
+                QuestionId = "Q1",
+                AiScore = 8.0m,
+                GradingState = 1, // AiGraded
+                Session = session
+            }
+        };
+
+        var sessionRepo = new StubSessionRepo([session]);
+        var questionRepo = new StubQuestionRepo([
+            new VivaQuestion { QuestionId = "Q1", ExamId = "EXAM01", Title = "Câu 1", Content = "Nội dung câu 1" }
+        ]);
+        var accountRepo = new StubAccountRepo([
+            new SystemAccount { AccountId = 1, AccountName = "SV 1", AccountEmail = "SV01", AccountRole = 1 }
+        ]);
+        var gradingRepo = new StubGradingRepo(gradingResults);
+
+        var repo = new ExamReportRepository(sessionRepo, questionRepo, accountRepo, gradingRepo: gradingRepo);
+        var classService = new ClassReportService(repo);
+        var stats = await classService.GetClassStatisticsAsync("GV01", "EXAM01", "EXAM01");
+
+        Assert.NotNull(stats);
+        var row = Assert.Single(stats.GradeExportRows);
+        Assert.Equal("AI chấm, chờ giảng viên duyệt", row.Note);
     }
 
     [Fact]

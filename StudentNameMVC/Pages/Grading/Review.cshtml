@@ -1,0 +1,851 @@
+@page "{sessionId:guid?}"
+@model StudentNameMVC.Pages.Grading.ReviewModel
+@using AIVES.BLL.Models.Grading
+@{
+    ViewData["Title"] = "Chi tiết chấm thi vấn đáp - " + Model.StudentDisplayName;
+    var session = Model.Session!;
+}
+
+<div class="viva-exam-shell pb-5">
+    <!-- 1. Header Card & Breadcrumb Navigation -->
+    <div class="viva-header-card mb-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+                <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                    <a asp-page="/Grading/Index" class="btn btn-sm btn-outline-secondary rounded-pill px-3 fw-semibold">
+                        <i class="bi bi-arrow-left me-1"></i> Quay lại danh sách
+                    </a>
+                    <span class="badge tag-purple">NHÓM 4 AI GRADING</span>
+                    <span class="badge tag-cyan">HUMAN-IN-THE-LOOP (HITL)</span>
+                    <span class="badge bg-light text-dark border">CHI TIẾT BÀI THI</span>
+                </div>
+                <h3 class="fw-bold mb-1 text-dark" style="letter-spacing: -0.5px;">
+                    <i class="bi bi-person-badge text-primary me-2"></i>Chi Tiết Đánh Giá & Duyệt Điểm Vấn Đáp
+                </h3>
+                <p class="text-secondary small mb-0">
+                    Thí sinh: <strong class="text-dark">@Model.StudentDisplayName</strong> · 
+                    Đề thi: <strong class="text-dark">@Model.ExamTitle</strong> · 
+                    Mã phiên: <code class="text-muted">@session.SessionId</code>
+                </p>
+            </div>
+
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <a asp-page="/Grading/Review" asp-route-sessionId="@session.SessionId" class="btn btn-outline-primary rounded-pill px-3 fw-semibold">
+                    <i class="bi bi-arrow-clockwise me-1"></i> Làm mới bài thi
+                </a>
+            </div>
+        </div>
+    </div>
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show border-0 rounded-4 shadow-sm mb-4" role="alert">
+            <i class="bi bi-check-circle-fill me-2"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show border-0 rounded-4 shadow-sm mb-4" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- 2. Session Metric & Overview Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="card border-0 rounded-4 shadow-sm p-3 h-100 bg-white">
+                <div class="text-secondary small fw-semibold">Trạng thái tổng thể</div>
+                <div class="mt-2">
+                    @switch (session.OverallState)
+                    {
+                        case GradingState.Pending:
+                            <span class="badge bg-secondary px-3 py-2 rounded-pill fs-6">
+                                <i class="bi bi-hourglass-split me-1"></i>Chờ chấm điểm
+                            </span>
+                            break;
+                        case GradingState.AiGraded:
+                            <span class="badge bg-warning text-dark px-3 py-2 rounded-pill fs-6">
+                                <i class="bi bi-robot me-1"></i>AI chấm, chờ giảng viên duyệt
+                            </span>
+                            break;
+                        case GradingState.Finalized:
+                            <span class="badge bg-success px-3 py-2 rounded-pill fs-6">
+                                <i class="bi bi-check-circle-fill me-1"></i>Điểm chính thức
+                            </span>
+                            break;
+                        case GradingState.Failed:
+                            <span class="badge bg-danger px-3 py-2 rounded-pill fs-6">
+                                <i class="bi bi-exclamation-triangle-fill me-1"></i>Cần chấm lại
+                            </span>
+                            break;
+                    }
+                </div>
+                <div class="text-muted small mt-2">
+                    @(session.IsFullyFinalized ? "Tất cả các câu đã được chốt điểm." : "Còn câu hỏi đang chờ giảng viên duyệt.")
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="card border-0 rounded-4 shadow-sm p-3 h-100 bg-white">
+                <div class="text-secondary small fw-semibold">Điểm AI đề xuất</div>
+                <div class="fs-3 fw-bold text-primary mt-1">
+                    @(session.TotalAiScore.HasValue ? session.TotalAiScore.Value.ToString("0.##") : "—")
+                    <span class="text-muted fs-6 fw-normal">/@session.TotalMaxScore.ToString("0.##")</span>
+                </div>
+                <div class="text-muted small mt-1">
+                    <i class="bi bi-cpu me-1"></i>Điểm do mô hình AI & Rubric chấm
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="card border-0 rounded-4 shadow-sm p-3 h-100 bg-white">
+                <div class="text-secondary small fw-semibold">Điểm chính thức (GV chốt)</div>
+                <div class="fs-3 fw-bold @(session.TotalFinalScore.HasValue ? "text-success" : "text-muted") mt-1">
+                    @(session.TotalFinalScore.HasValue ? session.TotalFinalScore.Value.ToString("0.##") : "Chưa chốt")
+                    @if (session.TotalFinalScore.HasValue)
+                    {
+                        <span class="text-muted fs-6 fw-normal">/@session.TotalMaxScore.ToString("0.##")</span>
+                    }
+                </div>
+                <div class="text-muted small mt-1">
+                    <i class="bi bi-shield-check me-1"></i>Điểm có hiệu lực pháp lý học vụ
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="card border-0 rounded-4 shadow-sm p-3 h-100 bg-white">
+                <div class="text-secondary small fw-semibold">Thời gian nộp bài</div>
+                <div class="fs-5 fw-bold text-dark mt-1">
+                    @session.SessionCompletedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                </div>
+                <div class="text-muted small mt-1">
+                    <i class="bi bi-clock-history me-1"></i>Hoàn thành phỏng vấn vấn đáp
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. Question-by-Question Detailed Review -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="fw-bold mb-0 text-dark">
+            <i class="bi bi-list-check text-primary me-2"></i>Nội Dung Từng Câu Hỏi & Kết Quả Chấm
+        </h4>
+        <span class="text-secondary small">
+            Tổng cộng: <strong>@session.QuestionResults.Count</strong> câu hỏi
+        </span>
+    </div>
+
+    @if (session.QuestionResults.Count == 0)
+    {
+        <div class="viva-panel-card p-5 text-center text-muted">
+            <i class="bi bi-question-circle fs-1 text-secondary d-block mb-2"></i>
+            <div class="fw-semibold">Không tìm thấy câu hỏi nào trong phiên thi này.</div>
+        </div>
+    }
+    else
+    {
+        var questionIndex = 1;
+        foreach (var q in session.QuestionResults)
+        {
+            var collapseId = $"collapseQuestion_{q.QuestionId}";
+            var isFinalized = q.IsFinalized;
+
+            <div class="card border-0 rounded-4 shadow-sm mb-4 overflow-hidden" id="card-question-@q.QuestionId">
+                <!-- Question Header Bar (Click to collapse/expand) -->
+                <div class="card-header bg-white border-bottom p-3 p-md-4" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#@collapseId" aria-expanded="true">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="badge rounded-circle bg-primary bg-opacity-10 text-primary p-3 fs-6 fw-bold" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+                                #@(questionIndex++)
+                            </div>
+                            <div>
+                                <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                                    <h5 class="fw-bold mb-0 text-dark">@q.QuestionTitle</h5>
+                                    @if (!string.IsNullOrWhiteSpace(q.BloomLevel))
+                                    {
+                                        <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 rounded-pill px-2 py-1 small">
+                                            Bloom: @q.BloomLevel
+                                        </span>
+                                    }
+                                </div>
+                                <div class="text-muted small">
+                                    Mã câu hỏi: <code class="text-secondary">@q.QuestionId</code> · Thang điểm tối đa: <strong>@q.MaxPoints.ToString("0.##")</strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex align-items-center gap-3 flex-wrap">
+                            <!-- Question Status Badge -->
+                            @switch (q.State)
+                            {
+                                case GradingState.Pending:
+                                    <span class="badge bg-secondary px-3 py-2 rounded-pill">
+                                        <i class="bi bi-hourglass-split me-1"></i>Chờ chấm điểm
+                                    </span>
+                                    break;
+                                case GradingState.AiGraded:
+                                    <span class="badge bg-warning text-dark px-3 py-2 rounded-pill">
+                                        <i class="bi bi-robot me-1"></i>AI chấm, chờ duyệt
+                                    </span>
+                                    break;
+                                case GradingState.Finalized:
+                                    <span class="badge bg-success px-3 py-2 rounded-pill">
+                                        <i class="bi bi-check-circle-fill me-1"></i>Điểm chính thức
+                                    </span>
+                                    break;
+                                case GradingState.Failed:
+                                    <span class="badge bg-danger px-3 py-2 rounded-pill">
+                                        <i class="bi bi-exclamation-triangle-fill me-1"></i>Cần chấm lại
+                                    </span>
+                                    break;
+                            }
+
+                            <!-- Score Pill -->
+                            <div class="d-flex align-items-center gap-2 bg-light px-3 py-2 rounded-pill border">
+                                <span class="small text-secondary">AI:</span>
+                                <strong class="text-primary">@(q.AiScore.HasValue ? q.AiScore.Value.ToString("0.##") : "—")</strong>
+                                <span class="text-muted">|</span>
+                                <span class="small text-secondary">GV:</span>
+                                <strong class="@(q.TeacherFinalScore.HasValue ? "text-success" : "text-muted")">
+                                    @(q.TeacherFinalScore.HasValue ? q.TeacherFinalScore.Value.ToString("0.##") : "—")
+                                </strong>
+                                <span class="text-muted small">/@q.MaxPoints.ToString("0.##")</span>
+                            </div>
+
+                            <i class="bi bi-chevron-down text-secondary fs-5"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Collapsible Question Content -->
+                <div class="collapse show" id="@collapseId">
+                    <div class="card-body p-4 bg-white">
+                        <!-- 3.1 Nội Dung Đề Bài -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold text-dark small text-uppercase">
+                                <i class="bi bi-file-earmark-text text-primary me-1"></i>Nội dung câu hỏi đề bài:
+                            </label>
+                            <div class="p-3 rounded-4 bg-light border text-dark">
+                                @(string.IsNullOrWhiteSpace(q.QuestionContent) ? q.QuestionTitle : q.QuestionContent)
+                            </div>
+                        </div>
+
+                        <!-- 3.2 Lời Thoại Thí Sinh & Các Lượt Hỏi Phụ (Collapsible Turns) -->
+                        <div class="mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label fw-bold text-dark small text-uppercase mb-0">
+                                    <i class="bi bi-mic text-danger me-1"></i>Bản ghi âm & Lời thoại thí sinh (Transcript):
+                                </label>
+                                <span class="badge bg-light text-secondary border small">
+                                    @(q.Turns.Count > 0 ? $"{q.Turns.Count} lượt thoại" : "Lượt trả lời chính")
+                                </span>
+                            </div>
+
+                            @if (q.Turns.Count > 0)
+                            {
+                                <div class="accordion" id="accordionTurns_@q.QuestionId">
+                                    @foreach (var turn in q.Turns)
+                                    {
+                                        var turnCollapseId = $"turnCollapse_{turn.TurnId}_{turn.TurnOrdinal}";
+                                        var isMain = turn.TurnOrdinal == 1;
+
+                                        <div class="accordion-item border rounded-3 mb-2 overflow-hidden">
+                                            <h2 class="accordion-header" id="heading_@turnCollapseId">
+                                                <button class="accordion-button @(isMain ? "" : "collapsed") bg-light py-2 px-3 fw-semibold small" type="button" data-bs-toggle="collapse" data-bs-target="#@turnCollapseId">
+                                                    <span class="badge @(isMain ? "bg-primary" : "bg-secondary") rounded-pill me-2">
+                                                        @(isMain ? "Câu trả lời chính" : $"Hỏi phụ #{turn.TurnOrdinal - 1}")
+                                                    </span>
+                                                    @if (!string.IsNullOrWhiteSpace(turn.FollowUpQuestionText))
+                                                    {
+                                                        <span class="text-truncate text-secondary me-2" style="max-width: 450px;">
+                                                            Hỏi: "@turn.FollowUpQuestionText"
+                                                        </span>
+                                                    }
+                                                    @if (turn.ConfidenceScore.HasValue)
+                                                    {
+                                                        <span class="ms-auto me-3 badge bg-white text-muted border small">
+                                                            STT Conf: @((turn.ConfidenceScore.Value * 100).ToString("0"))%
+                                                        </span>
+                                                    }
+                                                </button>
+                                            </h2>
+                                            <div id="@turnCollapseId" class="accordion-collapse collapse @(isMain ? "show" : "")" data-bs-parent="#accordionTurns_@q.QuestionId">
+                                                <div class="accordion-body p-3 bg-white">
+                                                    @if (!string.IsNullOrWhiteSpace(turn.FollowUpQuestionText))
+                                                    {
+                                                        <div class="mb-2 p-2 rounded-3 bg-info bg-opacity-10 border border-info border-opacity-25 small">
+                                                            <strong class="text-info-emphasis"><i class="bi bi-robot me-1"></i>Câu hỏi tiếp nối của AI:</strong>
+                                                            <div class="text-dark mt-1">@turn.FollowUpQuestionText</div>
+                                                        </div>
+                                                    }
+
+                                                    <div class="p-3 rounded-3 bg-light border-start border-4 border-primary">
+                                                        <div class="text-secondary small mb-1 fw-bold">
+                                                            <i class="bi bi-chat-quote me-1"></i>Lời thoại sinh viên:
+                                                        </div>
+                                                        <div class="text-dark fst-italic">
+                                                            @(string.IsNullOrWhiteSpace(turn.TranscriptText) ? "(Không nhận diện được giọng nói hoặc chưa có lời thoại)" : turn.TranscriptText)
+                                                        </div>
+                                                    </div>
+
+                                                    @if (!string.IsNullOrWhiteSpace(turn.AudioUrl))
+                                                    {
+                                                        <div class="mt-2">
+                                                            <audio controls class="w-100" style="height: 38px;">
+                                                                <source src="@turn.AudioUrl" type="audio/wav">
+                                                                Trình duyệt của bạn không hỗ trợ phát âm thanh.
+                                                            </audio>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="p-3 rounded-4 bg-light border text-dark">
+                                    <div class="text-secondary small mb-1 fw-bold"><i class="bi bi-chat-quote me-1"></i>Lời thoại sinh viên:</div>
+                                    <div class="fst-italic">
+                                        @(string.IsNullOrWhiteSpace(q.StudentAnswerTranscript) ? "(Chưa có dữ liệu lời thoại cho câu hỏi này)" : q.StudentAnswerTranscript)
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        <!-- 3.3 Đánh Giá Theo Tiêu Chí Rubric (Rubric Breakdown) -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold text-dark small text-uppercase">
+                                <i class="bi bi-table text-success me-1"></i>Chi tiết đánh giá theo tiêu chí Rubric:
+                            </label>
+
+                            @if (q.CriteriaOutcomes.Count > 0)
+                            {
+                                <div class="table-responsive">
+                                    <table class="table table-bordered align-middle mb-0">
+                                        <thead class="table-light text-secondary small text-uppercase">
+                                            <tr>
+                                                <th style="width: 120px;">Mã tiêu chí</th>
+                                                <th>Tiêu chuẩn đánh giá</th>
+                                                <th class="text-center" style="width: 120px;">Kết quả</th>
+                                                <th class="text-center" style="width: 130px;">Điểm đạt / Max</th>
+                                                <th>Giải thích / Từ khóa khớp</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var crit in q.CriteriaOutcomes)
+                                            {
+                                                <tr>
+                                                    <td>
+                                                        <span class="badge bg-light text-dark border font-monospace">@crit.CriterionCode</span>
+                                                    </td>
+                                                    <td class="fw-semibold text-dark">@crit.CriterionName</td>
+                                                    <td class="text-center">
+                                                        @if (crit.IsMet)
+                                                        {
+                                                            <span class="badge bg-success rounded-pill px-3 py-1">
+                                                                <i class="bi bi-check-lg me-1"></i>Đạt
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="badge bg-secondary rounded-pill px-3 py-1">
+                                                                <i class="bi bi-x-lg me-1"></i>Chưa đạt
+                                                            </span>
+                                                        }
+                                                    </td>
+                                                    <td class="text-center">
+                                                        <strong class="@(crit.AwardedPoints > 0 ? "text-success" : "text-muted")">
+                                                            @crit.AwardedPoints.ToString("0.##")
+                                                        </strong>
+                                                        <span class="text-muted small">/@crit.MaxPoints.ToString("0.##")</span>
+                                                    </td>
+                                                    <td class="small text-secondary">
+                                                        @crit.Explanation
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="p-3 rounded-4 bg-light border text-muted small">
+                                    Chưa có bảng kết quả tiêu chí chi tiết cho câu hỏi này.
+                                </div>
+                            }
+                        </div>
+
+                        <!-- 3.4 Nhận Xét & Phân Tích Của AI -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-12 col-lg-6">
+                                <div class="p-3 rounded-4 bg-light border h-100">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <span class="fw-bold text-dark small text-uppercase">
+                                            <i class="bi bi-robot text-primary me-1"></i>Nhận xét tổng thể từ AI:
+                                        </span>
+                                        <span class="badge bg-white text-muted border small">
+                                            @(q.AiProvider ?? "AI Provider") · @(q.AiModel ?? "Model")
+                                        </span>
+                                    </div>
+                                    <p class="text-dark mb-0 small" style="line-height: 1.6;">
+                                        @(string.IsNullOrWhiteSpace(q.AiFeedback) ? "Chưa có nhận xét tổng thể từ mô hình AI." : q.AiFeedback)
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="col-12 col-lg-6">
+                                <div class="p-3 rounded-4 bg-light border h-100">
+                                    <div class="fw-bold text-dark small text-uppercase mb-2">
+                                        <i class="bi bi-award text-warning me-1"></i>Điểm mạnh & Điểm cần cải thiện:
+                                    </div>
+
+                                    <div class="mb-2">
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 rounded-pill px-2 py-1 small mb-1">
+                                            <i class="bi bi-hand-thumbs-up-fill me-1"></i>Điểm mạnh:
+                                        </span>
+                                        <div class="small text-dark mt-1">
+                                            @(string.IsNullOrWhiteSpace(q.Strengths) ? "Chưa ghi nhận điểm mạnh đặc thù." : q.Strengths)
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 rounded-pill px-2 py-1 small mb-1">
+                                            <i class="bi bi-exclamation-octagon-fill me-1"></i>Cần cải thiện:
+                                        </span>
+                                        <div class="small text-dark mt-1">
+                                            @(string.IsNullOrWhiteSpace(q.Weaknesses) ? "Không có thiếu sót nghiêm trọng." : q.Weaknesses)
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3.5 Tín Hiệu Phụ & Nhịp Điệu Giọng Nói (Speech Metrics) -->
+                        @if (q.SpeechMetrics != null)
+                        {
+                            var metrics = q.SpeechMetrics;
+                            <div class="p-3 rounded-4 bg-white border border-dashed mb-4">
+                                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                                    <span class="fw-bold text-secondary small text-uppercase">
+                                        <i class="bi bi-soundwave text-info me-1"></i>Tín hiệu bổ trợ: Thời gian, Tốc độ nói & Từ đệm
+                                    </span>
+                                    <span class="badge bg-light text-muted border small">
+                                        Tham khảo chuyên môn · Không trừ điểm tự động
+                                    </span>
+                                </div>
+
+                                <div class="row g-3">
+                                    <div class="col-6 col-md-3">
+                                        <div class="bg-light p-2 rounded-3 text-center">
+                                            <div class="text-secondary small">Thời lượng trả lời</div>
+                                            <div class="fs-5 fw-bold text-dark">@metrics.AnswerDurationSeconds.ToString("0.#") <small class="fs-6 fw-normal text-muted">giây</small></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-6 col-md-3">
+                                        <div class="bg-light p-2 rounded-3 text-center">
+                                            <div class="text-secondary small">Tốc độ phát âm</div>
+                                            <div class="fs-5 fw-bold text-dark">@metrics.SpeakingSpeedWpm.ToString("0.#") <small class="fs-6 fw-normal text-muted">WPM</small></div>
+                                            <div class="text-muted" style="font-size: 11px;">@Model.GetSpeakingSpeedAssessment(metrics.SpeakingSpeedWpm)</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-6 col-md-3">
+                                        <div class="bg-light p-2 rounded-3 text-center">
+                                            <div class="text-secondary small">Số từ đệm phát hiện</div>
+                                            <div class="fs-5 fw-bold @(metrics.FillerWordsCount > 5 ? "text-warning" : "text-dark")">
+                                                @metrics.FillerWordsCount <small class="fs-6 fw-normal text-muted">từ</small>
+                                            </div>
+                                            <div class="text-muted" style="font-size: 11px;">Tỉ lệ: @((metrics.FillerWordsRatio * 100).ToString("0.1"))%</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-6 col-md-3">
+                                        <div class="bg-light p-2 rounded-3">
+                                            <div class="text-secondary small mb-1">Các từ đệm chính</div>
+                                            @if (metrics.IdentifiedFillerWords.Count > 0)
+                                            {
+                                                <div class="d-flex flex-wrap gap-1">
+                                                    @foreach (var filler in metrics.IdentifiedFillerWords)
+                                                    {
+                                                        <span class="badge bg-white text-secondary border small">@filler</span>
+                                                    }
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="text-muted small fst-italic">Không phát hiện từ đệm đáng kể</div>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        <!-- 3.6 Khung Chốt Điểm Giảng Viên (Human-in-the-Loop Actions & Forms) -->
+                        <div class="p-3 p-md-4 rounded-4 bg-light border">
+                            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+                                <div>
+                                    <div class="fw-bold text-dark">
+                                        <i class="bi bi-shield-check text-success me-1"></i>Quyết định giảng viên (Human-in-the-Loop):
+                                    </div>
+                                    @if (isFinalized)
+                                    {
+                                        <div class="text-success small mt-1">
+                                            <i class="bi bi-check2-circle me-1"></i>Đã chốt điểm chính thức: 
+                                            <strong>@q.TeacherFinalScore?.ToString("0.##")</strong>/@q.MaxPoints.ToString("0.##")
+                                            @if (!string.IsNullOrWhiteSpace(q.FinalizedBy))
+                                            {
+                                                <span>bởi <strong>@q.FinalizedBy</strong></span>
+                                            }
+                                            @if (q.FinalizedAtUtc.HasValue)
+                                            {
+                                                <span>lúc @q.FinalizedAtUtc.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
+                                            }
+                                        </div>
+                                        @if (!string.IsNullOrWhiteSpace(q.TeacherNotes))
+                                        {
+                                            <div class="text-secondary small mt-1">
+                                                Ghi chú: <em>"@q.TeacherNotes"</em>
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <div class="text-muted small mt-1">
+                                            Bài thi đang ở trạng thái AI chấm sơ bộ. Giảng viên có thể xác nhận điểm AI hoặc nhập điểm ghi đè.
+                                        </div>
+                                    }
+                                </div>
+
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    @if (!isFinalized && q.AiScore.HasValue)
+                                    {
+                                        <button type="button" class="btn btn-outline-success rounded-pill px-3 fw-semibold"
+                                                data-bs-toggle="modal" data-bs-target="#confirmAiModal_@q.QuestionId">
+                                            <i class="bi bi-check-lg me-1"></i>Xác nhận điểm AI (@q.AiScore.Value.ToString("0.##"))
+                                        </button>
+                                    }
+
+                                    <button type="button" class="btn btn-primary rounded-pill px-3 fw-semibold"
+                                            data-bs-toggle="modal" data-bs-target="#overrideModal_@q.QuestionId">
+                                        <i class="bi bi-pencil-fill me-1"></i>@(isFinalized ? "Sửa điểm chính thức" : "Nhập điểm GV")
+                                    </button>
+
+                                    @if (isFinalized)
+                                    {
+                                        <button type="button" class="btn btn-outline-secondary rounded-pill px-3 fw-semibold" disabled
+                                                title="Câu hỏi này đã chốt điểm chính thức nên không thể chấm lại bằng AI. Vui lòng mở khóa hoặc sử dụng chức năng 'Sửa điểm chính thức'.">
+                                            <i class="bi bi-arrow-repeat me-1"></i>Chấm lại bằng AI
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="btn btn-outline-primary rounded-pill px-3 fw-semibold btn-regrade-ai"
+                                                data-bs-toggle="modal" data-bs-target="#regradeModal_@q.QuestionId">
+                                            <i class="bi bi-arrow-repeat me-1"></i>Chấm lại bằng AI
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3.7 Lịch Sử Thay Đổi Điểm (Audit Trail cho từng câu hỏi) -->
+                        <div class="mt-4 pt-3 border-top">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label fw-bold text-dark small text-uppercase mb-0">
+                                    <i class="bi bi-clock-history text-secondary me-1"></i>Lịch sử điều chỉnh điểm (Audit Trail):
+                                </label>
+                                @if (q.ChangeLogs.Count > 0)
+                                {
+                                    <span class="badge bg-light text-muted border small">@q.ChangeLogs.Count lần cập nhật</span>
+                                }
+                            </div>
+                            @if (q.ChangeLogs.Count > 0)
+                            {
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-bordered align-middle mb-0 bg-white">
+                                        <thead class="table-light text-secondary small text-uppercase">
+                                            <tr>
+                                                <th style="width: 170px;">Thời gian</th>
+                                                <th class="text-center" style="width: 100px;">Điểm cũ</th>
+                                                <th class="text-center" style="width: 100px;">Điểm mới</th>
+                                                <th style="width: 150px;">Người sửa</th>
+                                                <th>Lý do điều chỉnh</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var log in q.ChangeLogs)
+                                            {
+                                                <tr>
+                                                    <td class="small text-muted font-monospace">
+                                                        @log.ChangedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")
+                                                    </td>
+                                                    <td class="text-center text-muted">
+                                                        @(log.OldScore.HasValue ? log.OldScore.Value.ToString("0.##") : "—")
+                                                    </td>
+                                                    <td class="text-center">
+                                                        <strong class="text-success">@log.NewScore.ToString("0.##")</strong>
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge bg-light text-dark border">
+                                                            <i class="bi bi-person me-1"></i>@log.ChangedBy
+                                                        </span>
+                                                    </td>
+                                                    <td class="small text-dark">
+                                                        @(string.IsNullOrWhiteSpace(log.Reason) ? "Không có lý do ghi nhận" : log.Reason)
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="text-muted small fst-italic">
+                                    <i class="bi bi-info-circle me-1"></i>Chưa có lịch sử điều chỉnh điểm cho câu hỏi này.
+                                </div>
+                            }
+                        </div>
+
+                        <!-- MODAL 1: Xác nhận điểm AI -->
+                        @if (!isFinalized && q.AiScore.HasValue)
+                        {
+                            <div class="modal fade" id="confirmAiModal_@q.QuestionId" tabindex="-1" aria-labelledby="confirmAiModalLabel_@q.QuestionId" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <div class="modal-content rounded-4 border-0 shadow">
+                                        <div class="modal-header border-bottom-0 pb-0">
+                                            <h5 class="modal-title fw-bold text-dark" id="confirmAiModalLabel_@q.QuestionId">
+                                                <i class="bi bi-robot text-primary me-2"></i>Xác Nhận Điểm AI
+                                            </h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <form method="post" asp-page-handler="AcceptAiScore" asp-route-sessionId="@session.SessionId">
+                                            <div class="modal-body py-3">
+                                                <input type="hidden" name="questionId" value="@q.QuestionId" />
+                                                <input type="hidden" name="aiScore" value="@q.AiScore.Value" />
+                                                <input type="hidden" name="expectedRowVersion" value="@q.RowVersion" />
+
+                                                <p class="text-secondary mb-3">
+                                                    Bạn có chắc chắn muốn xác nhận điểm số do mô hình AI chấm cho câu hỏi <strong>@q.QuestionTitle</strong> không?
+                                                </p>
+                                                <div class="p-3 bg-light rounded-3 text-center mb-3">
+                                                    <div class="text-muted small">Điểm AI đề xuất</div>
+                                                    <div class="fs-2 fw-bold text-success">
+                                                        @q.AiScore.Value.ToString("0.##") <span class="fs-6 text-muted fw-normal">/@q.MaxPoints.ToString("0.##")</span>
+                                                    </div>
+                                                </div>
+                                                <div class="alert alert-info py-2 px-3 small border-0 mb-0">
+                                                    <i class="bi bi-info-circle me-1"></i>Sau khi xác nhận, điểm này sẽ trở thành <strong>Điểm chính thức</strong> của câu hỏi.
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer border-top-0 pt-0">
+                                                <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Hủy</button>
+                                                <button type="submit" class="btn btn-success rounded-pill px-4 fw-bold">
+                                                    <i class="bi bi-check2-circle me-1"></i>Xác nhận điểm
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        <!-- MODAL 2: Nhập điểm GV hoặc Sửa điểm chính thức -->
+                        <div class="modal fade" id="overrideModal_@q.QuestionId" tabindex="-1" aria-labelledby="overrideModalLabel_@q.QuestionId" aria-hidden="true">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content rounded-4 border-0 shadow">
+                                    <div class="modal-header border-bottom-0 pb-0">
+                                        <h5 class="modal-title fw-bold text-dark" id="overrideModalLabel_@q.QuestionId">
+                                            <i class="bi bi-pencil-square text-primary me-2"></i>@(isFinalized ? "Điều Chỉnh Điểm Chính Thức" : "Nhập Điểm Giảng Viên")
+                                        </h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <form method="post" asp-page-handler="OverrideScore" asp-route-sessionId="@session.SessionId">
+                                        <div class="modal-body py-3">
+                                            <input type="hidden" name="questionId" value="@q.QuestionId" />
+                                            <input type="hidden" name="expectedRowVersion" value="@q.RowVersion" />
+                                            <input type="hidden" name="isAlreadyFinalized" value="@(isFinalized ? "true" : "false")" />
+                                            <input type="hidden" name="maxPoints" value="@q.MaxPoints" />
+
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold text-dark small">
+                                                    Câu hỏi: <span class="text-primary">@q.QuestionTitle</span>
+                                                </label>
+                                                <div class="input-group">
+                                                    <span class="input-group-text bg-light fw-bold text-secondary">Điểm số</span>
+                                                    <input type="number" step="0.25" min="0" max="@q.MaxPoints" name="finalScore" 
+                                                           value="@(q.EffectiveScore?.ToString("0.##") ?? "0")" 
+                                                           class="form-control form-control-lg fw-bold text-primary" required />
+                                                    <span class="input-group-text bg-light">/@q.MaxPoints.ToString("0.##")</span>
+                                                </div>
+                                            </div>
+
+                                            <div class="mb-3">
+                                                <label class="form-label fw-bold text-dark small">Ghi chú đánh giá của giảng viên:</label>
+                                                <textarea name="teacherNotes" class="form-control rounded-3" rows="2" 
+                                                          placeholder="Nhận xét cụ thể của giảng viên cho câu trả lời này...">@q.TeacherNotes</textarea>
+                                            </div>
+
+                                            @if (isFinalized)
+                                            {
+                                                <div class="mb-3">
+                                                    <label class="form-label text-danger fw-bold small">
+                                                        <i class="bi bi-exclamation-triangle-fill me-1"></i>Lý do sửa đổi điểm (Bắt buộc vì điểm đã được chốt trước đó):
+                                                    </label>
+                                                    <textarea name="changeReason" class="form-control border-danger rounded-3" rows="2" 
+                                                              placeholder="Nhập lý do điều chỉnh điểm đã chốt (ghi vào nhật ký thay đổi)..." required></textarea>
+                                                    <div class="form-text text-danger small">
+                                                        Mọi thay đổi sau khi chốt điểm đều được lưu vết vào nhật ký hệ thống (Audit Log).
+                                                    </div>
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="mb-2">
+                                                    <label class="form-label text-secondary fw-semibold small">Lý do điều chỉnh (Không bắt buộc):</label>
+                                                    <input type="text" name="changeReason" class="form-control rounded-3" 
+                                                           placeholder="Lý do ghi đè điểm AI (tùy chọn)..." />
+                                                </div>
+                                            }
+                                        </div>
+                                        <div class="modal-footer border-top-0 pt-0">
+                                            <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Hủy</button>
+                                            <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold">
+                                                <i class="bi bi-save2 me-1"></i>Lưu điểm chính thức
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- MODAL 3: Chấm lại bằng AI -->
+                        @if (!isFinalized)
+                        {
+                            <div class="modal fade" id="regradeModal_@q.QuestionId" tabindex="-1" aria-labelledby="regradeModalLabel_@q.QuestionId" aria-hidden="true">
+                                <div class="modal-dialog modal-dialog-centered">
+                                    <div class="modal-content rounded-4 border-0 shadow">
+                                        <div class="modal-header border-bottom-0 pb-0">
+                                            <h5 class="modal-title fw-bold text-dark" id="regradeModalLabel_@q.QuestionId">
+                                                <i class="bi bi-arrow-repeat text-primary me-2"></i>Chấm Lại Bằng AI
+                                            </h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                        </div>
+                                        <form method="post" asp-page-handler="RegradeQuestion" asp-route-sessionId="@session.SessionId" onsubmit="handleRegradeSubmit(this)">
+                                            <div class="modal-body py-3">
+                                                <input type="hidden" name="questionId" value="@q.QuestionId" />
+
+                                                <p class="text-secondary mb-3">
+                                                    Bạn có chắc chắn muốn yêu cầu hệ thống chấm lại bằng mô hình AI cho câu hỏi <strong>@q.QuestionTitle</strong> không?
+                                                </p>
+                                                <div class="alert alert-warning py-2 px-3 small border-0 mb-3">
+                                                    <i class="bi bi-exclamation-triangle-fill me-1"></i>Hệ thống sẽ chạy lại quy trình đánh giá dựa trên rubric và lời thoại sinh viên. Điểm đề xuất AI sẽ được tính toán lại.
+                                                </div>
+                                                <div class="p-3 bg-light rounded-3 text-center">
+                                                    <div class="text-muted small">Điểm AI hiện tại</div>
+                                                    <div class="fs-4 fw-bold text-primary">
+                                                        @(q.AiScore.HasValue ? q.AiScore.Value.ToString("0.##") : "Chưa chấm")
+                                                        <span class="fs-6 text-muted fw-normal">/@q.MaxPoints.ToString("0.##")</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer border-top-0 pt-0">
+                                                <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Hủy</button>
+                                                <button type="submit" class="btn btn-primary rounded-pill px-4 fw-bold regrade-submit-btn">
+                                                    <span class="spinner-border spinner-border-sm me-1 d-none regrade-spinner" role="status" aria-hidden="true"></span>
+                                                    <i class="bi bi-play-circle me-1 regrade-icon"></i>Bắt đầu chấm lại
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    }
+
+    <!-- 4. Session-Level Comprehensive Audit Log -->
+    @if (session.AllChangeLogs.Count > 0)
+    {
+        <div class="card border-0 rounded-4 shadow-sm p-4 bg-white mt-4">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <h5 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-journal-text text-primary me-2"></i>Nhật Ký Điều Chỉnh Điểm Toàn Bộ Phiên Thi (Session Audit Trail)
+                </h5>
+                <span class="badge bg-secondary rounded-pill px-3 py-1">@session.AllChangeLogs.Count bản ghi</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover table-bordered align-middle mb-0">
+                    <thead class="table-light text-secondary small text-uppercase">
+                        <tr>
+                            <th style="width: 170px;">Thời gian</th>
+                            <th style="width: 220px;">Câu hỏi</th>
+                            <th class="text-center" style="width: 100px;">Điểm cũ</th>
+                            <th class="text-center" style="width: 100px;">Điểm mới</th>
+                            <th style="width: 160px;">Giảng viên</th>
+                            <th>Lý do điều chỉnh</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var log in session.AllChangeLogs)
+                        {
+                            <tr>
+                                <td class="small text-muted font-monospace">
+                                    @log.ChangedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")
+                                </td>
+                                <td class="fw-semibold text-dark">
+                                    @(log.QuestionTitle ?? log.QuestionId ?? "Câu hỏi")
+                                </td>
+                                <td class="text-center text-muted">
+                                    @(log.OldScore.HasValue ? log.OldScore.Value.ToString("0.##") : "—")
+                                </td>
+                                <td class="text-center">
+                                    <strong class="text-success">@log.NewScore.ToString("0.##")</strong>
+                                </td>
+                                <td>
+                                    <span class="badge bg-light text-dark border">
+                                        <i class="bi bi-person me-1"></i>@log.ChangedBy
+                                    </span>
+                                </td>
+                                <td class="small text-dark">
+                                    @(string.IsNullOrWhiteSpace(log.Reason) ? "Không có lý do ghi nhận" : log.Reason)
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        function handleRegradeSubmit(form) {
+            var submitBtn = form.querySelector('.regrade-submit-btn');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                var spinner = submitBtn.querySelector('.regrade-spinner');
+                var icon = submitBtn.querySelector('.regrade-icon');
+                if (spinner) spinner.classList.remove('d-none');
+                if (icon) icon.classList.add('d-none');
+                submitBtn.lastChild.textContent = ' Đang chấm lại...';
+            }
+            form.submit();
+        }
+    </script>
+}

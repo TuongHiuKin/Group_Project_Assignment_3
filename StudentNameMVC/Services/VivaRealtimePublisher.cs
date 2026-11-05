@@ -1,4 +1,5 @@
 using AIVES.BLL.Interfaces.VivaInterview;
+using AIVES.BLL.Models.Grading;
 using AIVES.BLL.Models.VivaInterview;
 using Microsoft.AspNetCore.SignalR;
 using StudentNameMVC.Hubs;
@@ -26,6 +27,20 @@ public sealed class VivaRealtimePublisher(
         SendAsync(timer.SessionId, client => client.TimeRemainingChanged(timer), ct);
     public Task PublishErrorAsync(VivaErrorDto error, CancellationToken ct = default) =>
         SendAsync(error.SessionId, client => client.VivaError(error), ct);
+
+    // Group 4: lecturer grading group. Callers publish only after the grading result was committed.
+    private Task SendGradingAsync(string examId, Func<IVivaClientEvents, Task> send, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        return send(hub.Clients.Group(GradingGroup.Name(examId))).WaitAsync(ct);
+    }
+
+    public Task PublishGradingStartedAsync(string examId, GradingStartedDto started, CancellationToken ct = default) =>
+        SendGradingAsync(examId, client => client.GradingStarted(started), ct);
+    public Task PublishGradingCompletedAsync(string examId, GradingCompletedDto completed, CancellationToken ct = default) =>
+        SendGradingAsync(examId, client => client.GradingCompleted(completed), ct);
+    public Task PublishGradingFailedAsync(string examId, GradingFailedDto failed, CancellationToken ct = default) =>
+        SendGradingAsync(examId, client => client.GradingFailed(failed), ct);
 
     public async Task PublishSessionCompletedAsync(Guid sessionId, string examId, string studentId, CancellationToken ct = default)
     {

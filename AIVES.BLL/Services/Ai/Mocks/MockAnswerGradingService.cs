@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using AIVES.BLL.Interfaces.Ai;
 using AIVES.BLL.Interfaces.ExamReporting;
 using AIVES.BLL.Models.Grading;
@@ -6,17 +8,20 @@ using AIVES.BLL.Services.ExamReporting;
 namespace AIVES.BLL.Services.Ai.Mocks;
 
 /// <summary>
-/// Deterministic mock answer grading service for development, CI/CD, and offline testing.
-/// Evaluates answers against keyword rubrics using <see cref="IRubricGradingService"/>
-/// and constructs a fully detailed <see cref="QuestionGradingResultDto"/>.
+/// Triển khai mock cho IAnswerGradingService: đánh giá câu trả lời offline dựa trên từ khóa rubric,
+/// tính toán điểm và nhận xét chi tiết mà không gọi API cloud (tiết kiệm chi phí và phục vụ test).
 /// </summary>
 public sealed class MockAnswerGradingService : IAnswerGradingService
 {
-    private readonly IRubricGradingService _rubricService;
+    private readonly IRubricGradingService? _rubricGradingService;
+    private readonly ISpeechMetricsAnalyzer _speechMetricsAnalyzer;
 
-    public MockAnswerGradingService(IRubricGradingService? rubricService = null)
+    public MockAnswerGradingService(
+        IRubricGradingService? rubricGradingService = null,
+        ISpeechMetricsAnalyzer? speechMetricsAnalyzer = null)
     {
-        _rubricService = rubricService ?? new RubricGradingService();
+        _rubricGradingService = rubricGradingService;
+        _speechMetricsAnalyzer = speechMetricsAnalyzer ?? new SpeechMetricsAnalyzer();
     }
 
     public Task<QuestionGradingResultDto> GradeAnswerAsync(
@@ -25,99 +30,191 @@ public sealed class MockAnswerGradingService : IAnswerGradingService
     {
         ArgumentNullException.ThrowIfNull(input);
 
-        var rubric = _rubricService.GetRubric(input.QuestionId);
-        var rubricResult = _rubricService.Grade(
-            input.QuestionId,
-            input.QuestionText,
-            input.StudentAnswerTranscript,
-            6.0m);
+        var fullTranscript = CombineTranscripts(input.StudentAnswerTranscript, input.FollowUpTurns);
+        var normalizedAnswer = RubricGradingService.Normalize(fullTranscript);
+        var normalizedQuestion = RubricGradingService.Normalize(input.QuestionText);
 
-        if (rubricResult != null)
+        var paddedAnswer = $" {normalizedAnswer} ";
+        var hasRelevantAnswer = CountNovelTokens(normalizedAnswer, normalizedQuestion) >= RubricGradingService.MinNovelTokens;
+
+        List<CriterionOutcomeDto> outcomes = new();
+        decimal totalScore = 0m;
+        string feedback;
+        string strengths;
+        string weaknesses;
+
+        if (input.RubricCriteria != null && input.RubricCriteria.Count > 0)
         {
-            var outcomes = rubricResult.Outcomes.Select(o =>
+            // Trường hợp có tiêu chí Rubric truyền vào (từ Database hoặc cấu hình)
+            foreach (var criterion in input.RubricCriteria)
             {
-                var crit = rubric?.Criteria.FirstOrDefault(c => string.Equals(c.Id, o.CriterionId, StringComparison.OrdinalIgnoreCase));
-                var points = (crit != null && rubric != null)
-                    ? rubric.PointsFor(crit)
-                    : Math.Round(input.MaxPoints / Math.Max(1, rubricResult.Outcomes.Count), 2);
+                var isMet = false;
+                if (hasRelevantAnswer)
+                {
+                    if (criterion.Keywords != null && criterion.Keywords.Count > 0)
+                    {
+                        isMet = criterion.Keywords.Any(k =>
+                        {
+                            var normKey = RubricGradingService.Normalize(k);
+                            return normKey.Length > 0 && paddedAnswer.Contains($" {normKey} ", StringComparison.Ordinal);
+                        });
+                    }
+                    else
+                    {
+                        // Nếu tiêu chí không định nghĩa keyword, kiểm tra tên tiêu chí trong transcript
+                        var normName = RubricGradingService.Normalize(criterion.CriterionName);
+                        isMet = normName.Length > 0 && paddedAnswer.Contains($" {normName} ", StringComparison.Ordinal);
+                    }
+                }
 
-                return new CriterionOutcomeDto
+                var awarded = isMet ? criterion.MaxPoints : 0m;
+                outcomes.Add(new CriterionOutcomeDto
+                {
+                    CriterionCode = criterion.CriterionCode,
+                    CriterionName = criterion.CriterionName,
+                    MaxPoints = criterion.MaxPoints,
+                    AwardedPoints = awarded,
+                    IsMet = isMet,
+                    Explanation = isMet
+                        ? $"Đã thể hiện đúng nội dung yêu cầu của tiêu chí '{criterion.CriterionName}'."
+                        : $"Chưa đề cập hoặc giải thích chưa rõ về '{criterion.CriterionName}'."
+                });
+            }
+
+            var sumAwarded = outcomes.Sum(o => o.AwardedPoints);
+            totalScore = Math.Clamp(Math.Round(sumAwarded, 2), 0m, input.MaxPoints);
+
+            var metList = outcomes.Where(o => o.IsMet).ToList();
+            var unmetList = outcomes.Where(o => !o.IsMet).ToList();
+
+            if (!hasRelevantAnswer)
+            {
+                strengths = string.Empty;
+                weaknesses = "Chưa có câu trả lời từ sinh viên hoặc câu trả lời chỉ lặp lại câu hỏi.";
+                feedback = RubricGradingService.NoRelevantAnswerFeedback;
+            }
+            else
+            {
+                strengths = metList.Count > 0
+                    ? string.Join(" ", metList.Select(m => $"Đã nêu: {m.CriterionName}."))
+                    : "Chưa thể hiện rõ các luận điểm chính.";
+
+                weaknesses = unmetList.Count > 0
+                    ? string.Join(" ", unmetList.Select(u => $"Cần bổ sung: {u.CriterionName}."))
+                    : "Đã bao quát đầy đủ các tiêu chí.";
+
+                var verdict = unmetList.Count == 0
+                    ? "Câu trả lời đầy đủ, đáp ứng trọn vẹn yêu cầu câu hỏi."
+                    : totalScore >= (input.MaxPoints * 0.5m)
+                        ? $"Câu trả lời khá tốt nhưng còn thiếu: {string.Join("; ", unmetList.Select(u => u.CriterionName))}."
+                        : $"Câu trả lời chưa đạt, cần ôn tập thêm: {string.Join("; ", unmetList.Select(u => u.CriterionName))}.";
+
+                feedback = $"AI chấm gợi ý (mô phỏng Rubric offline): Đạt {metList.Count}/{outcomes.Count} tiêu chí, {totalScore:0.##}/{input.MaxPoints:0.##} điểm. {verdict}";
+            }
+        }
+        else if (_rubricGradingService != null)
+        {
+            // Fallback sang RubricCatalog thông qua IRubricGradingService nếu input.RubricCriteria rỗng
+            var legacyResult = _rubricGradingService.Grade(
+                input.QuestionId, 
+                input.QuestionText, 
+                fullTranscript, 
+                input.MaxPoints * 0.5m);
+
+            if (legacyResult != null)
+            {
+                totalScore = Math.Clamp(legacyResult.EarnedScore, 0m, input.MaxPoints);
+                strengths = legacyResult.Strengths;
+                weaknesses = legacyResult.Weaknesses;
+                feedback = legacyResult.Feedback;
+
+                outcomes = legacyResult.Outcomes.Select(o => new CriterionOutcomeDto
                 {
                     CriterionCode = o.CriterionId,
                     CriterionName = o.Name,
-                    MaxPoints = points,
-                    AwardedPoints = o.IsMet ? points : 0m,
+                    MaxPoints = Math.Round(input.MaxPoints / Math.Max(1, legacyResult.Outcomes.Count), 2),
+                    AwardedPoints = o.IsMet ? Math.Round(input.MaxPoints / Math.Max(1, legacyResult.Outcomes.Count), 2) : 0m,
                     IsMet = o.IsMet,
                     Explanation = o.IsMet
-                        ? (o.MatchedKeywords.Count > 0 ? $"Khớp từ khóa: {string.Join(", ", o.MatchedKeywords)}" : "Đạt yêu cầu tiêu chí")
-                        : "Chưa phát hiện từ khóa phù hợp trong câu trả lời"
-                };
-            }).ToList();
-
-            var strengths = !string.IsNullOrWhiteSpace(rubricResult.Strengths)
-                ? rubricResult.Strengths
-                : "Sinh viên nắm được một số từ khóa cơ bản của câu hỏi.";
-
-            var weaknesses = !string.IsNullOrWhiteSpace(rubricResult.Weaknesses)
-                ? rubricResult.Weaknesses
-                : "Cần diễn giải sâu hơn về bản chất kỹ thuật và cơ chế hoạt động.";
-
-            return Task.FromResult(new QuestionGradingResultDto
+                        ? $"Khớp từ khóa: {string.Join(", ", o.MatchedKeywords)}"
+                        : "Chưa nêu đúng từ khóa trọng tâm."
+                }).ToList();
+            }
+            else
             {
-                SessionId = input.SessionId,
-                QuestionId = input.QuestionId,
-                QuestionTitle = input.QuestionText,
-                BloomLevel = input.BloomLevel ?? "Vận dụng",
-                MaxPoints = input.MaxPoints > 0 ? input.MaxPoints : 10.0m,
-                AiScore = rubricResult.EarnedScore,
-                AiFeedback = rubricResult.Feedback,
-                Strengths = strengths,
-                Weaknesses = weaknesses,
-                CriteriaOutcomes = outcomes,
-                AiProvider = "Mock",
-                AiModel = "mock-rubric-grading-v1",
-                State = GradingState.AiGraded
-            });
+                feedback = "Không tìm thấy rubric cho câu hỏi này trong hệ thống.";
+                strengths = string.Empty;
+                weaknesses = string.Empty;
+            }
+        }
+        else
+        {
+            feedback = "Không có tiêu chí rubric được cung cấp để đánh giá câu trả lời.";
+            strengths = string.Empty;
+            weaknesses = string.Empty;
         }
 
-        // Generic fallback when rubric is not in catalog
-        var defaultOutcomes = new List<CriterionOutcomeDto>
+        var result = new QuestionGradingResultDto
         {
-            new()
-            {
-                CriterionCode = "C1",
-                CriterionName = "Mức độ hiểu bài",
-                MaxPoints = 5.0m,
-                AwardedPoints = 4.0m,
-                IsMet = true,
-                Explanation = "Trả lời đúng trọng tâm câu hỏi vấn đáp."
-            },
-            new()
-            {
-                CriterionCode = "C2",
-                CriterionName = "Vận dụng thực tế",
-                MaxPoints = 5.0m,
-                AwardedPoints = 3.5m,
-                IsMet = true,
-                Explanation = "Có dẫn chứng minh họa cụ thể."
-            }
-        };
-
-        return Task.FromResult(new QuestionGradingResultDto
-        {
+            Id = Guid.NewGuid(),
             SessionId = input.SessionId,
             QuestionId = input.QuestionId,
             QuestionTitle = input.QuestionText,
-            BloomLevel = input.BloomLevel ?? "Vận dụng",
-            MaxPoints = input.MaxPoints > 0 ? input.MaxPoints : 10.0m,
-            AiScore = 7.5m,
-            AiFeedback = "Câu trả lời tương đối đầy đủ và mạch lạc, đáp ứng yêu cầu cơ bản của đề thi.",
-            Strengths = "Trình bày rõ ràng, nắm được kiến thức nền tảng.",
-            Weaknesses = "Cần phân tích thêm các trường hợp biên và tối ưu hiệu năng.",
-            CriteriaOutcomes = defaultOutcomes,
+            BloomLevel = input.BloomLevel,
+            MaxPoints = input.MaxPoints,
+            AiScore = totalScore,
+            AiFeedback = feedback,
+            Strengths = strengths,
+            Weaknesses = weaknesses,
+            CriteriaOutcomes = outcomes,
             AiProvider = "Mock",
-            AiModel = "mock-rubric-grading-v1",
-            State = GradingState.AiGraded
-        });
+            AiModel = "mock-rubric-v1",
+            State = GradingState.AiGraded,
+            SpeechMetrics = _speechMetricsAnalyzer.Analyze(input.StudentAnswerTranscript, input.AnswerDurationSeconds, input.FollowUpTurns)
+        };
+
+        return Task.FromResult(result);
+    }
+
+    private static string CombineTranscripts(string? mainAnswer, IEnumerable<string>? followUpTurns)
+    {
+        var sb = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(mainAnswer))
+        {
+            sb.Append(mainAnswer);
+        }
+
+        if (followUpTurns != null)
+        {
+            foreach (var turn in followUpTurns)
+            {
+                if (!string.IsNullOrWhiteSpace(turn))
+                {
+                    if (sb.Length > 0)
+                    {
+                        sb.Append(". ");
+                    }
+                    sb.Append(turn);
+                }
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    private static int CountNovelTokens(string normalizedAnswer, string normalizedQuestion)
+    {
+        if (normalizedAnswer.Length == 0)
+        {
+            return 0;
+        }
+
+        var questionTokens = new HashSet<string>(normalizedQuestion.Split(' ', StringSplitOptions.RemoveEmptyEntries), StringComparer.Ordinal);
+        return normalizedAnswer
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            .Where(t => t.Length > 1 && !questionTokens.Contains(t))
+            .Distinct(StringComparer.Ordinal)
+            .Count();
     }
 }
+

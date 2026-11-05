@@ -134,21 +134,53 @@ public sealed class GradingOrchestrator(
         var questionDtos = new List<QuestionGradingResultDto>();
         foreach (var q in questions)
         {
+            var turnsForQ = session.Turns
+                .Where(t => string.Equals(t.QuestionId, q.QuestionId, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(t => t.TurnOrdinal)
+                .ToList();
+
+            var turnDtos = turnsForQ.Select(t => new QuestionTurnDetailDto
+            {
+                TurnId = t.TurnId,
+                TurnOrdinal = t.TurnOrdinal,
+                AudioUrl = t.AudioUrl,
+                TranscriptText = t.TranscriptText,
+                ConfidenceScore = t.ConfidenceScore,
+                FollowUpQuestionText = t.FollowUpQuestionText,
+                FollowUpAudioUrl = t.FollowUpAudioUrl,
+                CreatedAtUtc = t.CreatedAtUtc,
+                CompletedAtUtc = t.CompletedAtUtc
+            }).ToList();
+
+            var initialAnswer = turnsForQ.FirstOrDefault()?.TranscriptText;
+
+            QuestionGradingResultDto dto;
             if (resultMap.TryGetValue(q.QuestionId, out var existing))
             {
-                questionDtos.Add(MapToDto(existing, q));
+                dto = MapToDto(existing, q);
             }
             else
             {
-                questionDtos.Add(new QuestionGradingResultDto
+                dto = new QuestionGradingResultDto
                 {
                     SessionId = sessionId,
                     QuestionId = q.QuestionId,
                     QuestionTitle = q.Title,
                     MaxPoints = 10m,
                     State = GradingState.Pending
-                });
+                };
             }
+
+            dto.QuestionContent = q.Content;
+            dto.StudentAnswerTranscript = initialAnswer;
+            dto.Turns = turnDtos;
+
+            if (dto.SpeechMetrics == null && turnsForQ.Count > 0)
+            {
+                dto.SpeechMetrics = CalculateSpeechMetrics(turnsForQ);
+            }
+
+            questionDtos.Add(dto);
         }
 
         var totalMax = questionDtos.Sum(q => q.MaxPoints);
@@ -296,7 +328,11 @@ public sealed class GradingOrchestrator(
         };
 
         var saved = await vivaGradingRepo.UpsertAiResultAsync(entity, ct);
-        return MapToDto(saved, question);
+        var mapped = MapToDto(saved, question);
+        mapped.QuestionContent = question.Content;
+        mapped.StudentAnswerTranscript = mainTranscript;
+        mapped.SpeechMetrics = gradingResult.SpeechMetrics ?? CalculateSpeechMetrics(questionTurns);
+        return mapped;
     }
 
     private QuestionGradingResultDto ExecuteFallbackGrading(
@@ -352,6 +388,59 @@ public sealed class GradingOrchestrator(
         };
     }
 
+    private static SpeechMetricsDto CalculateSpeechMetrics(List<VivaSessionTurn> turns)
+    {
+        var allText = string.Join(" ", turns.Select(t => t.TranscriptText ?? string.Empty)).Trim();
+        var words = allText.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        var totalWords = words.Length;
+
+        double totalDurationSec = 0;
+        foreach (var turn in turns)
+        {
+            if (turn.CompletedAtUtc.HasValue && turn.CompletedAtUtc.Value > turn.CreatedAtUtc)
+            {
+                totalDurationSec += (turn.CompletedAtUtc.Value - turn.CreatedAtUtc).TotalSeconds;
+            }
+        }
+        if (totalDurationSec <= 0)
+        {
+            totalDurationSec = Math.Max(20.0, totalWords * 0.4);
+        }
+
+        var speedWpm = totalDurationSec > 0 ? Math.Round(totalWords / (totalDurationSec / 60.0), 1) : 0;
+
+        var fillerKeywords = new[] { "à", "ừm", "ừ", "kiểu", "thì", "dạ", "như là", "kiểu như", "ơ" };
+        var identifiedFillers = new List<string>();
+        int fillerCount = 0;
+
+        foreach (var kw in fillerKeywords)
+        {
+            int count = 0;
+            int idx = 0;
+            while ((idx = allText.IndexOf(kw, idx, StringComparison.OrdinalIgnoreCase)) != -1)
+            {
+                count++;
+                idx += kw.Length;
+            }
+            if (count > 0)
+            {
+                fillerCount += count;
+                identifiedFillers.Add($"{kw} ({count})");
+            }
+        }
+
+        double ratio = totalWords > 0 ? Math.Round((double)fillerCount / totalWords, 3) : 0;
+
+        return new SpeechMetricsDto
+        {
+            AnswerDurationSeconds = Math.Round(totalDurationSec, 1),
+            SpeakingSpeedWpm = speedWpm,
+            FillerWordsCount = fillerCount,
+            FillerWordsRatio = ratio,
+            IdentifiedFillerWords = identifiedFillers
+        };
+    }
+
     private static QuestionGradingResultDto MapToDto(VivaGradingResult entity, VivaQuestion? question)
     {
         var criteria = new List<CriterionOutcomeDto>();
@@ -367,12 +456,28 @@ public sealed class GradingOrchestrator(
             }
         }
 
+        var changeLogs = entity.ChangeLogs?
+            .OrderByDescending(l => l.ChangedAtUtc)
+            .Select(l => new GradeChangeLogDto
+            {
+                Id = l.Id,
+                GradingResultId = l.GradingResultId,
+                QuestionId = entity.QuestionId,
+                QuestionTitle = question?.Title ?? entity.QuestionId,
+                OldScore = l.OldScore,
+                NewScore = l.NewScore,
+                ChangedBy = l.ChangedBy,
+                Reason = l.Reason,
+                ChangedAtUtc = l.ChangedAtUtc
+            }).ToList() ?? new();
+
         return new QuestionGradingResultDto
         {
             Id = entity.Id,
             SessionId = entity.SessionId,
             QuestionId = entity.QuestionId,
             QuestionTitle = question?.Title ?? entity.QuestionId,
+            QuestionContent = question?.Content,
             MaxPoints = 10m,
             AiScore = entity.AiScore,
             AiFeedback = entity.AiFeedback,
@@ -386,7 +491,8 @@ public sealed class GradingOrchestrator(
             TeacherNotes = entity.TeacherNotes,
             FinalizedBy = entity.FinalizedBy,
             FinalizedAtUtc = entity.FinalizedAtUtc,
-            RowVersion = entity.RowVersion != null ? Convert.ToBase64String(entity.RowVersion) : null
+            RowVersion = entity.RowVersion != null ? Convert.ToBase64String(entity.RowVersion) : null,
+            ChangeLogs = changeLogs
         };
     }
 }

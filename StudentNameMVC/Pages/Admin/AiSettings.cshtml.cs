@@ -103,6 +103,7 @@ public class AiSettingsModel : PageModel
         if (ProfileInput.EnableStt) capabilities |= AiCapability.SpeechToText;
         if (ProfileInput.EnableTts) capabilities |= AiCapability.TextToSpeech;
         if (ProfileInput.EnableLlm) capabilities |= AiCapability.FollowUpLlm;
+        if (ProfileInput.EnableGrading) capabilities |= AiCapability.Grading;
         if (capabilities == AiCapability.None) capabilities = AiCapability.All;
 
         if (existing != null)
@@ -138,6 +139,11 @@ public class AiSettingsModel : PageModel
                 {
                     config.Routing.Llm.Model = DefaultModelFor(kind, AiCapability.FollowUpLlm);
                 }
+                if (string.Equals(config.Routing.Grading.ProfileId, existing.Id, StringComparison.OrdinalIgnoreCase) &&
+                    !IsModelCompatible(kind, AiCapability.Grading, config.Routing.Grading.Model))
+                {
+                    config.Routing.Grading.Model = DefaultModelFor(kind, AiCapability.Grading);
+                }
             }
 
             // Clear routing if capabilities were removed from this profile
@@ -152,6 +158,10 @@ public class AiSettingsModel : PageModel
             if (!capabilities.HasFlag(AiCapability.FollowUpLlm) && string.Equals(config.Routing.Llm.ProfileId, existing.Id, StringComparison.OrdinalIgnoreCase))
             {
                 config.Routing.Llm.ProfileId = null;
+            }
+            if (!capabilities.HasFlag(AiCapability.Grading) && string.Equals(config.Routing.Grading.ProfileId, existing.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                config.Routing.Grading.ProfileId = null;
             }
         }
         else
@@ -184,6 +194,11 @@ public class AiSettingsModel : PageModel
             {
                 config.Routing.Llm.ProfileId = newProfile.Id;
                 config.Routing.Llm.Model = DefaultModelFor(newProfile.Kind, AiCapability.FollowUpLlm);
+            }
+            if (string.IsNullOrWhiteSpace(config.Routing.Grading.ProfileId) && capabilities.HasFlag(AiCapability.Grading))
+            {
+                config.Routing.Grading.ProfileId = newProfile.Id;
+                config.Routing.Grading.Model = DefaultModelFor(newProfile.Kind, AiCapability.Grading);
             }
         }
 
@@ -220,6 +235,10 @@ public class AiSettingsModel : PageModel
             if (string.Equals(config.Routing.Llm.ProfileId, profileId, StringComparison.OrdinalIgnoreCase))
             {
                 config.Routing.Llm.ProfileId = config.Profiles.FirstOrDefault(p => p.CustomCapabilities.HasFlag(AiCapability.FollowUpLlm))?.Id;
+            }
+            if (string.Equals(config.Routing.Grading.ProfileId, profileId, StringComparison.OrdinalIgnoreCase))
+            {
+                config.Routing.Grading.ProfileId = config.Profiles.FirstOrDefault(p => p.CustomCapabilities.HasFlag(AiCapability.Grading))?.Id;
             }
 
             await _credentialStore.SaveConfigurationAsync(config, ct);
@@ -346,11 +365,48 @@ public class AiSettingsModel : PageModel
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(RoutingInput.GradingProfileId))
+        {
+            var p = config.FindProfile(RoutingInput.GradingProfileId);
+            if (p == null)
+            {
+                ModelState.AddModelError("RoutingInput.GradingProfileId", "Hồ sơ Chấm điểm AI đã chọn không tồn tại.");
+            }
+            else if (!p.CustomCapabilities.HasFlag(AiCapability.Grading))
+            {
+                ModelState.AddModelError("RoutingInput.GradingProfileId", $"Hồ sơ '{p.Name}' không hỗ trợ năng lực Chấm điểm AI.");
+            }
+            else
+            {
+                var defaultModel = DefaultModelFor(p.Kind, AiCapability.Grading);
+
+                if (string.IsNullOrWhiteSpace(RoutingInput.GradingModel))
+                {
+                    RoutingInput.GradingModel = defaultModel;
+                }
+                else
+                {
+                    var modelTrimmed = RoutingInput.GradingModel.Trim();
+                    if (p.Kind == AiProviderKinds.Gemini && IsLikelyOpenAiModel(modelTrimmed))
+                    {
+                        ModelState.AddModelError("RoutingInput.GradingModel",
+                            $"Model '{modelTrimmed}' là của OpenAI, không tương thích với nhà cung cấp Google Gemini. Vui lòng sử dụng '{defaultModel}' hoặc để trống.");
+                    }
+                    else if (p.Kind == AiProviderKinds.OpenAi && IsLikelyGeminiModel(modelTrimmed))
+                    {
+                        ModelState.AddModelError("RoutingInput.GradingModel",
+                            $"Model '{modelTrimmed}' là của Google Gemini, không tương thích với nhà cung cấp OpenAI. Vui lòng sử dụng '{defaultModel}' hoặc để trống.");
+                    }
+                }
+            }
+        }
+
         if (ModelState.IsValid)
         {
             await ValidateGeminiModelAsync(config.FindProfile(RoutingInput.SttProfileId), AiCapability.SpeechToText, RoutingInput.SttModel, "RoutingInput.SttModel", ct);
             await ValidateGeminiModelAsync(config.FindProfile(RoutingInput.TtsProfileId), AiCapability.TextToSpeech, RoutingInput.TtsModel, "RoutingInput.TtsModel", ct);
             await ValidateGeminiModelAsync(config.FindProfile(RoutingInput.LlmProfileId), AiCapability.FollowUpLlm, RoutingInput.LlmModel, "RoutingInput.LlmModel", ct);
+            await ValidateGeminiModelAsync(config.FindProfile(RoutingInput.GradingProfileId), AiCapability.Grading, RoutingInput.GradingModel, "RoutingInput.GradingModel", ct);
         }
 
         if (!ModelState.IsValid)
@@ -372,6 +428,9 @@ public class AiSettingsModel : PageModel
 
         config.Routing.Llm.ProfileId = RoutingInput.LlmProfileId;
         config.Routing.Llm.Model = string.IsNullOrWhiteSpace(RoutingInput.LlmModel) ? null : RoutingInput.LlmModel.Trim();
+
+        config.Routing.Grading.ProfileId = RoutingInput.GradingProfileId;
+        config.Routing.Grading.Model = string.IsNullOrWhiteSpace(RoutingInput.GradingModel) ? null : RoutingInput.GradingModel.Trim();
 
         await _credentialStore.SaveConfigurationAsync(config, ct);
         TempData["SuccessMessage"] = "Đã lưu thiết lập định tuyến năng lực AI thành công.";
@@ -404,7 +463,7 @@ public class AiSettingsModel : PageModel
     }
 
     /// <summary>
-    /// Với hồ sơ Gemini: model TTS phải là model "tts", STT/LLM không được là model TTS, và tên model phải có trong
+    /// Với hồ sơ Gemini: model TTS phải là model "tts", STT/LLM/Grading không được là model TTS, và tên model phải có trong
     /// danh sách ListModels thật của hồ sơ (nếu lấy được). Sai thì báo lỗi tại trang kèm gợi ý model hợp lệ gần nhất.
     /// </summary>
     private async Task ValidateGeminiModelAsync(AiProviderProfile? profile, AiCapability capability, string? model, string field, CancellationToken ct)
@@ -420,6 +479,7 @@ public class AiSettingsModel : PageModel
         {
             AiCapability.SpeechToText => "Nhận diện giọng nói (STT)",
             AiCapability.TextToSpeech => "Đọc câu hỏi (TTS)",
+            AiCapability.Grading => "Chấm điểm AI (Grading)",
             _ => "Câu hỏi phụ (LLM)"
         };
 
@@ -570,7 +630,9 @@ public class AiSettingsModel : PageModel
             TtsModel = Configuration.Routing.Tts.Model,
             TtsVoice = Configuration.Routing.Tts.Voice,
             LlmProfileId = Configuration.Routing.Llm.ProfileId,
-            LlmModel = Configuration.Routing.Llm.Model
+            LlmModel = Configuration.Routing.Llm.Model,
+            GradingProfileId = Configuration.Routing.Grading.ProfileId,
+            GradingModel = Configuration.Routing.Grading.Model
         };
     }
 
@@ -585,6 +647,7 @@ public class AiSettingsModel : PageModel
         public bool EnableStt { get; set; } = true;
         public bool EnableTts { get; set; } = true;
         public bool EnableLlm { get; set; } = true;
+        public bool EnableGrading { get; set; } = true;
     }
 
     public class RoutingInputModel
@@ -597,5 +660,7 @@ public class AiSettingsModel : PageModel
         public string? TtsVoice { get; set; }
         public string? LlmProfileId { get; set; }
         public string? LlmModel { get; set; }
+        public string? GradingProfileId { get; set; }
+        public string? GradingModel { get; set; }
     }
 }

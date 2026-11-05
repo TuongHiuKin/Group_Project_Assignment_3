@@ -195,6 +195,19 @@
                                         }
                                         else
                                         {
+                                            @if (attempt.IsFullyFinalized)
+                                            {
+                                                <span class="badge bg-success text-white rounded-pill px-3">
+                                                    <i class="bi bi-shield-check me-1"></i>Điểm chính thức
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-warning text-dark rounded-pill px-3">
+                                                    <i class="bi bi-robot me-1"></i>AI chấm, chờ giảng viên duyệt
+                                                </span>
+                                            }
+
                                             <span class="badge @(attempt.IsPassed ? "bg-success" : "bg-danger") rounded-pill px-3">
                                                 @(attempt.IsPassed ? "ĐẠT CHUẨN" : "CHƯA ĐẠT")
                                             </span>
