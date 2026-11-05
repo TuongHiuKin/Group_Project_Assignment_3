@@ -10,5 +10,6 @@ public enum AiCapability
     SpeechToText = 1,
     TextToSpeech = 2,
     FollowUpLlm = 4,
-    All = SpeechToText | TextToSpeech | FollowUpLlm
+    Grading = 8,
+    All = SpeechToText | TextToSpeech | FollowUpLlm | Grading
 }

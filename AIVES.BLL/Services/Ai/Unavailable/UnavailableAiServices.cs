@@ -1,4 +1,5 @@
 using AIVES.BLL.Interfaces.Ai;
+using AIVES.BLL.Models.Grading;
 
 namespace AIVES.BLL.Services.Ai.Unavailable;
 
@@ -44,4 +45,28 @@ public sealed class UnavailableFollowUpGeneratorService(string reason) : IFollow
         string subjectContext,
         CancellationToken ct = default) =>
         Task.FromResult(new FollowUpResult(false, string.Empty, string.Empty, ErrorMessage));
+}
+
+public sealed class UnavailableAnswerGradingService(string reason) : IAnswerGradingService
+{
+    public string ErrorMessage { get; } = AiUnavailableMessages.Format("Chấm điểm AI (Grading)", reason);
+
+    public Task<QuestionGradingResultDto> GradeAnswerAsync(
+        GradingInputDto input, 
+        CancellationToken ct = default)
+    {
+        return Task.FromResult(new QuestionGradingResultDto
+        {
+            Id = Guid.NewGuid(),
+            SessionId = input?.SessionId ?? Guid.Empty,
+            QuestionId = input?.QuestionId ?? string.Empty,
+            QuestionTitle = input?.QuestionText ?? string.Empty,
+            BloomLevel = input?.BloomLevel,
+            MaxPoints = input?.MaxPoints ?? 10m,
+            AiScore = 0m,
+            AiFeedback = ErrorMessage,
+            State = GradingState.Failed,
+            AiProvider = "Unavailable"
+        });
+    }
 }

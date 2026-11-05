@@ -112,6 +112,7 @@ public sealed class GradingInputDto
     public string StudentAnswerTranscript { get; set; } = string.Empty;
     public List<string> FollowUpTurns { get; set; } = new();
     public List<RubricCriterionDto> RubricCriteria { get; set; } = new();
+    public double AnswerDurationSeconds { get; set; }
 }
 
 public sealed class RubricCriterionDto

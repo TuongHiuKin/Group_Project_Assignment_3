@@ -11,6 +11,7 @@ public static class GeminiModels
     public const string DefaultSpeechToText = "gemini-3.8-flash";
     public const string DefaultTextToSpeech = "gemini-3.8-flash-tts";
     public const string DefaultFollowUp = "gemini-3.8-flash";
+    public const string DefaultGrading = "gemini-3.8-flash";
     public const string DefaultVoice = "Puck";
 
     /// <summary>Danh sách dự phòng khi không gọi được ListModels (không dùng để kiểm tra hợp lệ).</summary>
@@ -23,6 +24,7 @@ public static class GeminiModels
     {
         AiCapability.TextToSpeech => DefaultTextToSpeech,
         AiCapability.FollowUpLlm => DefaultFollowUp,
+        AiCapability.Grading => DefaultGrading,
         _ => DefaultSpeechToText
     };
 
@@ -48,23 +50,26 @@ public static class GeminiModels
             return null;
         }
 
-        var target = requested?.Trim() ?? string.Empty;
-        var preferred = DefaultFor(capability);
-        return candidates
-            .OrderByDescending(m => CommonPrefixLength(m, target))
-            .ThenByDescending(m => string.Equals(m, preferred, StringComparison.OrdinalIgnoreCase))
-            .ThenBy(m => m.Length)
-            .First();
-    }
-
-    private static int CommonPrefixLength(string a, string b)
-    {
-        var length = Math.Min(a.Length, b.Length);
-        var i = 0;
-        while (i < length && char.ToLowerInvariant(a[i]) == char.ToLowerInvariant(b[i]))
+        var req = requested?.Trim();
+        if (!string.IsNullOrWhiteSpace(req))
         {
-            i++;
+            var exact = candidates.FirstOrDefault(m => string.Equals(m, req, StringComparison.OrdinalIgnoreCase));
+            if (exact != null)
+            {
+                return exact;
+            }
+
+            var prefix = candidates
+                .Where(m => req.StartsWith(m, StringComparison.OrdinalIgnoreCase) || m.StartsWith(req, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(m => m.Length)
+                .FirstOrDefault();
+            if (prefix != null)
+            {
+                return prefix;
+            }
         }
-        return i;
+
+        var fallback = DefaultFor(capability);
+        return candidates.FirstOrDefault(m => string.Equals(m, fallback, StringComparison.OrdinalIgnoreCase)) ?? candidates[0];
     }
 }

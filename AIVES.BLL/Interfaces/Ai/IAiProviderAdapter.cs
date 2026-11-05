@@ -49,6 +49,14 @@ public interface IAiProviderAdapter
         string model);
 
     /// <summary>
+    /// Creates a configured Answer Grading service for this provider.
+    /// </summary>
+    IAnswerGradingService? CreateAnswerGradingService(
+        IServiceProvider sp,
+        AiProviderProfile profile,
+        string model) => null;
+
+    /// <summary>
     /// Tests network connectivity and API key validity for the given profile.
     /// </summary>
     Task<(bool Ok, string Message)> TestConnectionAsync(

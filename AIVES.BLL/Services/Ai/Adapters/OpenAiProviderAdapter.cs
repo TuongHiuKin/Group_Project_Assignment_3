@@ -24,6 +24,7 @@ public sealed class OpenAiProviderAdapter : IAiProviderAdapter
         AiCapability.SpeechToText => "whisper-1",
         AiCapability.TextToSpeech => "tts-1",
         AiCapability.FollowUpLlm => "gpt-4o-mini",
+        AiCapability.Grading => "gpt-4o-mini",
         _ => "gpt-4o-mini"
     };
 
@@ -113,6 +114,24 @@ public sealed class OpenAiProviderAdapter : IAiProviderAdapter
         var allowFallback = sp.GetService<IOptions<AiServiceOptions>>()?.Value.AllowMockFallback ?? false;
         var mock = allowFallback ? sp.GetService<MockFollowUpGeneratorService>() : null;
         return new OpenAiFollowUpGeneratorService(httpClient, customOptions, logger, mock);
+    }
+
+    public IAnswerGradingService? CreateAnswerGradingService(IServiceProvider sp, AiProviderProfile profile, string model)
+    {
+        if (!profile.CustomCapabilities.HasFlag(AiCapability.Grading))
+        {
+            return null;
+        }
+
+        var effectiveModel = string.IsNullOrWhiteSpace(model) ? GetDefaultModel(AiCapability.Grading) : model;
+        var httpClient = sp.GetRequiredService<HttpClient>();
+        var logger = sp.GetService<ILogger<OpenAiAnswerGradingService>>();
+        var aiOptions = sp.GetService<IOptions<AiServiceOptions>>()?.Value;
+        var allowFallback = aiOptions?.AllowMockFallback ?? false;
+        var mock = allowFallback ? sp.GetService<MockAnswerGradingService>() : null;
+        var timeout = aiOptions?.GradingTimeoutSeconds > 0 ? aiOptions.GradingTimeoutSeconds : 30;
+        var validator = sp.GetService<GradingOutputValidator>() ?? new GradingOutputValidator();
+        return new OpenAiAnswerGradingService(httpClient, profile, effectiveModel, timeoutSeconds: timeout, logger, mock, validator);
     }
 
     public async Task<(bool Ok, string Message)> TestConnectionAsync(HttpClient httpClient, AiProviderProfile profile, CancellationToken ct = default)
