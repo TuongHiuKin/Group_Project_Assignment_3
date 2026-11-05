@@ -86,6 +86,9 @@ builder.Services.AddScoped<AIVES.BLL.Interfaces.ExamReporting.IExamReportReposit
 builder.Services.AddScoped<AIVES.BLL.Interfaces.ExamReporting.IStudentReportService, AIVES.BLL.Services.ExamReporting.StudentReportService>();
 builder.Services.AddScoped<AIVES.BLL.Interfaces.ExamReporting.IClassReportService, AIVES.BLL.Services.ExamReporting.ClassReportService>();
 
+// Group 4 - AI-Assisted Viva Exam Grading Services (Scoped, backed by real SQL Server repositories)
+AIVES.BLL.DependencyInjection.AddVivaGradingServices(builder.Services);
+
 // Mock data for functional groups not built in ASM2 (exam scheduling, AI grading): test accounts + graded EXAM01 attempts
 builder.Services.Configure<MockDataOptions>(builder.Configuration.GetSection(MockDataOptions.SectionName));
 builder.Services.AddScoped<AIVES.BLL.Services.MockData.MockExamDataSeeder>();
