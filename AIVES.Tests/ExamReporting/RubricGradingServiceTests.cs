@@ -128,4 +128,55 @@ public class RubricGradingServiceTests
         Assert.Equal(0m, service.Grade("T-Q1", "", "hệ thống dùng claimsprincipal để lấy thông tin", Threshold)!.EarnedScore);
         Assert.Equal(10m, service.Grade("T-Q1", "", "hệ thống đọc claim của người dùng đăng nhập", Threshold)!.EarnedScore);
     }
+
+    [Fact]
+    public void Default_Constructor_Does_Not_Throw_NullReference_On_GetRubrics_Or_GetRubric()
+    {
+        var service = new RubricGradingService();
+
+        var rubrics = service.GetRubrics("EXAM01");
+        var rubric = service.GetRubric("EXAM01-Q01");
+
+        Assert.NotNull(rubrics);
+        Assert.NotEmpty(rubrics);
+        Assert.NotNull(rubric);
+        Assert.Equal("EXAM01-Q01", rubric.QuestionId);
+    }
+
+    [Fact]
+    public void RubricGradingService_Supports_Initialization_With_IVivaRubricRepository()
+    {
+        var repoInterface = Type.GetType("AIVES.DAL.Repositories.Interfaces.IVivaRubricRepository, AIVES.DAL");
+        Assert.True(repoInterface != null, "IVivaRubricRepository interface must exist in AIVES.DAL.Repositories.Interfaces.");
+
+        var ctor = typeof(RubricGradingService).GetConstructor(new[] { repoInterface });
+        Assert.True(ctor != null, "RubricGradingService must provide a constructor accepting IVivaRubricRepository.");
+    }
+
+    [Fact]
+    public void RubricGradingService_Supports_Initialization_With_Rubric_Or_Criteria_List()
+    {
+        var sampleRubrics = new List<QuestionRubric>
+        {
+            new()
+            {
+                QuestionId = "TEST-Q01",
+                ExamId = "TEST",
+                Title = "Test Question",
+                Criteria = new List<RubricCriterion>
+                {
+                    new() { Id = "C1", Name = "Criterion 1", Weight = 1.0m, Keywords = new[] { "keyword" } }
+                }
+            }
+        };
+
+        var service = new RubricGradingService(sampleRubrics);
+        var rubrics = service.GetRubrics("TEST");
+        var rubric = service.GetRubric("TEST-Q01");
+
+        Assert.NotNull(rubrics);
+        Assert.Single(rubrics);
+        Assert.NotNull(rubric);
+        Assert.Equal("TEST-Q01", rubric.QuestionId);
+    }
 }
