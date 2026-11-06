@@ -7,7 +7,8 @@ using System.Threading.Tasks;
 namespace AIVES.DAL.Entities;
 public class VivaRubricCriterion
 {
-    public Guid Id { get; set; }
+    public string Id { get; set; } = string.Empty;
+    public string QuestionId { get; set; } = string.Empty;
     public int CriterionCode { get; set; }
     public string CriterionName { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
