@@ -8,8 +8,9 @@ public class VivaQuestion
     public string Content { get; set; } = string.Empty;
     public int TimeLimitSeconds { get; set; } = 90;
     public string? AudioUrl { get; set; }
-    public decimal BloomingPoint { get; set; }
+    public string? BloomLevel { get; set; }
 
     public ICollection<VivaSessionTurn> Turns { get; set; } = new List<VivaSessionTurn>();
     public ICollection<VivaGradingResult> GradingResults { get; set; } = new List<VivaGradingResult>();
+    public ICollection<VivaRubricCriterion> RubricCriteria { get; set; } = new List<VivaRubricCriterion>();
 }
