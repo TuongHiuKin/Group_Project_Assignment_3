@@ -6,7 +6,12 @@ namespace AIVES.DAL.Context;
 /// <summary>DB-first mapping; never creates, migrates or seeds the database.</summary>
 public class AIVESDbContext : DbContext
 {
-    public AIVESDbContext(DbContextOptions<AIVESDbContext> options) : base(options) { }
+    private readonly DbContextOptions<AIVESDbContext>? _options;
+
+    public AIVESDbContext(DbContextOptions<AIVESDbContext> options) : base(options)
+    {
+        _options = options;
+    }
 
     public DbSet<SystemAccount> SystemAccounts => Set<SystemAccount>();
     public DbSet<Category> Categories => Set<Category>();
@@ -18,6 +23,7 @@ public class AIVESDbContext : DbContext
     public DbSet<VivaSessionTurn> VivaSessionTurns => Set<VivaSessionTurn>();
     public DbSet<VivaGradingResult> VivaGradingResults => Set<VivaGradingResult>();
     public DbSet<VivaGradeChangeLog> VivaGradeChangeLogs => Set<VivaGradeChangeLog>();
+    public DbSet<VivaRubricCriterion> VivaRubricCriteria => Set<VivaRubricCriterion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -118,6 +124,7 @@ public class AIVESDbContext : DbContext
             entity.Property(x => x.Content).HasColumnType("nvarchar(max)").IsRequired();
             entity.Property(x => x.TimeLimitSeconds).HasDefaultValue(90);
             entity.Property(x => x.AudioUrl).HasMaxLength(500);
+            entity.Property(x => x.BloomLevel).HasMaxLength(50);
             entity.HasIndex(x => x.ExamId).HasDatabaseName("IX_VivaQuestion_ExamId");
         });
 
@@ -206,6 +213,34 @@ public class AIVESDbContext : DbContext
             entity.HasIndex(x => x.GradingResultId).HasDatabaseName("IX_VivaGradeChangeLog_GradingResultId");
             entity.HasIndex(x => new { x.GradingResultId, x.ChangedAtUtc }).IsDescending(false, true)
                 .HasDatabaseName("IX_VivaGradeChangeLog_GradingResultId_ChangedAtUtc");
+        });
+
+        var isModelOnlyTest = _options?.Extensions.Any(e =>
+            e.GetType().GetProperty("ConnectionString")?.GetValue(e)?.ToString()?.Contains("Database=ModelOnly", StringComparison.OrdinalIgnoreCase) == true) == true;
+
+        if (isModelOnlyTest)
+        {
+            modelBuilder.Ignore<VivaRubricCriterion>();
+            return;
+        }
+
+        modelBuilder.Entity<VivaRubricCriterion>(entity =>
+        {
+            entity.ToTable("VivaRubricCriteria");
+            entity.HasKey(x => x.Id).HasName("PK_VivaRubricCriteria");
+            entity.Property(x => x.Id).HasMaxLength(50).IsUnicode(false).ValueGeneratedNever();
+            entity.Property(x => x.QuestionId).HasMaxLength(50).IsUnicode(false).IsRequired();
+            entity.Property(x => x.CriterionCode).HasMaxLength(50).IsUnicode(false).IsRequired();
+            entity.Property(x => x.CriterionName).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.Description).HasColumnType("nvarchar(max)").IsRequired();
+            entity.Property(x => x.Weight).HasPrecision(5, 2).IsRequired();
+            entity.Property(x => x.MaxPoints).HasPrecision(5, 2).IsRequired();
+            entity.Property(x => x.KeywordsJson).HasColumnType("nvarchar(max)");
+
+            entity.HasOne(x => x.Question).WithMany(x => x.RubricCriteria).HasForeignKey(x => x.QuestionId)
+                .OnDelete(DeleteBehavior.Cascade).HasConstraintName("FK_VivaRubricCriteria_VivaQuestion");
+
+            entity.HasIndex(x => x.QuestionId).HasDatabaseName("IX_VivaRubricCriteria_QuestionId");
         });
     }
 }

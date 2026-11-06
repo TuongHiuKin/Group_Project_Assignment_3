@@ -20,6 +20,7 @@ public static class DependencyInjection
         services.AddScoped<IVivaQuestionRepository, VivaQuestionRepository>();
         services.AddScoped<IVivaTurnRepository, VivaTurnRepository>();
         services.AddScoped<IVivaGradingRepository, VivaGradingRepository>();
+        services.AddScoped<IVivaRubricRepository, VivaRubricRepository>();
         return services;
     }
 }

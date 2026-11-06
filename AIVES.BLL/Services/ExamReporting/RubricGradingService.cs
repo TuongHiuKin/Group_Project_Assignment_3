@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using AIVES.BLL.Interfaces.ExamReporting;
 using AIVES.BLL.Models.ExamReporting;
+using AIVES.DAL.Repositories.Interfaces;
 
 namespace AIVES.BLL.Services.ExamReporting;
 
@@ -19,6 +20,7 @@ public sealed class RubricGradingService : IRubricGradingService
     /// <summary>Nhóm 4 (AI chấm điểm) chưa triển khai: nhận xét là mô phỏng theo Rubric của giảng viên.</summary>
     public const string FeedbackPrefix = "AI chấm gợi ý (mô phỏng theo Rubric của giảng viên): ";
 
+    private readonly IVivaRubricRepository? _rubricRepo;
     private readonly IReadOnlyList<QuestionRubric> _rubrics;
 
     public RubricGradingService() : this(RubricCatalog.All)
@@ -28,6 +30,11 @@ public sealed class RubricGradingService : IRubricGradingService
     public RubricGradingService(IReadOnlyList<QuestionRubric> rubrics)
     {
         _rubrics = rubrics ?? throw new ArgumentNullException(nameof(rubrics));
+    }
+
+    public RubricGradingService(IVivaRubricRepository rubricRepo) : this(RubricCatalog.All)
+    {
+        _rubricRepo = rubricRepo ?? throw new ArgumentNullException(nameof(rubricRepo));
     }
 
     public IReadOnlyList<QuestionRubric> GetRubrics(string examId) =>
