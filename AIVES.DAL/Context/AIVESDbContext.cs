@@ -18,6 +18,7 @@ public class AIVESDbContext : DbContext
     public DbSet<VivaSessionTurn> VivaSessionTurns => Set<VivaSessionTurn>();
     public DbSet<VivaGradingResult> VivaGradingResults => Set<VivaGradingResult>();
     public DbSet<VivaGradeChangeLog> VivaGradeChangeLogs => Set<VivaGradeChangeLog>();
+    public DbSet<VivaRubricCriterion> VivaRubricCriterions => Set<VivaRubricCriterion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
