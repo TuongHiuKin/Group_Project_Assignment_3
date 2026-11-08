@@ -326,4 +326,79 @@ public class GradingOrchestratorTests
         Assert.True(finalizedSummary.IsFullyFinalized);
         Assert.Equal(15.5m, finalizedSummary.TotalFinalScore);
     }
+
+    /// <summary>
+    /// Regression: when AI is not configured, the resolver returns
+    /// <c>UnavailableAnswerGradingService</c>. It used to report AiScore = 0m, which the orchestrator
+    /// read as "grading succeeded" and persisted as Failed/0 points. It must fall back to keywords.
+    /// </summary>
+    [Fact]
+    public async Task GradeQuestion_falls_back_to_keywords_when_ai_service_is_unavailable()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var context = CreateInMemoryContext(dbName);
+        var sessionRepo = new VivaSessionRepository(context);
+        var questionRepo = new VivaQuestionRepository(context);
+        var gradingRepo = new VivaGradingRepository(context);
+
+        context.VivaQuestions.Add(new VivaQuestion
+        {
+            QuestionId = "EXAM01-Q01",
+            ExamId = "EXAM01",
+            Title = "OOP",
+            Content = "DbContext lifetime?"
+        });
+
+        var sessionId = Guid.NewGuid();
+        context.VivaSessions.Add(new VivaSession
+        {
+            SessionId = sessionId,
+            ExamId = "EXAM01",
+            StudentId = "student-1",
+            State = 8,
+            StartedAtUtc = DateTime.UtcNow
+        });
+
+        context.VivaSessionTurns.Add(new VivaSessionTurn
+        {
+            TurnId = Guid.NewGuid(),
+            SessionId = sessionId,
+            QuestionId = "EXAM01-Q01",
+            TurnOrdinal = 1,
+            TranscriptText = "DbContext sống trong phạm vi mỗi request, dùng Singleton sẽ gây rò rỉ bộ nhớ trong change tracker và không thread-safe",
+            CreatedAtUtc = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var unavailable = new AIVES.BLL.Services.Ai.Unavailable.UnavailableAnswerGradingService(
+            AIVES.BLL.Services.Ai.Unavailable.AiUnavailableMessages.RealAiDisabled);
+
+        var orchestrator = new GradingOrchestrator(
+            sessionRepo, questionRepo, gradingRepo, unavailable, new RubricGradingService(),
+            NullLogger<GradingOrchestrator>.Instance);
+
+        var result = await orchestrator.GradeQuestionAsync(sessionId, "EXAM01-Q01");
+
+        Assert.Equal("KeywordFallback", result.AiProvider);
+        Assert.Equal(GradingState.AiGraded, result.State);
+        Assert.True(result.AiScore > 0, "Keyword fallback must award rubric points instead of persisting 0.");
+    }
+
+    [Fact]
+    public void Unavailable_grading_service_reports_no_score_so_the_orchestrator_can_fallback()
+    {
+        var service = new AIVES.BLL.Services.Ai.Unavailable.UnavailableAnswerGradingService(
+            AIVES.BLL.Services.Ai.Unavailable.AiUnavailableMessages.RealAiDisabled);
+
+        var result = service.GradeAnswerAsync(new GradingInputDto
+        {
+            SessionId = Guid.NewGuid(),
+            QuestionId = "EXAM01-Q01",
+            QuestionText = "Q",
+            MaxPoints = 10m
+        }).GetAwaiter().GetResult();
+
+        Assert.Null(result.AiScore);
+        Assert.Equal(GradingState.Failed, result.State);
+    }
 }
