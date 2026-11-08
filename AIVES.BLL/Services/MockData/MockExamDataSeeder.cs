@@ -17,6 +17,13 @@ public sealed record MockSeedResult(int AccountsCreated, int AttemptsCreated);
 public sealed class MockExamDataSeeder
 {
     private const byte StudentRole = 1;
+    private const byte LecturerRole = 2;
+
+    /// <summary>
+    /// Demo-only lecturer account (G4 demo script). Seeded so the walkthrough in docs/G4-DEMO.md
+    /// can actually sign in; there is no lecturer self-registration in the app.
+    /// </summary>
+    public const string DemoLecturerEmail = "gv01@aives.local";
 
     private readonly ISystemAccountService _accountService;
     private readonly ISystemAccountRepository _accountRepo;
@@ -43,6 +50,8 @@ public sealed class MockExamDataSeeder
         var accountsCreated = 0;
         var attemptsCreated = 0;
 
+        if (await EnsureLecturerAsync(ct)) accountsCreated++;
+
         foreach (var account in MockExamDataCatalog.TestAccounts)
         {
             if ((await EnsureAccountAsync(account, ct)).Created) accountsCreated++;
@@ -68,6 +77,23 @@ public sealed class MockExamDataSeeder
     {
         var bytes = MD5.HashData(Encoding.UTF8.GetBytes($"aives-mock:{account.Email}:{attempt.Key}"));
         return new Guid(bytes);
+    }
+
+    private async Task<bool> EnsureLecturerAsync(CancellationToken ct)
+    {
+        var existing = await _accountRepo.GetByEmailAsync(DemoLecturerEmail, ct);
+        if (existing != null)
+        {
+            return false;
+        }
+
+        await _accountService.CreateAccountAsync(
+            "Giảng viên Demo 01",
+            DemoLecturerEmail,
+            MockExamDataCatalog.DefaultPassword,
+            LecturerRole,
+            ct);
+        return true;
     }
 
     private async Task<(int Id, bool Created)> EnsureAccountAsync(MockAccount account, CancellationToken ct)

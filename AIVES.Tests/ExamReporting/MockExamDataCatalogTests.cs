@@ -61,4 +61,16 @@ public sealed class MockExamDataCatalogTests
         var first = MockExamDataCatalog.Students[0];
         Assert.Equal(MockExamDataSeeder.SessionIdFor(first.Account, first.Attempts[0]), MockExamDataSeeder.SessionIdFor(first.Account, first.Attempts[0]));
     }
+
+    [Fact]
+    public void DemoLecturerEmail_IsStableAndNotCollidingWithStudentAccounts()
+    {
+        // docs/G4-DEMO.md relies on this exact address to sign in as a Lecturer.
+        Assert.Equal("gv01@aives.local", MockExamDataSeeder.DemoLecturerEmail);
+
+        var emails = MockExamDataCatalog.TestAccounts
+            .Concat(MockExamDataCatalog.Students.Select(s => s.Account))
+            .Select(a => a.Email);
+        Assert.DoesNotContain(MockExamDataSeeder.DemoLecturerEmail, emails, StringComparer.OrdinalIgnoreCase);
+    }
 }

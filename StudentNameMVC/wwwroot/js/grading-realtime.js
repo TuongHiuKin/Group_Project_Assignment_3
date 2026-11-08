@@ -75,7 +75,10 @@
     }
 
     function setText(el, text) {
-        if (el) el.textContent = text;
+        if (!el) return;
+        el.textContent = text;
+        // Score placeholders start hidden so the static page stays clean; reveal on first real value.
+        if (text) el.classList.remove('d-none');
     }
 
     function within(target, selector) {
@@ -85,7 +88,11 @@
 
     function GradingRealtime(root, options) {
         this.root = root;
-        this.examId = (options && options.examId) || root.getAttribute('data-exam-id');
+        // data-exam-id may hold several comma-separated exam ids (the Index page lists every exam
+        // until the lecturer filters). Group membership is per exam, so we join each one.
+        var rawExamId = (options && options.examId) || root.getAttribute('data-exam-id') || '';
+        this.examIds = rawExamId.split(',').map(function (v) { return v.trim(); }).filter(Boolean);
+        this.examId = this.examIds[0] || '';
         this.statusUrl = (options && options.statusUrl) || root.getAttribute('data-status-url');
         this.hubUrl = (options && options.hubUrl) || root.getAttribute('data-hub-url') || '/hubs/viva';
         // sessionId -> { questionId -> badge key }; used to derive the session-level badge.
@@ -181,7 +188,10 @@
 
     GradingRealtime.prototype.join = function () {
         var self = this;
-        return self.connection.invoke('JoinGradingGroup', self.examId).then(function () {
+        var ids = self.examIds.length ? self.examIds : [self.examId];
+        return Promise.all(ids.map(function (examId) {
+            return self.connection.invoke('JoinGradingGroup', examId);
+        })).then(function () {
             self.connectionStatus('Đang cập nhật trực tiếp');
         });
     };
@@ -215,7 +225,6 @@
             console.error('[grading] data-exam-id is required.');
             return Promise.resolve(null);
         }
-
         self.connection = new window.signalR.HubConnectionBuilder()
             .withUrl(self.hubUrl)
             .withAutomaticReconnect(RECONNECT_DELAYS)
