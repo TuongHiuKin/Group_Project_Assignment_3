@@ -6,7 +6,10 @@
     var session = Model.Session!;
 }
 
-<div class="viva-exam-shell pb-5">
+<div class="viva-exam-shell pb-5" data-grading-realtime
+     data-exam-id="@session.ExamId"
+     data-status-url="@Url.Page("/Grading/Index", "Status", new { examId = session.ExamId })"
+     data-hub-url="/hubs/viva">
     <!-- 1. Header Card & Breadcrumb Navigation -->
     <div class="viva-header-card mb-4">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
@@ -156,7 +159,11 @@
             var collapseId = $"collapseQuestion_{q.QuestionId}";
             var isFinalized = q.IsFinalized;
 
-            <div class="card border-0 rounded-4 shadow-sm mb-4 overflow-hidden" id="card-question-@q.QuestionId">
+            <div class="card border-0 rounded-4 shadow-sm mb-4 overflow-hidden"
+                 id="card-question-@q.QuestionId"
+                 data-grading-session="@session.SessionId"
+                 data-grading-question="@q.QuestionId">
+                <div data-grading-message class="px-3 pt-3"></div>
                 <!-- Question Header Bar (Click to collapse/expand) -->
                 <div class="card-header bg-white border-bottom p-3 p-md-4" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#@collapseId" aria-expanded="true">
                     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
@@ -185,22 +192,22 @@
                             @switch (q.State)
                             {
                                 case GradingState.Pending:
-                                    <span class="badge bg-secondary px-3 py-2 rounded-pill">
+                                    <span data-grading-badge class="badge bg-secondary px-3 py-2 rounded-pill">
                                         <i class="bi bi-hourglass-split me-1"></i>Chờ chấm điểm
                                     </span>
                                     break;
                                 case GradingState.AiGraded:
-                                    <span class="badge bg-warning text-dark px-3 py-2 rounded-pill">
+                                    <span data-grading-badge class="badge bg-warning text-dark px-3 py-2 rounded-pill">
                                         <i class="bi bi-robot me-1"></i>AI chấm, chờ duyệt
                                     </span>
                                     break;
                                 case GradingState.Finalized:
-                                    <span class="badge bg-success px-3 py-2 rounded-pill">
+                                    <span data-grading-badge class="badge bg-success px-3 py-2 rounded-pill">
                                         <i class="bi bi-check-circle-fill me-1"></i>Điểm chính thức
                                     </span>
                                     break;
                                 case GradingState.Failed:
-                                    <span class="badge bg-danger px-3 py-2 rounded-pill">
+                                    <span data-grading-badge class="badge bg-danger px-3 py-2 rounded-pill">
                                         <i class="bi bi-exclamation-triangle-fill me-1"></i>Cần chấm lại
                                     </span>
                                     break;
@@ -217,6 +224,9 @@
                                 </strong>
                                 <span class="text-muted small">/@q.MaxPoints.ToString("0.##")</span>
                             </div>
+
+                            <!-- Realtime score from GradingCompleted (hidden until an event arrives) -->
+                            <span data-grading-score class="badge bg-light text-dark border small d-none"></span>
 
                             <i class="bi bi-chevron-down text-secondary fs-5"></i>
                         </div>
@@ -834,6 +844,8 @@
 </div>
 
 @section Scripts {
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+    <script src="~/js/grading-realtime.js" asp-append-version="true"></script>
     <script>
         function handleRegradeSubmit(form) {
             var submitBtn = form.querySelector('.regrade-submit-btn');

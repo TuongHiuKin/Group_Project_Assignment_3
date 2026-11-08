@@ -837,6 +837,104 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
 
         // 5. Check action link to Review page
         Assert.Contains("/Grading/Review?sessionId=11111111-1111-1111-1111-111111111111", html);
+
+        // 6. G4-RT-05: realtime hook-up must exist or the "Cập nhật thời gian thực" claim is false.
+        Assert.Contains("data-grading-realtime", html);
+        Assert.Contains("data-grading-session", html);
+        Assert.Contains("data-grading-badge", html);
+        Assert.Contains("grading-realtime.js", rawHtml);
+    }
+
+    [Fact]
+    public async Task Get_GradingIndex_StatusHandler_ReturnsPerQuestionGradingState()
+    {
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-User", "GV01");
+        client.DefaultRequestHeaders.Add("X-Test-Role", ApplicationRoles.Lecturer);
+
+        var response = await client.GetAsync("/Grading/Index?handler=Status&examId=EXAM01");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await response.Content.ReadAsStringAsync();
+
+        Assert.Contains("\"sessionId\"", json);
+        Assert.Contains("\"questionId\"", json);
+        Assert.Contains("\"state\"", json);
+        Assert.Contains("\"earnedScore\"", json);
+        Assert.Contains("\"maxScore\"", json);
+    }
+
+    [Fact]
+    public async Task Get_GradingIndex_StatusHandler_RequiresLecturerRole()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false
+        });
+        client.DefaultRequestHeaders.Add("X-Test-User", "SV01");
+        client.DefaultRequestHeaders.Add("X-Test-Role", ApplicationRoles.Staff);
+
+        var response = await client.GetAsync("/Grading/Index?handler=Status&examId=EXAM01");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Contains("/Account/AccessDenied", response.Headers.Location!.ToString());
+    }
+
+    [Fact]
+    public async Task OnGetStatusAsync_EmptyExamId_ReturnsEmptyPayload()
+    {
+        var model = new IndexModel(new FakeGradingOrchestrator(), new FakeClassReportService(), NullLogger<IndexModel>.Instance);
+
+        var result = await model.OnGetStatusAsync(null);
+
+        var json = Assert.IsType<JsonResult>(result);
+        Assert.NotNull(json.Value);
+    }
+
+    [Fact]
+    public async Task OnGetStatusAsync_ReturnsOneItemPerQuestion()
+    {
+        var fakeOrchestrator = new FakeGradingOrchestrator();
+        var model = new IndexModel(fakeOrchestrator, new FakeClassReportService(), NullLogger<IndexModel>.Instance);
+
+        var result = await model.OnGetStatusAsync("EXAM01");
+
+        var json = Assert.IsType<JsonResult>(result);
+        var items = Assert.IsAssignableFrom<System.Collections.IEnumerable>(json.Value).Cast<object>().ToList();
+        Assert.NotEmpty(items);
+    }
+
+    [Fact]
+    public async Task OnGetStatusAsync_SwallowsRepositoryFailures()
+    {
+        var model = new IndexModel(new ThrowingGradingOrchestrator(), new FakeClassReportService(), NullLogger<IndexModel>.Instance);
+
+        var result = await model.OnGetStatusAsync("EXAM01");
+
+        var json = Assert.IsType<JsonResult>(result);
+        Assert.Empty(Assert.IsAssignableFrom<System.Collections.IEnumerable>(json.Value).Cast<object>());
+    }
+
+    private sealed class ThrowingGradingOrchestrator : IGradingOrchestrator
+    {
+        public Task<SessionGradingSummaryDto> GradeSessionAsync(Guid sessionId, CancellationToken ct = default)
+            => throw new InvalidOperationException("Invalid object name 'VivaGradingResult'.");
+
+        public Task<QuestionGradingResultDto> GradeQuestionAsync(Guid sessionId, string questionId, CancellationToken ct = default)
+            => throw new InvalidOperationException("Invalid object name 'VivaGradingResult'.");
+
+        public Task<QuestionGradingResultDto> RegradeQuestionAsync(Guid sessionId, string questionId, string requestedBy, CancellationToken ct = default)
+            => throw new InvalidOperationException("Invalid object name 'VivaGradingResult'.");
+
+        public Task<QuestionGradingResultDto> FinalizeScoreAsync(FinalizeScoreRequestDto request, string teacherId, CancellationToken ct = default)
+            => throw new InvalidOperationException("Invalid object name 'VivaGradingResult'.");
+
+        public Task<SessionGradingSummaryDto?> GetSessionGradingAsync(Guid sessionId, CancellationToken ct = default)
+            => throw new InvalidOperationException("Invalid object name 'VivaGradingResult'.");
+
+        public Task<List<SessionGradingSummaryDto>> GetGradingListByExamAsync(
+            string examId, string? classId = null, GradingState? filterState = null, CancellationToken ct = default)
+            => throw new InvalidOperationException("Invalid object name 'VivaGradingResult'.");
     }
 
     [Fact]

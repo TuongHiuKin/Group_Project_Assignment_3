@@ -21,7 +21,7 @@ Hệ thống hỗ trợ 2 chế độ vận hành độc lập: **Chế độ Mo
 ### 1.2. Chế độ Real AI (Gemini / OpenAI)
 1. Đăng nhập tài khoản Admin mặc định:
    - **URL:** `/Account/Login`
-   - **Email:** `admin@fpt.edu.vn` (hoặc email cấu hình trong `DefaultAdmin:Email`)
+   - **Email:** `admin@AIVESSystem.org` (hoặc email cấu hình trong `DefaultAdmin:Email`)
    - **Mật khẩu:** Theo cấu hình trong `appsettings.json`
 2. Truy cập `/Admin/AiSettings`:
    - Thêm hồ sơ AI Provider: chọn **Gemini** (Google AI Studio) hoặc **OpenAI**.
@@ -33,11 +33,19 @@ Hệ thống hỗ trợ 2 chế độ vận hành độc lập: **Chế độ Mo
 
 ## 2. Danh sách Tài khoản Demo
 
+> Các tài khoản dưới đây được tạo bởi `MockExamDataSeeder` khi `MockData:SeedOnStartup = true`
+> (mặc định trong `appsettings.Development.json`). Mật khẩu dùng chung là **`Test@123`**.
+> Nếu DB đã có tài khoản cùng email, seeder bỏ qua (idempotent) và giữ mật khẩu hiện tại.
+
 | Vai trò | Email đăng nhập | Mật khẩu mặc định | Mục đích sử dụng trong Demo |
 | :--- | :--- | :--- | :--- |
-| **Admin** | `admin@fpt.edu.vn` | `@Admin123456` | Cấu hình AI Provider và hệ thống |
-| **Giảng viên (Lecturer)** | `gv01@fpt.edu.vn` | `@Lecturer123456` | Review bài thi, chốt điểm AI, override điểm, xem báo cáo lớp |
-| **Sinh viên (Student)** | `khoa@fpt.edu.vn` | `@Student123456` | Trả lời vấn đáp viva, xem điểm AI tạm thời và điểm chính thức |
+| **Admin** | `admin@AIVESSystem.org` | `@@abc123@@` (xem `DefaultAdmin` trong `appsettings.json`) | Cấu hình AI Provider và hệ thống |
+| **Giảng viên (Lecturer)** | `gv01@aives.local` | `Test@123` | Review bài thi, chốt điểm AI, override điểm, xem báo cáo lớp |
+| **Sinh viên (Student)** | `sv.test1@aives.local` | `Test@123` | Sinh viên sạch để thi thử trực tiếp (`/Viva/Index`) |
+| **Sinh viên (có bài sẵn)** | `minhanh@mock.aives.local` (và 5 tài khoản `@mock.aives.local` khác) | `Test@123` | Xem báo cáo cá nhân với lượt thi EXAM01 đã hoàn thành |
+
+Ghi chú: role trong DB chỉ có 2 giá trị — `1` = Staff/Sinh viên, `2` = Lecturer.
+`admin@AIVESSystem.org` là tài khoản Admin cấu hình trong `DefaultAdmin` (không nằm trong bảng `SystemAccount`).
 
 ---
 
@@ -63,7 +71,7 @@ sequenceDiagram
 ```
 
 ### Bước 1: Sinh viên thực hiện bài thi viva
-1. Đăng nhập với tài khoản sinh viên `khoa@fpt.edu.vn`.
+1. Đăng nhập với tài khoản sinh viên sạch `sv.test1@aives.local` (mật khẩu `Test@123`).
 2. Truy cập trang `/Viva/Index` và chọn đề thi **EXAM01** (.NET Core & Kiến trúc Ba lớp).
 3. Bấm **Bắt đầu thi vấn đáp** (`/Viva/Exam/{sessionId}`).
 4. Trả lời các câu hỏi bằng giọng nói (hoặc microphone giả lập):
@@ -89,7 +97,7 @@ sequenceDiagram
    - Xem chi tiết phản hồi của AI: các tiêu chí đạt/chưa đạt, nhận xét điểm mạnh và điểm cần cải thiện.
 
 ### Bước 4: Giảng viên Review và Chốt điểm (HITL)
-1. Đăng xuất sinh viên, đăng nhập tài khoản Giảng viên `gv01@fpt.edu.vn`.
+1. Đăng xuất sinh viên, đăng nhập tài khoản Giảng viên `gv01@aives.local`.
 2. Trên thanh điều hướng, chọn **Chấm điểm thi** (`/Grading/Index`).
 3. Danh sách hiển thị bài thi vừa nộp với trạng thái <span class="badge bg-warning text-dark">Chờ duyệt</span>.
 4. Bấm **Xem chi tiết** để vào trang `/Grading/Review/{sessionId}`:
@@ -112,19 +120,19 @@ sequenceDiagram
 - Tại trang review, bấm xem tab **Lịch sử sửa điểm (Audit Trail)**.
 - Bảng hiển thị rõ:
   - Thời gian sửa (UTC & Giờ địa phương).
-  - Người thực hiện (`gv01@fpt.edu.vn`).
+  - Người thực hiện (`gv01@aives.local`).
   - Điểm cũ -> Điểm mới (`8.0` -> `9.5`).
   - Lý do điều chỉnh: *"Cộng 1.5 điểm vì câu trả lời hỏi xoáy vượt mong đợi."*
 
 ### Bước 6: Sinh viên xem điểm chính thức
-1. Đăng nhập lại tài khoản sinh viên `khoa@fpt.edu.vn`.
+1. Đăng nhập lại tài khoản sinh viên vừa thi `sv.test1@aives.local`.
 2. Vào `/StudentReports`:
    - Trạng thái bài thi cập nhật: <span class="badge bg-success text-white">Điểm chính thức</span>.
    - Câu 1: Điểm chính thức = Điểm AI (`10.0`).
    - Câu 2: Điểm chính thức = Điểm GV chốt (`9.5`), có hiển thị ghi chú của giảng viên.
 
 ### Bước 7: Giảng viên xem Báo cáo lớp và Xuất bảng điểm
-1. Đăng nhập Giảng viên `gv01@fpt.edu.vn` -> Truy cập `/ClassReports`.
+1. Đăng nhập Giảng viên `gv01@aives.local` -> Truy cập `/ClassReports`.
 2. Chọn đề thi **EXAM01**:
    - Biểu đồ phổ điểm và điểm trung bình lớp tự động tính toán dựa trên điểm chính thức vừa chốt.
    - Danh sách câu hỏi khó nhất (Hardest Questions) phản ánh chính xác kết quả chấm.

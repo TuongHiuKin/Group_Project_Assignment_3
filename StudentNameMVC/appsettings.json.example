@@ -13,6 +13,10 @@
     "Email": "admin@AIVESSystem.org",
     "Password": "@@abc123@@"
   },
+  "VivaInterview": {
+    // Bắt buộc cho luồng chấm điểm G4: bật SignalR hub /hubs/viva, background grading worker và AI services.
+    "Enabled": true
+  },
   "Logging": {
     "LogLevel": {
       "Default": "Information",

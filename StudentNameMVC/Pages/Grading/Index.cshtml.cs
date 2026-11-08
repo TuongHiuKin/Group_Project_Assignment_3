@@ -98,6 +98,42 @@ public class IndexModel : PageModel
         }
     }
 
+    /// <summary>
+    /// G4-RT-05 catch-up endpoint. The realtime client calls it after every (re)connect to recover
+    /// events missed while disconnected; persisted grading rows are the source of truth.
+    /// Returns <c>[{ sessionId, questionId, state, earnedScore, maxScore }]</c> per docs/G4-RT-SIGNALR-HANDOFF.md.
+    /// </summary>
+    public async Task<IActionResult> OnGetStatusAsync(string? examId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(examId))
+        {
+            return new JsonResult(Array.Empty<object>());
+        }
+
+        try
+        {
+            var sessions = await _gradingOrchestrator.GetGradingListByExamAsync(examId, null, null, ct);
+            var items = sessions
+                .SelectMany(s => s.QuestionResults.Select(q => new
+                {
+                    sessionId = s.SessionId,
+                    questionId = q.QuestionId,
+                    state = (byte)q.State,
+                    earnedScore = (decimal?)q.EffectiveScore,
+                    maxScore = q.MaxPoints
+                }))
+                .ToList();
+
+            return new JsonResult(items);
+        }
+        catch (Exception ex)
+        {
+            // Never break the lecturer page because a resync failed.
+            _logger.LogError(ex, "Lỗi khi đồng bộ trạng thái chấm điểm thời gian thực cho đề {ExamId}", examId);
+            return new JsonResult(Array.Empty<object>());
+        }
+    }
+
     public string GetExamTitle(string examId)
     {
         if (string.IsNullOrWhiteSpace(examId)) return "—";
