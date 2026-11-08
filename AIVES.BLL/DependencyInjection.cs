@@ -184,6 +184,14 @@ public static class DependencyInjection
         var profile = config.FindProfile(profileId);
         if (profile == null) return Fallback(AiUnavailableMessages.NoProfileSelected);
 
+        // A profile without a key (and not a local/LAN endpoint) cannot serve any capability. Without
+        // this check the adapter builds a real service with a null key, which then fails deep inside
+        // the HTTP client with an English provider message instead of the intended Vietnamese reason.
+        if (string.IsNullOrWhiteSpace(profile.ApiKey) && !NetworkEndpointHelper.IsLocalOrLan(profile.BaseUrl))
+        {
+            return Fallback(AiUnavailableMessages.CapabilityNotEnabled);
+        }
+
         var adapter = sp.GetRequiredService<IAiProviderRegistry>().GetAdapter(profile.Kind);
         if (adapter == null) return Fallback(AiUnavailableMessages.ProviderNotSupported);
 

@@ -258,9 +258,84 @@ public sealed class AiRoutingTests
         Assert.Contains("Câu hỏi phụ (LLM) chưa sẵn sàng", llm.ErrorMessage);
     }
 
+    /// <summary>
+    /// Regression: a routed profile with no API key used to build a real adapter anyway, so the
+    /// failure surfaced deep inside the HTTP client as the English
+    /// "OpenAI API key is not configured." instead of the intended Vietnamese reason.
+    /// </summary>
     [Fact]
-    public void Routing_StrictMode_MissingProfile_ReturnsUnavailableNotMock()
+    public async Task Routing_StrictMode_ProfileWithoutApiKey_ReturnsUnavailableWithVietnameseReason()
     {
+        using var sp = BuildStrictProvider(new AiConfigurationModel
+        {
+            UseRealAi = true,
+            Profiles =
+            [
+                new AiProviderProfile
+                {
+                    Id = "openai-nokey",
+                    Name = "OpenAI (no key)",
+                    Kind = AiProviderKinds.OpenAi,
+                    BaseUrl = "https://api.openai.com/v1",
+                    ApiKey = null,
+                    CustomCapabilities = AiCapability.All
+                }
+            ],
+            Routing = new AiCapabilityRouting
+            {
+                Stt = new AiCapabilityTarget { ProfileId = "openai-nokey", Model = "whisper-1" },
+                Tts = new AiTtsCapabilityTarget { ProfileId = "openai-nokey", Model = "tts-1", Voice = "alloy" },
+                Llm = new AiCapabilityTarget { ProfileId = "openai-nokey", Model = "gpt-4o-mini" }
+            }
+        });
+
+        var stt = Assert.IsType<UnavailableSpeechToTextService>(sp.GetRequiredService<ISpeechToTextService>());
+        Assert.Contains("Nhận diện giọng nói (STT) chưa sẵn sàng", stt.ErrorMessage);
+        Assert.Contains("thiếu API key", stt.ErrorMessage);
+        Assert.DoesNotContain("OpenAI API key is not configured", stt.ErrorMessage);
+
+        var tts = Assert.IsType<UnavailableTextToSpeechService>(sp.GetRequiredService<ITextToSpeechService>());
+        Assert.Contains("Đọc câu hỏi (TTS) chưa sẵn sàng", tts.ErrorMessage);
+
+        var llm = Assert.IsType<UnavailableFollowUpGeneratorService>(sp.GetRequiredService<IFollowUpGeneratorService>());
+        Assert.Contains("Câu hỏi phụ (LLM) chưa sẵn sàng", llm.ErrorMessage);
+
+        var result = await stt.TranscribeAsync(new MemoryStream(new byte[] { 1 }), "audio/webm");
+        Assert.False(result.IsSuccess);
+        Assert.DoesNotContain("OpenAI API key is not configured", result.ErrorMessage);
+    }
+
+    /// <summary>A keyless local/LAN endpoint (Ollama, LM Studio) must still resolve a real service.</summary>
+    [Fact]
+    public void Routing_KeylessLocalEndpoint_StillResolvesRealService()
+    {
+        using var sp = BuildStrictProvider(new AiConfigurationModel
+        {
+            UseRealAi = true,
+            Profiles =
+            [
+                new AiProviderProfile
+                {
+                    Id = "ollama",
+                    Name = "Ollama",
+                    Kind = AiProviderKinds.OpenAiCompatible,
+                    BaseUrl = "http://localhost:11434/v1",
+                    ApiKey = null,
+                    CustomCapabilities = AiCapability.FollowUpLlm | AiCapability.Grading
+                }
+            ],
+            Routing = new AiCapabilityRouting
+            {
+                Llm = new AiCapabilityTarget { ProfileId = "ollama", Model = "llama3" }
+            }
+        });
+
+        var llm = sp.GetRequiredService<IFollowUpGeneratorService>();
+        Assert.IsNotType<UnavailableFollowUpGeneratorService>(llm);
+    }
+
+    [Fact]
+    public void Routing_StrictMode_MissingProfile_ReturnsUnavailableNotMock()    {
         using var sp = BuildStrictProvider(new AiConfigurationModel
         {
             UseRealAi = true,
