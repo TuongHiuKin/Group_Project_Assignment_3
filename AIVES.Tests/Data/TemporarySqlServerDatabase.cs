@@ -48,6 +48,8 @@ public sealed class TemporarySqlServerDatabase : IAsyncLifetime
             await RunScriptAsync("002-add-system-account-soft-delete.sql");
             await RunScriptAsync("003-create-viva-exam-core.sql");
             await RunScriptAsync("004-seed-viva-questions.sql");
+            await RunScriptAsync("005-create-viva-grading.sql");
+            await RunScriptAsync("006-seed-viva-rubric.sql");
         }
         catch
         {
@@ -59,7 +61,7 @@ public sealed class TemporarySqlServerDatabase : IAsyncLifetime
     public async Task RunScriptAsync(string fileName)
     {
         if (!created) throw new InvalidOperationException("No fixture-owned test DB.");
-        if (fileName is not ("001-create-schema.sql" or "002-add-system-account-soft-delete.sql" or "003-create-viva-exam-core.sql" or "004-seed-viva-questions.sql"))
+        if (fileName is not ("001-create-schema.sql" or "002-add-system-account-soft-delete.sql" or "003-create-viva-exam-core.sql" or "004-seed-viva-questions.sql" or "005-create-viva-grading.sql" or "006-seed-viva-rubric.sql"))
             throw new ArgumentException("Only reviewed schema and seed scripts are permitted.", nameof(fileName));
         ValidateName();
         var sql = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Sql", fileName));

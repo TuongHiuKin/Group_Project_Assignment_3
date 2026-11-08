@@ -25,26 +25,30 @@ END;
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
 
+-- 1. Ensure BloomLevel column exists in dbo.VivaQuestion.
+--    This must be its own batch: SQL Server compiles a batch before executing it, so an ALTER TABLE
+--    followed by a statement referencing the new column in the SAME batch fails with
+--    "Invalid column name 'BloomLevel'".
+IF OBJECT_ID(N'dbo.VivaQuestion', N'U') IS NULL
+BEGIN
+    ;THROW 51062, 'dbo.VivaQuestion is missing. Create the viva schema before running this seed script.', 1;
+END;
+
+IF COL_LENGTH(N'dbo.VivaQuestion', N'BloomLevel') IS NULL
+BEGIN
+    ALTER TABLE dbo.VivaQuestion ADD BloomLevel NVARCHAR(50) NULL;
+END;
+GO
+
 BEGIN TRY
     BEGIN TRANSACTION;
 
-    IF OBJECT_ID(N'dbo.VivaQuestion', N'U') IS NULL
-    BEGIN
-        ;THROW 51062, 'dbo.VivaQuestion is missing. Create the viva schema before running this seed script.', 1;
-    END;
-
-    -- 1. Ensure BloomLevel column exists in dbo.VivaQuestion
-    IF COL_LENGTH(N'dbo.VivaQuestion', N'BloomLevel') IS NULL
-    BEGIN
-        ALTER TABLE dbo.VivaQuestion ADD BloomLevel NVARCHAR(50) NULL;
-    END;
-
-    -- Update BloomLevel for existing baseline questions if currently NULL
+    -- 2. Backfill BloomLevel for existing baseline questions if currently NULL
     UPDATE dbo.VivaQuestion SET BloomLevel = N'Phân tích' WHERE QuestionId = 'EXAM01-Q01' AND BloomLevel IS NULL;
     UPDATE dbo.VivaQuestion SET BloomLevel = N'Hiểu' WHERE QuestionId = 'EXAM01-Q02' AND BloomLevel IS NULL;
     UPDATE dbo.VivaQuestion SET BloomLevel = N'Vận dụng' WHERE QuestionId = 'EXAM01-Q03' AND BloomLevel IS NULL;
 
-    -- 2. Create dbo.VivaRubricCriteria table if missing
+    -- 3. Create dbo.VivaRubricCriteria table if missing
     IF OBJECT_ID(N'dbo.VivaRubricCriteria', N'U') IS NULL
     BEGIN
         CREATE TABLE dbo.VivaRubricCriteria
@@ -67,7 +71,7 @@ BEGIN TRY
             ON dbo.VivaRubricCriteria (QuestionId);
     END;
 
-    -- 3. Seed rubric criteria for EXAM01-Q01
+    -- 4. Seed rubric criteria for EXAM01-Q01
     IF NOT EXISTS (SELECT 1 FROM dbo.VivaRubricCriteria WHERE Id = 'RC-EXAM01-Q01-01')
     BEGIN
         INSERT INTO dbo.VivaRubricCriteria (Id, QuestionId, CriterionCode, CriterionName, Description, Weight, MaxPoints, KeywordsJson)

@@ -14,6 +14,18 @@ public interface IRubricGradingService
     QuestionRubric? GetRubric(string questionId);
 
     /// <summary>
+    /// Như <see cref="GetRubrics"/> nhưng ưu tiên bảng <c>VivaRubricCriteria</c> trong SQL Server
+    /// (G4-DB-07). Fallback về catalog tĩnh khi DB chưa được seed.
+    /// </summary>
+    Task<IReadOnlyList<QuestionRubric>> GetRubricsAsync(string examId, CancellationToken ct = default);
+
+    /// <summary>Như <see cref="GetRubric"/> nhưng đọc rubric từ SQL Server trước.</summary>
+    Task<QuestionRubric?> GetRubricAsync(string questionId, CancellationToken ct = default);
+
+    /// <summary>Chấm theo một rubric đã resolve sẵn (từ DB hoặc catalog).</summary>
+    RubricGradingResult? Grade(QuestionRubric rubric, string? questionText, string? answerTranscript, decimal passThresholdScore);
+
+    /// <summary>
     /// Chấm một câu. Trả về null khi câu hỏi không có Rubric (giữ trạng thái "Chưa chấm").
     /// </summary>
     /// <param name="questionId">Mã câu hỏi, ví dụ EXAM01-Q01.</param>

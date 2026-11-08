@@ -1,22 +1,27 @@
 # Hướng Dẫn Thiết Lập Database & Cấu Hình Kết Nối AIVES
 
-> Phạm vi: hướng dẫn này dành cho **schema News hiện hữu** (SystemAccount/Category/NewsArticle/Tag/NewsTag), không tạo schema thi vấn đáp nhóm 6. Không chạy lại scripts để chuẩn bị demo báo cáo thi. Định hướng hiện hành và điều kiện thay DB nằm ở [ARCHITECTURE.md](ARCHITECTURE.md) và [G6-IMPLEMENTATION-HANDOFF.md](G6-IMPLEMENTATION-HANDOFF.md). Các bước dưới chỉ áp dụng khi được giao setup/bảo trì DB News riêng.
+> Cập nhật 2026-11-07 cho Assignment 3. Hướng dẫn này dựng **đầy đủ** schema: News (001/002),
+> phòng thi viva (003/004), **bảng chấm điểm G4 (005)** và **rubric (006)**.
+> Thiếu 005 thì `/Grading` sẽ lỗi `Invalid object name 'VivaGradingResult'`.
 
-Tài liệu này hướng dẫn cách chạy script SQL Server để khởi tạo cơ sở dữ liệu `AIVES` và cấu hình chuỗi kết nối trong `appsettings.json` cho ứng dụng ASP.NET Core MVC (PRN222 Assignment 1).
+Tài liệu này hướng dẫn cách chạy script SQL Server để khởi tạo cơ sở dữ liệu `AIVES` và cấu hình chuỗi kết nối trong `appsettings.json`.
 
 ---
 
 ## 1. Giới Thiệu Các Script Database
 
-Toàn bộ script quản lý cơ sở dữ liệu theo định hướng **DB-First** được lưu trữ trong thư mục [`database/`](../database):
+Toàn bộ script quản lý cơ sở dữ liệu theo định hướng **DB-First** được lưu trữ trong thư mục [`database/`](../database) và **phải chạy theo đúng thứ tự**:
 
-1. **[`001-create-schema.sql`](../database/001-create-schema.sql):**
-   - Tạo cơ sở dữ liệu `AIVES` trên SQL Server nếu chưa tồn tại.
-   - Tạo các bảng cơ sở: `SystemAccount`, `Category`, `Tag`, `NewsArticle`, `NewsTag`.
-   - Thiết lập các ràng buộc toàn vẹn: Primary Key, Foreign Key, Unique Index trên `AccountEmail`, Check Constraints (`CK_NewsArticle_NewsStatus`, `CK_SystemAccount_AccountRole`, v.v.).
-2. **[`002-add-system-account-soft-delete.sql`](../database/002-add-system-account-soft-delete.sql):**
-   - Bổ sung cột `IsDeleted BIT NOT NULL DEFAULT 0` vào bảng `SystemAccount`.
-   - Cập nhật ràng buộc và filtered index hỗ trợ tính năng Soft-Delete theo quyết định nghiệp vụ `SC-10` và `SC-11`.
+| # | Script | Tạo / thay đổi | Ghi chú |
+| :--- | :--- | :--- | :--- |
+| 1 | [`001-create-schema.sql`](../database/001-create-schema.sql) | DB `AIVES`; `SystemAccount`, `Category`, `Tag`, `NewsArticle`, `NewsTag`; PK/FK/Unique/Check | News module |
+| 2 | [`002-add-system-account-soft-delete.sql`](../database/002-add-system-account-soft-delete.sql) | `SystemAccount.IsDeleted` + filtered index | Soft-delete |
+| 3 | [`003-create-viva-exam-core.sql`](../database/003-create-viva-exam-core.sql) | `VivaQuestion`, `VivaSession`, `VivaSessionTurn` | Group 3 |
+| 4 | [`004-seed-viva-questions.sql`](../database/004-seed-viva-questions.sql) | 3 câu hỏi mẫu `EXAM01-Q01..Q03` | Idempotent |
+| 5 | [`005-create-viva-grading.sql`](../database/005-create-viva-grading.sql) | **`VivaGradingResult`, `VivaGradeChangeLog`** (ROWVERSION, unique `(SessionId, QuestionId)`, check constraint lý do) | **Group 4 — bắt buộc** |
+| 6 | [`006-seed-viva-rubric.sql`](../database/006-seed-viva-rubric.sql) | `VivaQuestion.BloomLevel`; `VivaRubricCriteria` + 9 tiêu chí rubric | **Group 4 — bắt buộc** |
+
+Mọi script đều **idempotent** (chạy lại an toàn). Tên bảng là **số ít** (`VivaGradingResult`, `VivaGradeChangeLog`) để khớp EF Core model trong `AIVESDbContext`.
 
 ---
 
@@ -27,23 +32,31 @@ Bạn có thể chạy script bằng một trong các công cụ sau:
 ### Cách 1: Sử dụng SQL Server Management Studio (SSMS) — Khuyến nghị
 1. Mở **SSMS** và kết nối tới SQL Server instance của bạn (ví dụ: `localhost`, `.`, hoặc `.\SQLEXPRESS`).
 2. Nhấn `Ctrl + O` (hoặc vào **File** $\rightarrow$ **Open** $\rightarrow$ **File...**).
-3. Chọn và mở file `database/001-create-schema.sql`.
-4. Nhấn **Execute** (hoặc phím **F5**) để chạy script tạo DB `AIVES` và các bảng.
-5. Tiếp tục mở file `database/002-add-system-account-soft-delete.sql`.
-6. Nhấn **Execute** (**F5**) để áp dụng cập nhật soft-delete.
-7. Kiểm tra Object Explorer: Cơ sở dữ liệu `AIVES` đã xuất hiện cùng 5 bảng dữ liệu.
+3. Mở và **Execute** (F5) lần lượt, **đúng thứ tự**: `001` → `002` → `003` → `004` → `005` → `006`.
+4. Kiểm tra Object Explorer: DB `AIVES` phải có đủ 10 bảng, trong đó có
+   `VivaQuestion`, `VivaSession`, `VivaSessionTurn`, `VivaGradingResult`, `VivaGradeChangeLog`, `VivaRubricCriteria`.
 
 ### Cách 2: Sử dụng dòng lệnh `sqlcmd` (Terminal / PowerShell)
 Mở PowerShell tại thư mục gốc của repository và chạy:
 
 ```powershell
-# Chạy script 001 khởi tạo schema
 sqlcmd -S localhost -E -i database/001-create-schema.sql
-
-# Chạy script 002 thêm cột soft-delete
 sqlcmd -S localhost -E -i database/002-add-system-account-soft-delete.sql
+sqlcmd -S localhost -E -i database/003-create-viva-exam-core.sql
+sqlcmd -S localhost -E -i database/004-seed-viva-questions.sql
+sqlcmd -S localhost -E -i database/005-create-viva-grading.sql
+sqlcmd -S localhost -E -i database/006-seed-viva-rubric.sql
 ```
 *(Nếu sử dụng SQL Server Express, thay `-S localhost` bằng `-S .\SQLEXPRESS`. Nếu dùng SQL Authentication, thay `-E` bằng `-U sa -P YourPassword`).*
+
+### Kiểm chứng nhanh trên SQL Server thật
+Repo có bộ test SQL tùy chọn (tạo DB tạm, chạy toàn bộ 001→006, kiểm tra schema và repository):
+
+```powershell
+$env:AIVES_RUN_DATABASE_WRITE_TESTS='1'
+$env:AIVES_TEST_SERVER_CONNECTION_STRING='Server=localhost;Database=master;Trusted_Connection=True;TrustServerCertificate=True;'
+dotnet test AIVES.Tests/AIVES.Tests.csproj --filter "Category=SqlServerWrite"
+```
 
 ---
 

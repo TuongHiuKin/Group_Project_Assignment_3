@@ -163,7 +163,9 @@ public class GradingOrchestratorTests
 
         Assert.NotNull(result);
         Assert.Equal("KeywordFallback", result.AiProvider);
-        Assert.Equal("RubricCatalog", result.AiModel);
+        // Fallback now grades through RubricGradingService, which reads VivaRubricCriteria (DB) first
+        // and only then falls back to the static RubricCatalog. The label must not claim "RubricCatalog".
+        Assert.Equal("RubricGradingService", result.AiModel);
         Assert.Equal(GradingState.AiGraded, result.State);
         Assert.True(result.AiScore > 0, "Fallback rubric score should be calculated from matched keywords.");
     }
