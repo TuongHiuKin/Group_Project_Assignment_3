@@ -186,6 +186,75 @@ public sealed class AdminAiSettingsTests : IClassFixture<AdminAiSettingsTests.Ad
     }
 
     [Fact]
+    public async Task Get_AiSettings_RendersDeepSeekConnectCard()
+    {
+        using var factory = new RenderFactory();
+        var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/Admin/AiSettings");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var html = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
+
+        Assert.Contains("Kết nối DeepSeek", html);
+        Assert.Contains("DeepSeekInput.ApiKey", html);
+        Assert.Contains("https://api.deepseek.com/v1", html);
+        Assert.Contains("deepseek-chat", html);
+        // The dedicated card must not let the admin route audio through DeepSeek.
+        Assert.DoesNotContain("DeepSeekInput.EnableStt", html);
+        Assert.DoesNotContain("DeepSeekInput.EnableTts", html);
+    }
+
+    /// <summary>
+    /// Authenticated RenderFactory: the class-level fixture uses the real cookie handler, so a shared
+    /// <c>ApiSettings</c> render test needs its own header-driven auth scheme.
+    /// </summary>
+    private sealed class RenderFactory : WebApplicationFactory<global::Program>
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.UseEnvironment("Development");
+            builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["VivaInterview:Enabled"] = "false",
+                ["AiServices:UseMock"] = "true",
+                ["MockData:SeedOnStartup"] = "false",
+                ["ConnectionStrings:DefaultConnection"] = "Server=unused;Database=AdminRender;Integrated Security=true;TrustServerCertificate=true",
+                ["DefaultAdmin:Email"] = "admin@example.test",
+                ["DefaultAdmin:Password"] = "admin-password-test"
+            }));
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddAuthentication(o =>
+                {
+                    o.DefaultAuthenticateScheme = "AdminRender";
+                    o.DefaultChallengeScheme = "AdminRender";
+                }).AddScheme<AuthenticationSchemeOptions, AdminRenderHandler>("AdminRender", _ => { });
+                services.AddLogging(options => options.SetMinimumLevel(LogLevel.Error));
+            });
+        }
+
+        private sealed class AdminRenderHandler(
+            IOptionsMonitor<AuthenticationSchemeOptions> options,
+            ILoggerFactory logger,
+            UrlEncoder encoder)
+            : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+        {
+            protected override Task<AuthenticateResult> HandleAuthenticateAsync()
+            {
+                var claims = new[]
+                {
+                    new Claim(ClaimTypes.NameIdentifier, "ADMIN01"),
+                    new Claim(ClaimTypes.Name, "Administrator"),
+                    new Claim(ClaimTypes.Role, ApplicationRoles.Admin)
+                };
+                return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(
+                    new ClaimsPrincipal(new ClaimsIdentity(claims, "AdminRender")), "AdminRender")));
+            }
+        }
+    }
+
+    [Fact]
     public async Task Get_AiSettings_WhenVivaDisabled_Returns200ForAdmin()
     {
         using var factory = _factory.WithWebHostBuilder(builder =>
@@ -436,6 +505,85 @@ public sealed class AdminAiSettingsTests : IClassFixture<AdminAiSettingsTests.Ad
         Assert.Contains("OpenAI", model.ModelState["RoutingInput.TtsModel"]!.Errors[0].ErrorMessage);
         Assert.True(model.ModelState.ContainsKey("RoutingInput.LlmModel"));
         Assert.Contains("OpenAI", model.ModelState["RoutingInput.LlmModel"]!.Errors[0].ErrorMessage);
+    }
+
+    [Fact]
+    public async Task OnPostSaveRouting_DeepSeekProfile_DefaultsToDeepSeekChatNotOpenAi()
+    {
+        var config = new AIVES.BLL.Models.Ai.AiConfigurationModel
+        {
+            UseRealAi = true,
+            Profiles =
+            [
+                new AIVES.BLL.Models.Ai.AiProviderProfile
+                {
+                    Id = "deepseek",
+                    Name = "DeepSeek",
+                    Kind = AIVES.BLL.Models.Ai.AiProviderKinds.OpenAiCompatible,
+                    ApiKey = "sk-deepseek-1234567890",
+                    BaseUrl = "https://api.deepseek.com/v1",
+                    CustomCapabilities = AIVES.BLL.Models.Ai.AiCapability.Grading | AIVES.BLL.Models.Ai.AiCapability.FollowUpLlm
+                }
+            ]
+        };
+
+        var fakeStore = new InMemoryCredentialStore("sk-deepseek-1234567890", useRealAi: true, config);
+        var model = CreatePageModel(fakeStore, new DummyConnectionTester(true, "OK"));
+
+        model.RoutingInput = new AiSettingsModel.RoutingInputModel
+        {
+            UseRealAi = true,
+            LlmProfileId = "deepseek",
+            LlmModel = "",       // must resolve to deepseek-chat, not gpt-4o-mini
+            GradingProfileId = "deepseek",
+            GradingModel = null  // must resolve to deepseek-chat
+        };
+
+        var result = await model.OnPostSaveRoutingAsync();
+
+        Assert.IsType<RedirectToPageResult>(result);
+        Assert.True(model.ModelState.IsValid);
+
+        var saved = fakeStore.GetConfiguration();
+        Assert.Equal("deepseek-chat", saved.Routing.Llm.Model);
+        Assert.Equal("deepseek-chat", saved.Routing.Grading.Model);
+    }
+
+    [Fact]
+    public async Task OnPostSaveRouting_DeepSeekProfile_RejectsWhisperSttModel()
+    {
+        var config = new AIVES.BLL.Models.Ai.AiConfigurationModel
+        {
+            UseRealAi = true,
+            Profiles =
+            [
+                new AIVES.BLL.Models.Ai.AiProviderProfile
+                {
+                    Id = "deepseek",
+                    Name = "DeepSeek",
+                    Kind = AIVES.BLL.Models.Ai.AiProviderKinds.OpenAiCompatible,
+                    ApiKey = "sk-deepseek-1234567890",
+                    BaseUrl = "https://api.deepseek.com/v1",
+                    CustomCapabilities = AIVES.BLL.Models.Ai.AiCapability.Grading
+                }
+            ]
+        };
+
+        var fakeStore = new InMemoryCredentialStore("sk-deepseek-1234567890", useRealAi: true, config);
+        var model = CreatePageModel(fakeStore, new DummyConnectionTester(true, "OK"));
+
+        model.RoutingInput = new AiSettingsModel.RoutingInputModel
+        {
+            UseRealAi = true,
+            SttProfileId = "deepseek",
+            SttModel = "whisper-1"
+        };
+
+        var result = await model.OnPostSaveRoutingAsync();
+
+        Assert.IsType<PageResult>(result);
+        Assert.False(model.ModelState.IsValid);
+        Assert.True(model.ModelState.ContainsKey("RoutingInput.SttProfileId"));
     }
 
     private static AiSettingsModel CreatePageModel(IAiCredentialStore store, IAiConnectionTester tester)

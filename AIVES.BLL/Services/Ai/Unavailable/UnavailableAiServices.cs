@@ -63,7 +63,11 @@ public sealed class UnavailableAnswerGradingService(string reason) : IAnswerGrad
             QuestionTitle = input?.QuestionText ?? string.Empty,
             BloomLevel = input?.BloomLevel,
             MaxPoints = input?.MaxPoints ?? 10m,
-            AiScore = 0m,
+            // AiScore MUST stay null: GradingOrchestrator treats a null score as "AI did not grade"
+            // and falls back to the keyword RubricGradingService. Returning 0m here made the
+            // orchestrator believe grading succeeded, so every unavailable-AI session was persisted
+            // as Failed with 0 points instead of being graded by keywords.
+            AiScore = null,
             AiFeedback = ErrorMessage,
             State = GradingState.Failed,
             AiProvider = "Unavailable"
