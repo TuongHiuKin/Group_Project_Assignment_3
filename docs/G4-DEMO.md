@@ -18,16 +18,22 @@ Hệ thống hỗ trợ 2 chế độ vận hành độc lập: **Chế độ Mo
   ```
 - Hệ thống tự động sử dụng `MockAnswerGradingService` kết hợp `RubricGradingService` từ khóa: chấm điểm tức thì, tạo rubric outcomes và nhận xét chi tiết mà không cần gọi API ra ngoài internet.
 
-### 1.2. Chế độ Real AI (Gemini / OpenAI)
+### 1.2. Chế độ Real AI (Gemini / OpenAI / DeepSeek)
 1. Đăng nhập tài khoản Admin mặc định:
    - **URL:** `/Account/Login`
-   - **Email:** `admin@fpt.edu.vn` (hoặc email cấu hình trong `DefaultAdmin:Email`)
+   - **Email:** `admin@AIVESSystem.org` (hoặc email cấu hình trong `DefaultAdmin:Email`)
    - **Mật khẩu:** Theo cấu hình trong `appsettings.json`
 2. Truy cập `/Admin/AiSettings`:
-   - Thêm hồ sơ AI Provider: chọn **Gemini** (Google AI Studio) hoặc **OpenAI**.
-   - Nhập API Key hợp lệ và bấm **Kiểm tra kết nối**.
-   - Tại mục **Routing**, cấu hình năng lực chấm điểm (**Grading**) trỏ đến profile vừa tạo.
+   - **DeepSeek (nhanh nhất):** dùng khối **"Kết nối DeepSeek"**, dán API key rồi bấm
+     **Kết nối DeepSeek**. Hệ thống tự tạo hồ sơ, định tuyến LLM + Grading và bật AI thật.
+     Chi tiết: [ai-deepseek-setup.md](ai-deepseek-setup.md).
+   - **Gemini / OpenAI:** bấm **Thêm nhà cung cấp**, chọn Kind tương ứng, nhập API Key,
+     bấm **Kiểm tra kết nối**, rồi cấu hình **Routing** cho năng lực chấm điểm (**Grading**).
    - Bật cờ **Sử dụng AI thật (UseRealAi)** và lưu cấu hình.
+
+> **Lưu ý:** DeepSeek không có STT/TTS. Nếu demo cần đọc câu hỏi bằng giọng nói,
+> bật `AiServices:UseBrowserSpeechSynthesis = true` (trình duyệt tự đọc) hoặc cấu hình
+> STT/TTS sang Gemini/OpenAI song song.
 
 ---
 
