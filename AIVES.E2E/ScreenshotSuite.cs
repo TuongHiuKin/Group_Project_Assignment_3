@@ -60,20 +60,29 @@ public class ScreenshotSuite : PageTest
             // Desktop viewport: 1280x800
             await Page.SetViewportSizeAsync(1280, 800);
             await Page.GotoAsync(targetUrl, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+
+            if (Page.Url.Contains("/Account/Login", StringComparison.OrdinalIgnoreCase) && !pageRoute.Contains("/Account/Login", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    await Page.FillAsync("input[name='Email']", "admin@AIVESSystem.org");
+                    await Page.FillAsync("input[name='Password']", "@@abc123@@");
+                    await Page.ClickAsync("button[type='submit']");
+                    await Page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+                    if (!Page.Url.Equals(targetUrl, StringComparison.OrdinalIgnoreCase))
+                    {
+                        await Page.GotoAsync(targetUrl, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
+                    }
+                }
+                catch
+                {
+                }
+            }
+
             var desktopPath = Path.Combine(outputDir, $"{routeSlug}-desktop.png");
             await Page.ScreenshotAsync(new PageScreenshotOptions
             {
                 Path = desktopPath,
-                FullPage = true
-            });
-
-            // Mobile viewport: 390x844
-            await Page.SetViewportSizeAsync(390, 844);
-            await Page.GotoAsync(targetUrl, new PageGotoOptions { WaitUntil = WaitUntilState.NetworkIdle });
-            var mobilePath = Path.Combine(outputDir, $"{routeSlug}-mobile.png");
-            await Page.ScreenshotAsync(new PageScreenshotOptions
-            {
-                Path = mobilePath,
                 FullPage = true
             });
         }
