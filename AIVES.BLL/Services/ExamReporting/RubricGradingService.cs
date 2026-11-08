@@ -1,7 +1,9 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using AIVES.BLL.Interfaces.ExamReporting;
 using AIVES.BLL.Models.ExamReporting;
+using AIVES.DAL.Entities;
 using AIVES.DAL.Repositories.Interfaces;
 
 namespace AIVES.BLL.Services.ExamReporting;
@@ -9,6 +11,8 @@ namespace AIVES.BLL.Services.ExamReporting;
 /// <summary>
 /// Chấm điểm theo Rubric từ khóa: chuẩn hóa transcript (chữ thường, bỏ dấu, bỏ dấu câu),
 /// tiêu chí đạt khi khớp ít nhất một từ khóa, điểm câu = tổng trọng số đạt x thang điểm / tổng trọng số.
+/// Rubric được đọc từ SQL Server (<c>VivaRubricCriteria</c>) khi repository khả dụng (G4-DB-07);
+/// <see cref="RubricCatalog"/> chỉ còn là dự phòng khi bảng chưa được seed.
 /// </summary>
 public sealed class RubricGradingService : IRubricGradingService
 {
@@ -19,6 +23,8 @@ public sealed class RubricGradingService : IRubricGradingService
 
     /// <summary>Nhóm 4 (AI chấm điểm) chưa triển khai: nhận xét là mô phỏng theo Rubric của giảng viên.</summary>
     public const string FeedbackPrefix = "AI chấm gợi ý (mô phỏng theo Rubric của giảng viên): ";
+
+    private static readonly JsonSerializerOptions KeywordsJsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private readonly IVivaRubricRepository? _rubricRepo;
     private readonly IReadOnlyList<QuestionRubric> _rubrics;
@@ -32,9 +38,15 @@ public sealed class RubricGradingService : IRubricGradingService
         _rubrics = rubrics ?? throw new ArgumentNullException(nameof(rubrics));
     }
 
-    public RubricGradingService(IVivaRubricRepository rubricRepo) : this(RubricCatalog.All)
+    /// <summary>Rubric DB-first: đọc <c>VivaRubricCriteria</c>, chỉ dùng <see cref="RubricCatalog"/> khi DB trống.</summary>
+    public RubricGradingService(IVivaRubricRepository rubricRepo) : this(rubricRepo, RubricCatalog.All)
+    {
+    }
+
+    public RubricGradingService(IVivaRubricRepository rubricRepo, IReadOnlyList<QuestionRubric> fallbacks)
     {
         _rubricRepo = rubricRepo ?? throw new ArgumentNullException(nameof(rubricRepo));
+        _rubrics = fallbacks ?? throw new ArgumentNullException(nameof(fallbacks));
     }
 
     public IReadOnlyList<QuestionRubric> GetRubrics(string examId) =>
@@ -42,6 +54,54 @@ public sealed class RubricGradingService : IRubricGradingService
 
     public QuestionRubric? GetRubric(string questionId) =>
         _rubrics.FirstOrDefault(r => string.Equals(r.QuestionId, questionId, StringComparison.OrdinalIgnoreCase));
+
+    public async Task<IReadOnlyList<QuestionRubric>> GetRubricsAsync(string examId, CancellationToken ct = default)
+    {
+        if (_rubricRepo is null) return GetRubrics(examId);
+
+        try
+        {
+            var criteria = await _rubricRepo.GetCriteriaByExamAsync(examId, ct);
+            var mapped = MapCriteria(criteria, examId);
+            return mapped.Count > 0 ? mapped : GetRubrics(examId);
+        }
+        catch (Exception) when (_rubrics.Count > 0)
+        {
+            // A database that has not run 006 yet must not break grading or reporting.
+            return GetRubrics(examId);
+        }
+    }
+
+    public async Task<QuestionRubric?> GetRubricAsync(string questionId, CancellationToken ct = default)
+    {
+        if (_rubricRepo is null) return GetRubric(questionId);
+
+        try
+        {
+            var criteria = await _rubricRepo.GetCriteriaByQuestionAsync(questionId, ct);
+            if (criteria.Count > 0)
+            {
+                return MapCriteria(criteria, examId: null).FirstOrDefault();
+            }
+        }
+        catch (Exception) when (_rubrics.Count > 0)
+        {
+            // Fall through to the catalog fallback below.
+        }
+
+        return GetRubric(questionId);
+    }
+
+    /// <summary>Chấm theo một rubric đã resolve sẵn (từ DB hoặc catalog) thay vì tra cứu lại catalog.</summary>
+    public RubricGradingResult? Grade(
+        QuestionRubric rubric,
+        string? questionText,
+        string? answerTranscript,
+        decimal passThresholdScore)
+    {
+        ArgumentNullException.ThrowIfNull(rubric);
+        return GradeCore(rubric, questionText, answerTranscript, passThresholdScore);
+    }
 
     public RubricGradingResult? Grade(string questionId, string? questionText, string? answerTranscript, decimal passThresholdScore)
     {
@@ -51,6 +111,15 @@ public sealed class RubricGradingService : IRubricGradingService
             return null;
         }
 
+        return GradeCore(rubric, questionText, answerTranscript, passThresholdScore);
+    }
+
+    private static RubricGradingResult? GradeCore(
+        QuestionRubric rubric,
+        string? questionText,
+        string? answerTranscript,
+        decimal passThresholdScore)
+    {
         var description = BuildRubricDescription(rubric);
         var answer = Normalize(answerTranscript);
         var hasRelevantAnswer = CountNovelTokens(answer, Normalize(questionText)) >= MinNovelTokens;
@@ -122,8 +191,7 @@ public sealed class RubricGradingService : IRubricGradingService
     }
 
     /// <summary>Chữ thường, bỏ dấu tiếng Việt (kể cả đ), thay dấu câu bằng khoảng trắng, gộp khoảng trắng.</summary>
-    public static string Normalize(string? text)
-    {
+    public static string Normalize(string? text)    {
         if (string.IsNullOrWhiteSpace(text))
         {
             return string.Empty;
@@ -178,4 +246,64 @@ public sealed class RubricGradingService : IRubricGradingService
 
     private static string BuildRubricDescription(QuestionRubric rubric) =>
         string.Join(" ", rubric.Criteria.Select((c, i) => $"{i + 1}. {c.Name} ({rubric.PointsFor(c):0.##}đ): {c.Description}"));
+
+    /// <summary>
+    /// Maps persisted <c>VivaRubricCriteria</c> rows (G4-DB-06/DB-07) to the BLL rubric model.
+    /// One <see cref="QuestionRubric"/> per question; criteria keep their seeded order.
+    /// </summary>
+    private static List<QuestionRubric> MapCriteria(IReadOnlyList<VivaRubricCriterion> criteria, string? examId)
+    {
+        return criteria
+            .Where(c => !string.IsNullOrWhiteSpace(c.QuestionId))
+            .GroupBy(c => c.QuestionId, StringComparer.OrdinalIgnoreCase)
+            .Select(group =>
+            {
+                var rows = group
+                    .OrderBy(c => c.CriterionCode, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                // 006 seeds MaxPoints as each criterion's share of the question scale (3.5 + 3.5 + 3.0 = 10),
+                // so the question's maximum is the sum of its criteria points.
+                var criteriaPoints = rows.Sum(r => r.MaxPoints);
+                var maxScore = criteriaPoints > 0 ? criteriaPoints : 10m;
+                var question = rows[0].Question;
+
+                return new QuestionRubric
+                {
+                    QuestionId = group.Key,
+                    ExamId = examId ?? question?.ExamId ?? string.Empty,
+                    Title = question?.Title ?? string.Empty,
+                    BloomLevel = question?.BloomLevel ?? string.Empty,
+                    MaxScore = maxScore,
+                    Criteria = rows.Select(row => new RubricCriterion
+                    {
+                        Id = string.IsNullOrWhiteSpace(row.CriterionCode) ? row.Id : row.CriterionCode,
+                        Name = row.CriterionName,
+                        Description = row.Description,
+                        ImprovementHint = row.Description,
+                        Weight = row.Weight,
+                        Keywords = ParseKeywords(row.KeywordsJson)
+                    }).ToList()
+                };
+            })
+            .OrderBy(r => r.QuestionId, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static IReadOnlyList<string> ParseKeywords(string? keywordsJson)
+    {
+        if (string.IsNullOrWhiteSpace(keywordsJson))
+        {
+            return Array.Empty<string>();
+        }
+
+        try
+        {
+            var keywords = JsonSerializer.Deserialize<List<string>>(keywordsJson, KeywordsJsonOptions);
+            return keywords?.Where(k => !string.IsNullOrWhiteSpace(k)).ToList() ?? (IReadOnlyList<string>)Array.Empty<string>();
+        }
+        catch (JsonException)
+        {
+            return Array.Empty<string>();
+        }
+    }
 }

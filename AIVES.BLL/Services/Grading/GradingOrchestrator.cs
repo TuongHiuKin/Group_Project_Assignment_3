@@ -21,6 +21,12 @@ public sealed class GradingOrchestrator(
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
+    /// <summary>
+    /// Ngưỡng đạt dùng cho bản chấm dự phòng từ khóa. Giá trị production phải do giảng viên cấu hình
+    /// (DEC-03); khi chưa có bảng ExamSettings, dùng mặc định thang 10 và ghi rõ ở đây thay vì rải số 5.0.
+    /// </summary>
+    public const decimal DefaultPassThreshold = 5.0m;
+
     public async Task<SessionGradingSummaryDto> GradeSessionAsync(Guid sessionId, CancellationToken ct = default)
     {
         var session = await vivaSessionRepo.GetWithDetailsAsync(sessionId, ct)
@@ -264,8 +270,8 @@ public sealed class GradingOrchestrator(
             .Select(t => t.TranscriptText!)
             .ToList();
 
-        // 2. Fetch question rubric
-        var rubric = rubricGradingService.GetRubric(question.QuestionId);
+        // 2. Fetch question rubric (DB-first: VivaRubricCriteria, catalog fallback)
+        var rubric = await rubricGradingService.GetRubricAsync(question.QuestionId, ct);
         var rubricDtoList = rubric?.Criteria.Select(c => new RubricCriterionDto
         {
             CriterionCode = c.Id,
@@ -281,7 +287,7 @@ public sealed class GradingOrchestrator(
             SessionId = session.SessionId,
             QuestionId = question.QuestionId,
             QuestionText = question.Content,
-            BloomLevel = rubric?.BloomLevel,
+            BloomLevel = rubric?.BloomLevel ?? question.BloomLevel,
             MaxPoints = rubric?.MaxScore ?? 10.0m,
             StudentAnswerTranscript = mainTranscript,
             FollowUpTurns = followUpTurns,
@@ -340,11 +346,10 @@ public sealed class GradingOrchestrator(
         GradingInputDto input,
         QuestionRubric? rubric)
     {
-        var rubricResult = rubricGradingService.Grade(
-            question.QuestionId,
-            question.Content,
-            input.StudentAnswerTranscript,
-            passThresholdScore: 5.0m);
+        // Grade the rubric we already resolved (DB or catalog) so the fallback matches lecturer criteria.
+        var rubricResult = rubric != null
+            ? rubricGradingService.Grade(rubric, question.Content, input.StudentAnswerTranscript, passThresholdScore: DefaultPassThreshold)
+            : rubricGradingService.Grade(question.QuestionId, question.Content, input.StudentAnswerTranscript, passThresholdScore: DefaultPassThreshold);
 
         if (rubricResult != null)
         {
@@ -364,14 +369,14 @@ public sealed class GradingOrchestrator(
                 SessionId = input.SessionId,
                 QuestionId = question.QuestionId,
                 QuestionTitle = question.Title,
-                BloomLevel = rubric?.BloomLevel,
+                BloomLevel = rubric?.BloomLevel ?? question.BloomLevel,
                 MaxPoints = rubricResult.MaxScore,
                 AiScore = rubricResult.EarnedScore,
                 AiFeedback = rubricResult.Feedback,
                 Strengths = rubricResult.Strengths,
                 Weaknesses = rubricResult.Weaknesses,
                 AiProvider = "KeywordFallback",
-                AiModel = "RubricCatalog",
+                AiModel = "RubricGradingService",
                 State = GradingState.AiGraded,
                 CriteriaOutcomes = outcomes
             };
