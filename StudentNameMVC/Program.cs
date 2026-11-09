@@ -75,9 +75,6 @@ builder.Services.AddRateLimiter(options =>
         }));
 });
 builder.Services.AddScoped<ISystemAccountService, SystemAccountService>();
-builder.Services.AddScoped<ICategoryService, CategoryService>();
-builder.Services.AddScoped<INewsArticleService, NewsArticleService>();
-builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<ActiveAccountCookieEvents>();
 
 // Group 6 - Viva Exam Reporting Services (Scoped, backed by real SQL Server repositories)

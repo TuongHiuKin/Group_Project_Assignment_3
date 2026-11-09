@@ -137,13 +137,7 @@ public sealed class AccountManagementRazorPagesTests
         public Task<SystemAccount?> AuthenticateAsync(string email, string password, CancellationToken ct = default) =>
             Task.FromResult<SystemAccount?>(null);
 
-        public Task<List<NewsArticle>> GetNewsArticlesFromUserAsync(int accountId, CancellationToken ct = default) =>
-            Task.FromResult(new List<NewsArticle>());
 
-        public Task<List<NewsArticle>> GetNewsArticlesPublicAsync(CancellationToken ct = default) =>
-            Task.FromResult(new List<NewsArticle>());
 
-        public Task<List<NewsArticle>> GetNewsArticlesLecturerAsync(int accountId, CancellationToken ct = default) =>
-            Task.FromResult(new List<NewsArticle>());
     }
 }

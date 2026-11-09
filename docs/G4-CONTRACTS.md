@@ -105,6 +105,27 @@ public enum GradingState : byte
 }
 ```
 
+> **Hai enum `GradingState` — không nhầm lẫn.** Nhóm 4 dùng enum trên (giá trị byte lưu trong
+> `VivaGradingResult.GradingState`). Nhóm 6 (báo cáo) có enum riêng tên `ReportGradingState`
+> trong `AIVES.BLL.Models.ExamReporting` (`Pending = 1`, `Graded = 2`, `Failed = 3` — giá trị
+> của DTO báo cáo, **không** ghi xuống DB). Mapping do `ExamReportRepository` thực hiện:
+
+| `GradingState` (Nhóm 4, DB) | `ReportGradingState` (Nhóm 6, DTO) | Nhãn hiển thị |
+|---|---|---|
+| `Pending` (0) | `Pending` (1) | "Đang chờ chấm" |
+| `AiGraded` (1) | `Graded` (2) | "AI chấm, chờ giảng viên duyệt" |
+| `Finalized` (2) | `Graded` (2) | "Điểm chính thức" |
+| `Failed` (3) | `Failed` (3) | "Chấm lỗi" |
+
+> **Báo cáo không tự chấm.** `ExamReportRepository` chỉ đọc `VivaGradingResult` đã lưu. Phiên đã
+> `Completed` mà chưa có bản ghi chấm ⇒ `ReportGradingState.Pending`, `EarnedScore = 0`. Việc chấm
+> là của `GradingOrchestrator` chạy nền; nếu báo cáo tự gọi `RubricGradingService` thì sinh viên sẽ
+> thấy điểm khác điểm AI thật và giảng viên không có gì để duyệt.
+
+> **`RubricCatalog` là fallback.** `AIVES.BLL/Services/ExamReporting/RubricCatalog.cs` chỉ dùng khi
+> bảng `VivaRubricCriteria` chưa được seed (môi trường chưa chạy script `006`); khi fallback được
+> dùng, service ghi `LogWarning`. Nguồn chuẩn là DB qua `IVivaRubricRepository`.
+
 ### 3.3 Core DTOs
 ```csharp
 namespace AIVES.BLL.Models.Grading;

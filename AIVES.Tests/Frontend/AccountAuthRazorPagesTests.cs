@@ -476,9 +476,6 @@ public sealed class AccountAuthRazorPagesTests
         public Task<bool> IsAccountReferencedAsync(int id, CancellationToken ct = default) => Task.FromResult(false);
         public Task<bool> UpdateProfileAsync(int id, string name, string email, string? newPassword = null, CancellationToken ct = default) => Task.FromResult(true);
         public Task<SystemAccount?> AuthenticateAsync(string email, string password, CancellationToken ct = default) => Task.FromResult<SystemAccount?>(null);
-        public Task<List<NewsArticle>> GetNewsArticlesFromUserAsync(int accountId, CancellationToken ct = default) => Task.FromResult(new List<NewsArticle>());
-        public Task<List<NewsArticle>> GetNewsArticlesPublicAsync(CancellationToken ct = default) => Task.FromResult(new List<NewsArticle>());
-        public Task<List<NewsArticle>> GetNewsArticlesLecturerAsync(int accountId, CancellationToken ct = default) => Task.FromResult(new List<NewsArticle>());
     }
 
     private sealed class StubDashboardStudentReportService : IStudentReportService

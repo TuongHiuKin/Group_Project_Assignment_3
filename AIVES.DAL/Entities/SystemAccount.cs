@@ -9,6 +9,4 @@ public class SystemAccount
     // Database roles: 1 = Staff, 2 = Lecturer. Admin is configuration-only.
     public byte AccountRole { get; set; }
     public bool IsDeleted { get; set; }
-    public ICollection<NewsArticle> CreatedNewsArticles { get; set; } = new List<NewsArticle>();
-    public ICollection<NewsArticle> UpdatedNewsArticles { get; set; } = new List<NewsArticle>();
 }

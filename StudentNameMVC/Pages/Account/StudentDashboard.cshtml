@@ -169,13 +169,29 @@
                                 <td><span class="badge tag-purple m-0">@att.ExamId</span></td>
                                 <td class="text-secondary small">@(att.CompletedAt?.ToString("dd/MM/yyyy HH:mm") ?? "Đang thi")</td>
                                 <td>
-                                    @if (att.GradingState == AIVES.BLL.Models.ExamReporting.GradingState.Pending)
+                                    @if (att.GradingState == AIVES.BLL.Models.ExamReporting.ReportGradingState.Pending)
                                     {
                                         <span class="badge bg-secondary text-white rounded-pill px-3">Chưa chấm</span>
                                     }
                                     else
                                     {
                                         <strong class="fs-6">@att.NormalizedScore.ToString("F1") / 10</strong>
+                                        @* Nhãn phải khớp quy tắc đã chốt và khớp báo cáo cá nhân:
+                                           GV chưa chốt thì sinh viên chỉ thấy "AI chấm, chờ duyệt". *@
+                                        <div class="mt-1">
+                                            @if (att.IsFullyFinalized)
+                                            {
+                                                <span class="badge bg-success text-white rounded-pill px-2" style="font-size: 10px;">
+                                                    <i class="bi bi-shield-check me-1"></i>Điểm chính thức
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-warning text-dark rounded-pill px-2" style="font-size: 10px;">
+                                                    <i class="bi bi-robot me-1"></i>AI chấm, chờ giảng viên duyệt
+                                                </span>
+                                            }
+                                        </div>
                                     }
                                 </td>
                                 <td style="text-align: right;">

@@ -4,6 +4,7 @@ using AIVES.BLL.Interfaces.ExamReporting;
 using AIVES.BLL.Interfaces.Grading;
 using AIVES.BLL.Models.ExamReporting;
 using AIVES.BLL.Models.Grading;
+using AIVES.BLL.Models.VivaInterview;
 using AIVES.DAL.Entities;
 using AIVES.DAL.Repositories.Interfaces;
 using Microsoft.Extensions.Logging;
@@ -224,6 +225,7 @@ public sealed class GradingOrchestrator(
             TotalFinalScore = totalFinal,
             OverallState = overallState,
             IsFullyFinalized = isFullyFinalized,
+            SessionState = (VivaSessionState)session.State,
             QuestionResults = questionDtos
         };
     }
@@ -269,6 +271,29 @@ public sealed class GradingOrchestrator(
             .Where(t => !string.IsNullOrWhiteSpace(t.TranscriptText))
             .Select(t => t.TranscriptText!)
             .ToList();
+
+        if (string.IsNullOrWhiteSpace(mainTranscript))
+        {
+            var timeoutEntity = new VivaGradingResult
+            {
+                SessionId = session.SessionId,
+                QuestionId = question.QuestionId,
+                AiScore = 0m,
+                AiFeedback = "Hết thời gian, thí sinh không trả lời câu này.",
+                Strengths = string.Empty,
+                Weaknesses = string.Empty,
+                CriteriaOutcomesJson = "[]",
+                AiProvider = "Timeout",
+                AiModel = null,
+                GradingState = (byte)GradingState.AiGraded
+            };
+            var saved = await vivaGradingRepo.UpsertAiResultAsync(timeoutEntity, ct);
+            var mapped = MapToDto(saved, question);
+            mapped.QuestionContent = question.Content;
+            mapped.StudentAnswerTranscript = mainTranscript;
+            mapped.SpeechMetrics = CalculateSpeechMetrics(questionTurns);
+            return mapped;
+        }
 
         // 2. Fetch question rubric (DB-first: VivaRubricCriteria, catalog fallback)
         var rubric = await rubricGradingService.GetRubricAsync(question.QuestionId, ct);
@@ -333,12 +358,12 @@ public sealed class GradingOrchestrator(
             GradingState = (byte)gradingResult.State
         };
 
-        var saved = await vivaGradingRepo.UpsertAiResultAsync(entity, ct);
-        var mapped = MapToDto(saved, question);
-        mapped.QuestionContent = question.Content;
-        mapped.StudentAnswerTranscript = mainTranscript;
-        mapped.SpeechMetrics = gradingResult.SpeechMetrics ?? CalculateSpeechMetrics(questionTurns);
-        return mapped;
+        var persisted = await vivaGradingRepo.UpsertAiResultAsync(entity, ct);
+        var resultDto = MapToDto(persisted, question);
+        resultDto.QuestionContent = question.Content;
+        resultDto.StudentAnswerTranscript = mainTranscript;
+        resultDto.SpeechMetrics = gradingResult.SpeechMetrics ?? CalculateSpeechMetrics(questionTurns);
+        return resultDto;
     }
 
     private QuestionGradingResultDto ExecuteFallbackGrading(

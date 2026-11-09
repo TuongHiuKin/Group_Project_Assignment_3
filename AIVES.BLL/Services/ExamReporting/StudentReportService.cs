@@ -1,5 +1,6 @@
 using AIVES.BLL.Interfaces.ExamReporting;
 using AIVES.BLL.Models.ExamReporting;
+using GradingState = AIVES.BLL.Models.ExamReporting.ReportGradingState;
 
 namespace AIVES.BLL.Services.ExamReporting;
 

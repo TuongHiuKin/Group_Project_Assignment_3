@@ -29,9 +29,6 @@ public interface ISystemAccountService
     Task<SystemAccount?> AuthenticateAsync(string email, string password, CancellationToken ct = default);
 
     // --- 6. TV4 News queries for Staff/Lecturer/Public ---
-    Task<List<NewsArticle>> GetNewsArticlesFromUserAsync(int accountId, CancellationToken ct = default);
-    Task<List<NewsArticle>> GetNewsArticlesPublicAsync(CancellationToken ct = default);
-    Task<List<NewsArticle>> GetNewsArticlesLecturerAsync(int accountId, CancellationToken ct = default);
 }
 
 public interface ISystemAccountServices : ISystemAccountService

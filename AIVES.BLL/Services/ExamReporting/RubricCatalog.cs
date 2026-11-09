@@ -3,8 +3,9 @@ using AIVES.BLL.Models.ExamReporting;
 namespace AIVES.BLL.Services.ExamReporting;
 
 /// <summary>
-/// Dữ liệu mô phỏng thiết lập chấm điểm của giảng viên cho đề EXAM01 (Nhóm 1 và 4 chưa triển khai):
-/// mức Bloom, tiêu chí, trọng số và từ khóa của từng câu. LecturerDashboard và RubricGradingService đều đọc từ đây.
+/// Rubric mẫu của đề EXAM01, dùng làm DỰ PHÒNG khi bảng <c>VivaRubricCriteria</c> trong SQL Server
+/// chưa được seed. Nguồn chính là DB (xem <c>IVivaRubricRepository</c>); class này chỉ còn để
+/// LecturerDashboard và RubricGradingService vẫn hoạt động trên môi trường chưa chạy script 006.
 /// Từ khóa viết tự nhiên (có dấu, tiếng Việt và tiếng Anh); khi chấm sẽ được chuẩn hóa bỏ dấu và chữ thường.
 /// </summary>
 public static class RubricCatalog

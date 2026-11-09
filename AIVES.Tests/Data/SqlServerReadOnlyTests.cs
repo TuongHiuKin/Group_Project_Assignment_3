@@ -28,16 +28,12 @@ public class SqlServerReadOnlyTests
 
         // Read each mapped scalar column even on an empty DB. Do not print credentials/hashes.
         await context.SystemAccounts.AsNoTracking().Take(1).ToListAsync();
-        await context.Categories.AsNoTracking().Take(1).ToListAsync();
-        await context.Tags.AsNoTracking().Take(1).ToListAsync();
-        await context.NewsTags.AsNoTracking().Take(1).ToListAsync();
-        await context.NewsArticles.AsNoTracking()
-            .Include(x => x.Category).Include(x => x.CreatedBy).Include(x => x.UpdatedBy)
-            .Include(x => x.NewsTags).ThenInclude(x => x.Tag)
-            .OrderByDescending(x => x.CreatedDate).Take(1).ToListAsync();
         await context.VivaQuestions.AsNoTracking().Take(1).ToListAsync();
         await context.VivaSessions.AsNoTracking().Include(x => x.Turns).Take(1).ToListAsync();
         await context.VivaSessionTurns.AsNoTracking().Include(x => x.Question).Take(1).ToListAsync();
+        await context.VivaGradingResults.AsNoTracking().Take(1).ToListAsync();
+        await context.VivaGradeChangeLogs.AsNoTracking().Take(1).ToListAsync();
+        await context.VivaRubricCriteria.AsNoTracking().Take(1).ToListAsync();
         Assert.Empty(context.ChangeTracker.Entries());
         // Never call EnsureCreated, Migrate, SaveChanges, seed, or execute write SQL here.
     }

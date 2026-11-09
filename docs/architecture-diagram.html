@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>AIVES — Kiến trúc 3 lớp</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", Arial, Calibri, Roboto, sans-serif;
+    background: #ffffff;
+    padding: 34px 40px 26px 40px;
+    width: 1520px;
+  }
+  .title {
+    font-size: 25px; font-weight: 700; color: #1e293b;
+    text-align: center; margin-bottom: 2px; letter-spacing: -0.4px;
+  }
+  .subtitle {
+    font-size: 12.5px; color: #64748b; text-align: center; margin-bottom: 22px;
+  }
+
+  /* ── Browser ── */
+  .browser-wrap { display: flex; justify-content: center; margin-bottom: 6px; }
+  .browser {
+    width: 460px; border: 2.5px solid #475569; background: #f1f5f9;
+    border-radius: 9px; padding: 11px 16px; text-align: center;
+  }
+  .browser .t { font-size: 14px; font-weight: 700; color: #1e293b; margin-bottom: 3px; }
+  .browser .d { font-size: 11px; color: #64748b; line-height: 1.45; }
+
+  /* ── connector area ── */
+  .conn { height: 30px; position: relative; }
+  .conn .vline {
+    position: absolute; left: 50%; width: 2px; background: #1e293b;
+  }
+  .conn .vline.req  { top: 0; height: 30px; }
+  .conn .lbl {
+    position: absolute; font-size: 10.5px; color: #475569; font-weight: 600;
+    background: #fff; padding: 0 5px;
+  }
+
+  /* ── main grid: label | layer | right col ── */
+  .grid {
+    display: grid;
+    grid-template-columns: 76px 1fr 292px;
+    column-gap: 16px;
+    align-items: start;
+  }
+  .gutter-label {
+    font-size: 11px; font-weight: 700; color: #2563eb;
+    text-align: right; padding-top: 44px; line-height: 1.3;
+  }
+  .gutter-label small { display: block; font-weight: 400; color: #94a3b8; font-size: 9.5px; margin-top: 2px; }
+
+  /* ── Layer boxes ── */
+  .layer { border-radius: 9px; padding: 13px 15px 15px 15px; margin-bottom: 0; }
+  .layer.pres { border: 2.5px solid #2563eb; background: #eff6ff; }
+  .layer.biz  { border: 2.5px solid #16a34a; background: #f0fdf4; }
+  .layer.data { border: 2.5px solid #dc2626; background: #fef2f2; }
+
+  .layer-h {
+    display: flex; align-items: baseline; gap: 9px; margin-bottom: 11px;
+  }
+  .layer-h .name { font-size: 15px; font-weight: 700; }
+  .layer.pres .layer-h .name { color: #1d4ed8; }
+  .layer.biz  .layer-h .name { color: #15803d; }
+  .layer.data .layer-h .name { color: #b91c1c; }
+  .layer-h .proj { font-size: 11.5px; color: #64748b; font-weight: 600; }
+
+  .cards { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .card {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 7px;
+    padding: 9px 11px; min-height: 88px;
+  }
+  .card .ct { font-size: 11.5px; font-weight: 700; color: #1e293b; margin-bottom: 5px; }
+  .card ul { list-style: none; }
+  .card li {
+    font-size: 10px; color: #475569; line-height: 1.5;
+    padding-left: 9px; position: relative;
+  }
+  .card li::before {
+    content: "•"; position: absolute; left: 0; color: #94a3b8;
+  }
+
+  /* layer-to-layer arrow strip */
+  .layerarrow { position: relative; height: 34px; }
+  .layerarrow .down {
+    position: absolute; left: 50%; margin-left: -1px; top: 0;
+    width: 2px; height: 34px; background: #1e293b;
+  }
+  .layerarrow .up {
+    position: absolute; left: 50%; margin-left: 13px; top: 0;
+    width: 0; height: 34px; border-left: 2px dashed #1e293b;
+  }
+  .layerarrow .albl {
+    position: absolute; font-size: 9.5px; font-weight: 600; color: #475569;
+    background: #fff; padding: 0 4px; line-height: 1;
+  }
+  .layerarrow .albl.req { left: calc(50% - 52px); top: 11px; }
+  .layerarrow .albl.res { left: calc(50% + 17px); top: 11px; }
+
+  /* ── Right column ── */
+  .right { display: flex; flex-direction: column; gap: 12px; }
+  .ext { border-radius: 8px; padding: 10px 12px; }
+  .ext.ai   { border: 2px solid #ea580c; background: #fff7ed; }
+  .ext.sql  { border: 2px solid #64748b; background: #f8fafc; }
+  .ext .et { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+  .ext.ai .et  { color: #c2410c; }
+  .ext.sql .et { color: #334155; }
+  .row { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; color: #475569; padding: 2.5px 0; }
+  .row .k { font-weight: 600; color: #1e293b; }
+  .row .v { color: #64748b; font-family: Consolas, monospace; font-size: 9.5px; }
+
+  .legend { border: 1.5px solid #cbd5e1; background: #fff; border-radius: 8px; padding: 10px 12px; }
+  .legend .lt { font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 7px; }
+  .lgrow { display: flex; align-items: center; gap: 9px; font-size: 10px; color: #475569; margin-bottom: 6px; }
+  .lg-solid { width: 30px; height: 0; border-top: 2px solid #1e293b; position: relative; }
+  .lg-solid::after {
+    content: ""; position: absolute; right: -1px; top: -4.5px;
+    border-left: 6px solid #1e293b; border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  }
+  .lg-dash { width: 30px; height: 0; border-top: 2px dashed #1e293b; position: relative; }
+  .lg-dash::after {
+    content: ""; position: absolute; right: -1px; top: -4.5px;
+    border-left: 6px solid #1e293b; border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  }
+
+  .refs { border: 1.5px solid #cbd5e1; background: #fff; border-radius: 8px; padding: 10px 12px; }
+  .refs .rt { font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 7px; }
+  .ref { font-size: 10.5px; color: #334155; padding: 3px 0; font-family: Consolas, monospace; }
+  .ref b { color: #1d4ed8; }
+
+  .note {
+    margin-top: 20px; padding-top: 12px; border-top: 1px solid #e2e8f0;
+    font-size: 10.5px; color: #64748b; line-height: 1.65;
+  }
+  .note b { color: #334155; }
+</style>
+</head>
+<body>
+
+<div class="title">AIVES — Kiến trúc 3 lớp (AI-powered Viva Exam System)</div>
+<div class="subtitle">ASP.NET Core .NET 8 · Razor Pages · SignalR · EF Core · Multi-provider AI</div>
+
+<!-- Browser -->
+<div class="browser-wrap">
+  <div class="browser">
+    <div class="t">Trình duyệt (người dùng)</div>
+    <div class="d">HTML · Bootstrap · SignalR JS client · WebAudio recorder<br>Micro, phát audio TTS, đồng hồ đếm ngược</div>
+  </div>
+</div>
+
+<div class="conn">
+  <div class="vline req"></div>
+  <span class="lbl" style="left: calc(50% - 62px); top: 8px;">Request ▼</span>
+  <span class="lbl" style="left: calc(50% + 14px); top: 8px;">▲ Response</span>
+</div>
+
+<div class="grid">
+
+  <!-- ═══ PRESENTATION ═══ -->
+  <div class="gutter-label">Web App<small>startup project</small></div>
+  <div class="layer pres">
+    <div class="layer-h">
+      <span class="name">Presentation Layer</span>
+      <span class="proj">StudentNameMVC</span>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="ct">Razor Pages</div>
+        <ul>
+          <li>/Viva/Index · /Viva/Exam</li>
+          <li>/Grading/Index · Review</li>
+          <li>/ClassReports · /StudentReports</li>
+          <li>/Admin/AiSettings</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="ct">SignalR (Real-time)</div>
+        <ul>
+          <li>VivaHub — JoinSession</li>
+          <li>BeginAnswering</li>
+          <li>TranscriptReady · FollowUpGenerated</li>
+          <li>GradingStarted / Completed</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="ct">Workers &amp; Hubs</div>
+        <ul>
+          <li>VivaTimerWorker (đếm ngược)</li>
+          <li>VivaRealtimePublisher</li>
+          <li>ViewModels · Authorization</li>
+          <li>Antiforgery · middleware</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="right">
+    <div class="ext ai">
+      <div class="et">AI Providers bên ngoài (HTTPS)</div>
+      <div class="row"><span class="k">Gemini</span><span class="v">gemini-3.8-flash-tts</span></div>
+      <div class="row"><span class="k">Groq</span><span class="v">whisper-large-v3-turbo</span></div>
+      <div class="row"><span class="k">Groq</span><span class="v">openai/gpt-oss-120b</span></div>
+      <div class="row"><span class="k">DeepSeek</span><span class="v">deepseek-v4.1-flash</span></div>
+    </div>
+  </div>
+
+  <div></div>
+  <div class="layerarrow">
+    <div class="down"></div>
+    <div class="up"></div>
+    <span class="albl req">Request ▼</span>
+    <span class="albl res">▲ Response</span>
+  </div>
+  <div></div>
+
+  <!-- ═══ BUSINESS ═══ -->
+  <div class="gutter-label">.dll<small>Class Library</small></div>
+  <div class="layer biz">
+    <div class="layer-h">
+      <span class="name">Business Logic Layer</span>
+      <span class="proj">AIVES.BLL</span>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="ct">Viva Interview Core (G3)</div>
+        <ul>
+          <li>VivaSessionOrchestrator</li>
+          <li>VivaRealtimeSessionService</li>
+          <li>VivaTimerManager</li>
+          <li>AnswerQualityGate</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="ct">Grading &amp; Reporting (G4/G6)</div>
+        <ul>
+          <li>GradingOrchestrator (HITL)</li>
+          <li>VivaGradingBackgroundService</li>
+          <li>GradingRecoveryScanner</li>
+          <li>StudentReport · ClassReport</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="ct">AI Abstractions</div>
+        <ul>
+          <li>IAnswerGradingService + adapters</li>
+          <li>Speech-to-Text / Text-to-Speech</li>
+          <li>FollowUpGenerator · Validators</li>
+          <li>ProtectedAiCredentialStore</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="right">
+    <div class="legend">
+      <div class="lt">Legends</div>
+      <div class="lgrow"><span class="lg-solid"></span><span>Request — đi xuống</span></div>
+      <div class="lgrow"><span class="lg-dash"></span><span>Response — đi lên</span></div>
+      <div class="lgrow" style="margin-top:8px; font-size:9.5px; color:#64748b; display:block; line-height:1.5;">
+        SignalR cho phép server <b>chủ động đẩy</b> sự kiện lên trình duyệt mà không cần client hỏi lại.
+      </div>
+    </div>
+    <div class="refs">
+      <div class="rt">Project references</div>
+      <div class="ref"><b>MVC</b> → BLL → DAL</div>
+      <div class="ref">DAL không tham chiếu ngược</div>
+      <div class="ref">Repository &amp; DbContext: <b>Scoped</b></div>
+    </div>
+  </div>
+
+  <div></div>
+  <div class="layerarrow">
+    <div class="down"></div>
+    <div class="up"></div>
+    <span class="albl req">Request ▼</span>
+    <span class="albl res">▲ Response</span>
+  </div>
+  <div></div>
+
+  <!-- ═══ DATA ═══ -->
+  <div class="gutter-label">Data<small>AIVES.DAL</small></div>
+  <div class="layer data">
+    <div class="layer-h">
+      <span class="name">Data Access Layer</span>
+      <span class="proj">AIVES.DAL</span>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="ct">Repositories (Scoped)</div>
+        <ul>
+          <li>VivaSessionRepository</li>
+          <li>VivaTurn · VivaQuestion</li>
+          <li>VivaGradingRepository</li>
+          <li>ExamReportRepository</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="ct">Entity Models (11)</div>
+        <ul>
+          <li>VivaSession · VivaSessionTurn</li>
+          <li>VivaQuestion · VivaRubricCriterion</li>
+          <li>VivaGradingResult · VivaGradeChangeLog</li>
+          <li>SystemAccount (+ News ×5)</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="ct">AIVESDbContext</div>
+        <ul>
+          <li>EF Core (Database First)</li>
+          <li>Lifetime: Scoped</li>
+          <li>Không Singleton (tránh Captive Dependency)</li>
+          <li>SaveChangesAsync — persistence first</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="right">
+    <div class="ext sql">
+      <div class="et">SQL Server — AIVES</div>
+      <div class="row"><span class="k">Viva tables</span><span class="v">6</span></div>
+      <div class="row"><span class="k">News tables</span><span class="v">5</span></div>
+      <div class="row"><span class="k">Rubric criteria</span><span class="v">9 seeded</span></div>
+      <div class="row"><span class="k">Audit log</span><span class="v">VivaGradeChangeLog</span></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="note">
+  <b>Luồng dữ liệu hai chiều:</b> Request đi xuống (Browser → Presentation → BLL → DAL → SQL Server), Response đi ngược lên.
+  Riêng <b>AI Providers</b> được BLL gọi trực tiếp qua HTTPS — DAL không bao giờ gọi AI.
+  <b>SignalR</b> tạo kênh thứ hai: server đẩy <i>TranscriptReady</i>, <i>FollowUpGenerated</i>, <i>GradingCompleted</i> lên trình duyệt mà client không cần polling.
+  <b>Chấm điểm chạy nền:</b> VivaGradingBackgroundService dùng Channel queue + IServiceScopeFactory để resolve scoped services cho từng job.
+</div>
+
+</body>
+</html>

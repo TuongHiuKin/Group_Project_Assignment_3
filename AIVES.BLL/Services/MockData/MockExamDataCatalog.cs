@@ -10,9 +10,8 @@ public sealed record MockAttempt(string Key, DateTime StartedAtUtc, IReadOnlyLis
 public sealed record MockStudent(MockAccount Account, IReadOnlyList<MockAttempt> Attempts);
 
 /// <summary>
-/// Dữ liệu mô phỏng cho các nhóm chức năng chưa triển khai (Nhóm 2: kỳ thi, Nhóm 4: AI chấm điểm):
-/// tài khoản test và lượt thi EXAM01 đã hoàn thành của sinh viên mẫu. Điểm không lưu sẵn mà do
-/// <see cref="ExamReporting.RubricGradingService"/> chấm từ transcript theo Rubric giảng viên,
+/// Dữ liệu mẫu cho môi trường dev: tài khoản test và lượt thi EXAM01 đã hoàn thành của sinh viên mẫu.
+/// Điểm không lưu sẵn mà do <see cref="ExamReporting.RubricGradingService"/> chấm từ transcript theo Rubric giảng viên,
 /// nên thống kê lớp và nhận xét cho sinh viên luôn khớp với thiết lập chấm điểm.
 /// </summary>
 public static class MockExamDataCatalog

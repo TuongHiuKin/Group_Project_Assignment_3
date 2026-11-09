@@ -11,18 +11,11 @@ public class SystemAccountService : ISystemAccountService, ISystemAccountService
 {
     private readonly ISystemAccountRepository _accountRepo;
     private readonly PasswordHasher<SystemAccount> _passwordHasher;
-    private readonly INewsArticleRepository? _articlesRepo;
 
     public SystemAccountService(ISystemAccountRepository accountRepo)
     {
         _accountRepo = accountRepo ?? throw new ArgumentNullException(nameof(accountRepo));
         _passwordHasher = new PasswordHasher<SystemAccount>();
-    }
-
-    public SystemAccountService(ISystemAccountRepository accountRepo, INewsArticleRepository articlesRepo)
-        : this(accountRepo)
-    {
-        _articlesRepo = articlesRepo ?? throw new ArgumentNullException(nameof(articlesRepo));
     }
 
     private static string NormalizeEmail(string email)
@@ -226,42 +219,4 @@ public class SystemAccountService : ISystemAccountService, ISystemAccountService
         return account;
     }
 
-    public async Task<List<NewsArticle>> GetNewsArticlesFromUserAsync(int accountId, CancellationToken ct = default)
-    {
-        if (_articlesRepo == null)
-            throw new InvalidOperationException("INewsArticleRepository not provided.");
-        var exist = await _accountRepo.GetByIdAsync(accountId, includeDeleted: false, ct);
-        if (exist == null)
-            throw new ArgumentException("Cannot find this user", nameof(accountId));
-        return await _articlesRepo.GetByCreatorAsync(accountId, null, ct);
-    }
-
-    public async Task<List<NewsArticle>> GetNewsArticlesLecturerAsync(int accountId, CancellationToken ct = default)
-    {
-        if (_articlesRepo == null)
-            throw new InvalidOperationException("INewsArticleRepository not provided.");
-        var exist = await _accountRepo.GetByIdAsync(accountId, includeDeleted: false, ct);
-        if (exist == null)
-            throw new ArgumentException("Cannot find this user", nameof(accountId));
-        if (exist.AccountRole != 2)
-        {
-            throw new ArgumentException("Only Lecturers are allowed to view this", nameof(accountId));
-        }
-        return await _articlesRepo.GetByCreatorAsync(accountId, null, ct);
-    }
-
-    public async Task<List<NewsArticle>> GetNewsArticlesPublicAsync(CancellationToken ct = default)
-    {
-        if (_articlesRepo == null)
-            throw new InvalidOperationException("INewsArticleRepository not provided.");
-        return await _articlesRepo.GetActiveAsync(null, ct);
-    }
-}
-
-public class SystemAccountServices : SystemAccountService
-{
-    public SystemAccountServices(INewsArticleRepository articlesRepo, ISystemAccountRepository systemAccountRepo)
-        : base(systemAccountRepo, articlesRepo)
-    {
-    }
 }
