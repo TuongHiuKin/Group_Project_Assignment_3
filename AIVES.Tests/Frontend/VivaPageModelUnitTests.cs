@@ -127,6 +127,9 @@ public sealed class VivaPageModelUnitTests
             ));
         }
 
+        public Task<string?> EnsureFollowUpAudioAsync(Guid sessionId, Guid turnId, CancellationToken ct = default)
+            => Task.FromResult<string?>("/audio/cache/tts-followup.wav");
+
         public Task<VivaFollowUpDto?> GenerateFollowUpAsync(Guid sessionId, Guid turnId, CancellationToken ct = default)
         {
             CapturedFollowUpSessionId = sessionId;

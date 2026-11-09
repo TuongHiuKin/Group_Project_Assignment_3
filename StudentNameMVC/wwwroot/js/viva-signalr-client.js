@@ -15,6 +15,7 @@ class VivaExamClient {
         this.submitAudioUrl = config.submitAudioUrl || '/Viva/Exam?handler=SubmitAudio';
         this.startSessionUrl = config.startSessionUrl || '/Viva/Exam?handler=StartSession';
         this.retryFollowUpUrl = config.retryFollowUpUrl || '/Viva/Exam?handler=RetryFollowUp';
+        this.followUpAudioUrl = config.followUpAudioUrl || '/Viva/Exam?handler=FollowUpAudio';
         this.finishSessionUrl = config.finishSessionUrl || '/Viva/Exam?handler=FinishSession';
         // AiServices:UseBrowserSpeechSynthesis: questions are always read by speechSynthesis, never by AI audio files.
         this.useBrowserTts = config.useBrowserTts === true;
@@ -618,6 +619,44 @@ class VivaExamClient {
         }
     }
 
+    /**
+     * Đọc câu hỏi xoáy bằng ĐÚNG giọng của câu hỏi chính.
+     *
+     * Câu hỏi chính luôn có file audio do Gemini TTS sinh sẵn. Câu hỏi xoáy sinh ra lúc chạy nên
+     * có thể thiếu file (TTS lỗi/timeout lúc sinh), khi đó playTts sẽ rơi về speechSynthesis của
+     * trình duyệt — giọng khác hoàn toàn và phụ thuộc máy người dùng. Trước khi chấp nhận fallback,
+     * xin server sinh lại audio để giọng luôn thống nhất.
+     */
+    async playFollowUpTts(followUp) {
+        const onDone = () => this.requestBeginAnswering('Mời bạn bắt đầu ghi âm trả lời câu hỏi phụ.');
+        let audioUrl = followUp.audioUrl;
+
+        if (!audioUrl && !this.useBrowserTts && this.followUpAudioUrl && followUp.turnId) {
+            try {
+                const body = new URLSearchParams({ sessionId: this.sessionId, turnId: followUp.turnId });
+                const resp = await fetch(this.followUpAudioUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'RequestVerificationToken': this.antiForgeryToken
+                    },
+                    body
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data && data.audioUrl) {
+                        audioUrl = data.audioUrl;
+                        followUp.audioUrl = audioUrl;
+                    }
+                }
+            } catch (err) {
+                console.warn('Could not fetch follow-up audio from the server:', err);
+            }
+        }
+
+        this.playTts(followUp.followUpContent, this.el.followUpAudio, audioUrl, onDone);
+    }
+
     handleFollowUpGenerated(followUp) {
         if (!followUp) return;
         this.hideFollowUpError();
@@ -640,9 +679,7 @@ class VivaExamClient {
         // Follow-up TTS Playback (UI-05); the mic unlocks only after BeginAnswering succeeds.
         if (this.el.btnPlayFollowUpAudio) this.el.btnPlayFollowUpAudio.classList.remove('d-none');
         this.setRecordingUiState('disabled', 'Đang đọc câu hỏi phụ, vui lòng nghe hết rồi ghi âm.');
-        this.playTts(followUp.followUpContent, this.el.followUpAudio, followUp.audioUrl, () => {
-            this.requestBeginAnswering('Mời bạn bắt đầu ghi âm trả lời câu hỏi phụ.');
-        });
+        this.playFollowUpTts(followUp);
 
         this.showToast('AI đã tạo câu hỏi phụ cho bạn!', 'info');
     }

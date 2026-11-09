@@ -662,6 +662,60 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
     }
 
     /// <inheritdoc />
+    public async Task<string?> EnsureFollowUpAudioAsync(Guid sessionId, Guid turnId, CancellationToken ct = default)
+    {
+        var session = await _sessionRepo.GetByIdAsync(sessionId, ct)
+            ?? throw new KeyNotFoundException($"Session {sessionId} was not found.");
+
+        if (session.State is (byte)VivaSessionState.Completed or (byte)VivaSessionState.TimedOut)
+        {
+            throw new InvalidOperationException("Phiên thi đã kết thúc, không sinh được audio câu hỏi xoáy.");
+        }
+
+        var turn = await _turnRepo.GetByIdAsync(turnId, ct)
+            ?? throw new KeyNotFoundException($"Turn {turnId} was not found.");
+
+        if (turn.SessionId != sessionId)
+        {
+            throw new InvalidOperationException("Lượt trả lời không thuộc phiên thi này.");
+        }
+
+        if (string.IsNullOrWhiteSpace(turn.FollowUpQuestionText))
+        {
+            // Lượt này không sinh câu hỏi xoáy (câu trả lời không đạt cổng chất lượng) — không có gì để đọc.
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(turn.FollowUpAudioUrl))
+        {
+            return turn.FollowUpAudioUrl;
+        }
+
+        // Sinh lại bằng đúng _ttsService mà câu hỏi chính dùng, nên giọng đọc trùng khớp.
+        string? audioUrl = null;
+        try
+        {
+            var ttsResult = await _ttsService.SynthesizeAsync(turn.FollowUpQuestionText, "vi-VN", ct);
+            if (ttsResult.IsSuccess && !string.IsNullOrWhiteSpace(ttsResult.AudioUrl))
+            {
+                audioUrl = ttsResult.AudioUrl;
+                await _turnRepo.SaveFollowUpAsync(turnId, turn.FollowUpQuestionText, audioUrl, ct);
+                _logger.LogInformation(
+                    "Generated missing follow-up audio for turn {TurnId} of session {SessionId}: {Url}",
+                    turnId, sessionId, audioUrl);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "EnsureFollowUpAudio failed for turn {TurnId} of session {SessionId}.", turnId, sessionId);
+        }
+
+        return audioUrl;
+    }
+
+    /// <inheritdoc />
     public Task<VivaSessionStatusDto> CompleteSessionAsync(Guid sessionId, CancellationToken ct = default) =>
         CompleteSessionInternalAsync(sessionId, lockAlreadyHeld: false, ct);
 

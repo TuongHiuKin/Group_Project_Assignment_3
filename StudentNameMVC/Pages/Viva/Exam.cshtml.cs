@@ -332,6 +332,50 @@ public class ExamModel : PageModel
         }
     }
 
+    /// <summary>
+    /// Sinh lại audio TTS cho một câu hỏi xoáy khi bản ghi cũ không có <c>FollowUpAudioUrl</c>.
+    /// Mục đích: câu hỏi xoáy phải được đọc bằng CÙNG giọng với câu hỏi chính. Nếu client không có
+    /// file audio, nó rơi về <c>speechSynthesis</c> của trình duyệt — giọng khác hẳn và phụ thuộc
+    /// máy người dùng. Endpoint này để client xin lại audio trước khi chấp nhận fallback.
+    /// </summary>
+    public async Task<IActionResult> OnPostFollowUpAudioAsync(
+        [FromForm] Guid sessionId,
+        [FromForm] Guid turnId,
+        CancellationToken ct = default)
+    {
+        if (sessionId == Guid.Empty || turnId == Guid.Empty)
+        {
+            return BadRequest(new { message = "Mã phiên thi hoặc mã lượt trả lời không hợp lệ." });
+        }
+
+        if (_orchestrator == null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                message = "Hệ thống Viva Interview Orchestrator chưa được kích hoạt."
+            });
+        }
+
+        var studentId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? string.Empty;
+        if (!await _orchestrator.AuthorizeUserForSessionAsync(sessionId, studentId, ct))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            var audioUrl = await _orchestrator.EnsureFollowUpAudioAsync(sessionId, turnId, ct);
+            return audioUrl is null
+                ? new JsonResult(new { success = false, audioUrl = (string?)null })
+                : new JsonResult(new { success = true, audioUrl });
+        }
+        catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
+        {
+            _logger.LogWarning(ex, "FollowUpAudio rejected for {SessionId}/{TurnId}", sessionId, turnId);
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     private async Task<IActionResult?> EnsureTranscriptReadyAsync(Guid sessionId, CancellationToken ct)
     {
         if (sessionId == Guid.Empty)

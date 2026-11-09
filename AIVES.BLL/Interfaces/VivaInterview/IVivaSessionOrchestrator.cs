@@ -25,6 +25,13 @@ public interface IVivaSessionOrchestrator
     Task<VivaQuestionDto> StartSessionAsync(Guid sessionId, CancellationToken ct = default);
     Task<VivaTranscriptDto> SubmitAnswerAudioAsync(VivaAnswerSubmissionDto submission, CancellationToken ct = default);
     Task<VivaFollowUpDto?> GenerateFollowUpAsync(Guid sessionId, Guid turnId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bảo đảm câu hỏi xoáy đã có file audio do AI đọc, để nó được đọc bằng đúng giọng
+    /// với câu hỏi chính. Trả về URL nếu đã có sẵn hoặc vừa sinh xong; <c>null</c> nếu
+    /// lượt đó không có câu hỏi xoáy hoặc TTS thất bại (client sẽ phải fallback).
+    /// </summary>
+    Task<string?> EnsureFollowUpAudioAsync(Guid sessionId, Guid turnId, CancellationToken ct = default);
     Task<VivaSessionStatusDto> CompleteSessionAsync(Guid sessionId, CancellationToken ct = default);
 
     /// <summary>
