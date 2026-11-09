@@ -41,39 +41,50 @@
                     <i class="bi bi-mic-fill text-danger me-2"></i> Nhật Ký Vấn Đáp Giọng Nói (Speech-to-Text):
                 </div>
 
-                <!-- 2.1 Thí sinh trả lời ban đầu -->
+                <!-- 2.1 Câu trả lời chính -->
                 <div class="aives-answer-box mb-3">
                     <div class="small fw-bold text-primary mb-1 d-flex align-items-center gap-1">
-                        <i class="bi bi-person-fill"></i> Thí sinh trả lời ban đầu:
+                        <i class="bi bi-person-fill"></i> Câu trả lời chính:
                     </div>
                     <p class="mb-0 text-dark fst-italic lh-base">
                         @(string.IsNullOrWhiteSpace(Model.StudentInitialAnswerTranscript) 
-                            ? "Chưa có bản ghi âm câu trả lời ban đầu." 
+                            ? "Chưa có bản ghi âm câu trả lời chính." 
                             : $"\"{Model.StudentInitialAnswerTranscript}\"")
                     </p>
                 </div>
 
-                <!-- 2.2 AI Giám khảo hỏi xoáy / làm rõ (Adaptive Follow-up) -->
+                <!-- 2.2 Câu hỏi xoáy của AI + câu trả lời xoáy -->
                 @if (!string.IsNullOrWhiteSpace(Model.AiFollowUpQuestion))
                 {
                     <div class="aives-followup-box mb-3">
                         <div class="small fw-bold text-danger mb-1 d-flex align-items-center gap-1">
-                            <i class="bi bi-robot"></i> AI Giám Khảo Hỏi Xoáy / Làm Rõ (Adaptive Follow-up):
+                            <i class="bi bi-robot"></i> Câu hỏi xoáy (AI sinh ra từ câu trả lời trên):
                         </div>
                         <p class="mb-0 text-dark fw-bold lh-base">
                             @Model.AiFollowUpQuestion
                         </p>
                     </div>
 
-                    <!-- 2.3 Thí sinh phản hồi câu hỏi đào sâu -->
+                    <!-- 2.3 Câu trả lời xoáy -->
                     <div class="aives-followup-answer-box">
                         <div class="small fw-bold text-success mb-1 d-flex align-items-center gap-1">
-                            <i class="bi bi-person-check-fill"></i> Thí sinh phản hồi câu hỏi đào sâu:
+                            <i class="bi bi-person-check-fill"></i> Câu trả lời xoáy:
                         </div>
                         <p class="mb-0 text-dark fst-italic lh-base">
                             @(string.IsNullOrWhiteSpace(Model.StudentFollowUpAnswerTranscript) 
-                                ? "Chưa có bản ghi câu trả lời bổ sung." 
+                                ? "Chưa có bản ghi câu trả lời xoáy." 
                                 : $"\"{Model.StudentFollowUpAnswerTranscript}\"")
+                        </p>
+                    </div>
+                }
+                else
+                {
+                    <div class="aives-followup-box" style="background: #f8fafc; border-left-color: #cbd5e1;">
+                        <div class="small fw-bold text-secondary mb-1 d-flex align-items-center gap-1">
+                            <i class="bi bi-dash-circle"></i> Không có câu hỏi xoáy:
+                        </div>
+                        <p class="mb-0 text-secondary small lh-base">
+                            Câu trả lời chính không đạt điều kiện để AI đặt câu hỏi xoáy (câu trả lời rỗng, quá ngắn, lạc đề hoặc chỉ gồm câu đệm).
                         </p>
                     </div>
                 }
