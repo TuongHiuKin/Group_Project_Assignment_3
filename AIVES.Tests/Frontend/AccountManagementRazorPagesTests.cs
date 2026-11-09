@@ -119,6 +119,12 @@ public sealed class AccountManagementRazorPagesTests
             return Task.FromResult(10);
         }
 
+        public Task<int> RegisterStudentAsync(string name, string email, string password, int? defaultLecturerId = null, CancellationToken ct = default)
+        {
+            CreatedName = name;
+            return Task.FromResult(10);
+        }
+
         public Task<bool> UpdateAccountAsync(int id, string name, string email, byte role, string? newPassword = null, CancellationToken ct = default) =>
             Task.FromResult(true);
 

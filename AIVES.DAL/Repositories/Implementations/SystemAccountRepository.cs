@@ -112,7 +112,8 @@ public sealed class SystemAccountRepository(AIVESDbContext context) : ISystemAcc
             AccountName = input.Name,
             AccountEmail = NormalizeEmail(input.Email),
             AccountPasswordHash = input.PasswordHash,
-            AccountRole = input.Role
+            AccountRole = input.Role,
+            LecturerId = input.LecturerId
         };
         context.SystemAccounts.Add(entity);
         await SaveChangesSafeAsync(ct);

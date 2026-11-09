@@ -45,6 +45,18 @@ public class AIVESDbContext : DbContext
             entity.Property(x => x.AccountPasswordHash).HasMaxLength(512).IsRequired();
             entity.Property(x => x.AccountRole).HasColumnType("tinyint");
             entity.Property(x => x.IsDeleted).HasDefaultValue(false).IsRequired();
+
+            // Sinh viên trỏ tới giảng viên phụ trách (script 008). Tự tham chiếu, không cascade:
+            // xoá giảng viên không được kéo theo sinh viên.
+            entity.HasOne(x => x.Lecturer)
+                .WithMany(x => x.Students)
+                .HasForeignKey(x => x.LecturerId)
+                .OnDelete(DeleteBehavior.ClientNoAction)
+                .HasConstraintName("FK_SystemAccount_Lecturer");
+            // Filtered index: chỉ sinh viên mới có LecturerId.
+            entity.HasIndex(x => x.LecturerId)
+                .HasDatabaseName("IX_SystemAccount_LecturerId")
+                .HasFilter("[LecturerId] IS NOT NULL");
         });
 
         modelBuilder.Entity<VivaQuestion>(entity =>

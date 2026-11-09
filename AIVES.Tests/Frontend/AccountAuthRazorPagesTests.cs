@@ -470,6 +470,8 @@ public sealed class AccountAuthRazorPagesTests
             => Task.FromResult(Accounts.FirstOrDefault(a => a.AccountId == id));
 
         public Task<int> CreateAccountAsync(string name, string email, string password, byte role, CancellationToken ct = default) => Task.FromResult(1);
+        public Task<int> RegisterStudentAsync(string name, string email, string password, int? defaultLecturerId = null, CancellationToken ct = default)
+            => Task.FromResult(1);
         public Task<bool> UpdateAccountAsync(int id, string name, string email, byte role, string? newPassword = null, CancellationToken ct = default) => Task.FromResult(true);
         public Task<bool> SoftDeleteAccountAsync(int id, CancellationToken ct = default) => Task.FromResult(true);
         public Task<AccountDeleteResult> HardDeleteAccountAsync(int id, CancellationToken ct = default) => Task.FromResult(AccountDeleteResult.Deleted);

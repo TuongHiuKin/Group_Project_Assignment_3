@@ -21,6 +21,7 @@ Toàn bộ script quản lý cơ sở dữ liệu theo định hướng **DB-Fir
 | 5 | [`005-create-viva-grading.sql`](../database/005-create-viva-grading.sql) | **`VivaGradingResult`, `VivaGradeChangeLog`** (ROWVERSION, unique `(SessionId, QuestionId)`, check constraint lý do) | **Group 4 — bắt buộc** |
 | 6 | [`006-seed-viva-rubric.sql`](../database/006-seed-viva-rubric.sql) | `VivaQuestion.BloomLevel`; `VivaRubricCriteria` + 9 tiêu chí rubric | **Group 4 — bắt buộc** |
 | 7 | [`007-drop-legacy-news-tables.sql`](../database/007-drop-legacy-news-tables.sql) | Drop `NewsTag` → `NewsArticle` → `Tag` → `Category` | Dọn code mẫu News ngoài 3 nhóm chức năng; **chạy sau 006** |
+| 8 | [`008-add-student-lecturer-link.sql`](../database/008-add-student-lecturer-link.sql) | `SystemAccount.LecturerId` + FK tự tham chiếu + filtered index | Sinh viên tự đăng ký quy về một giảng viên phụ trách; **chạy sau 007** |
 
 Mọi script đều **idempotent** (chạy lại an toàn). Tên bảng là **số ít** (`VivaGradingResult`, `VivaGradeChangeLog`) để khớp EF Core model trong `AIVESDbContext`.
 
@@ -48,11 +49,12 @@ sqlcmd -S localhost -E -i database/004-seed-viva-questions.sql
 sqlcmd -S localhost -E -i database/005-create-viva-grading.sql
 sqlcmd -S localhost -E -i database/006-seed-viva-rubric.sql
 sqlcmd -S localhost -E -i database/007-drop-legacy-news-tables.sql
+sqlcmd -S localhost -E -i database/008-add-student-lecturer-link.sql
 ```
 *(Nếu sử dụng SQL Server Express, thay `-S localhost` bằng `-S .\SQLEXPRESS`. Nếu dùng SQL Authentication, thay `-E` bằng `-U sa -P YourPassword`).*
 
 ### Kiểm chứng nhanh trên SQL Server thật
-Repo có bộ test SQL tùy chọn (tạo DB tạm, chạy toàn bộ 001→007, kiểm tra schema và repository):
+Repo có bộ test SQL tùy chọn (tạo DB tạm, chạy toàn bộ 001→008, kiểm tra schema và repository):
 
 ```powershell
 $env:AIVES_RUN_DATABASE_WRITE_TESTS='1'

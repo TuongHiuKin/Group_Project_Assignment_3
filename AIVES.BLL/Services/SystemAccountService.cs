@@ -46,7 +46,45 @@ public class SystemAccountService : ISystemAccountService, ISystemAccountService
         return await _accountRepo.GetByIdAsync(id, includeDeleted, ct);
     }
 
+    /// <summary>
+    /// Sinh viên tự đăng ký từ /Account/Register. Chỉ tạo được tài khoản Staff (role 1);
+    /// giảng viên vẫn do Admin tạo ở /Account/Index. Tài khoản mới được gán về giảng viên
+    /// mặc định để /ClassReports lọc được danh sách sinh viên của giảng viên đó.
+    /// </summary>
+    /// <param name="defaultLecturerId">
+    /// Giảng viên phụ trách, do tầng Presentation resolve từ cấu hình. NULL nếu chưa có giảng viên nào.
+    /// </param>
+    public async Task<int> RegisterStudentAsync(
+        string name,
+        string email,
+        string password,
+        int? defaultLecturerId = null,
+        CancellationToken ct = default)
+    {
+        if (defaultLecturerId is { } lecturerId)
+        {
+            var lecturer = await _accountRepo.GetByIdAsync(lecturerId, includeDeleted: false, ct);
+            if (lecturer is null || lecturer.AccountRole != 2)
+            {
+                throw new InvalidOperationException(
+                    "Giảng viên phụ trách mặc định không tồn tại hoặc không phải tài khoản giảng viên.");
+            }
+        }
+
+        // Vai trò luôn là Staff (1) — không nhận role từ client.
+        return await CreateAccountAsync(name, email, password, role: 1, defaultLecturerId, ct);
+    }
+
     public async Task<int> CreateAccountAsync(string name, string email, string password, byte role, CancellationToken ct = default)
+        => await CreateAccountAsync(name, email, password, role, lecturerId: null, ct);
+
+    private async Task<int> CreateAccountAsync(
+        string name,
+        string email,
+        string password,
+        byte role,
+        int? lecturerId,
+        CancellationToken ct = default)
     {
         // 1. Business validation
         if (string.IsNullOrWhiteSpace(name))
@@ -80,7 +118,8 @@ public class SystemAccountService : ISystemAccountService, ISystemAccountService
             Name: trimmedName,
             Email: normalizedEmail,
             Role: role,
-            PasswordHash: passwordHash
+            PasswordHash: passwordHash,
+            LecturerId: lecturerId
         );
 
         return await _accountRepo.CreateAsync(command, ct);

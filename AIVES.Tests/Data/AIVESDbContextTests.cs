@@ -76,7 +76,12 @@ public class AIVESDbContextTests
         Assert.NotEmpty(model.GetEntityTypes().SelectMany(x => x.GetCheckConstraints()));
         var account = model.FindEntityType(typeof(SystemAccount))!;
         Assert.Equal("Latin1_General_100_CI_AS", account.FindProperty(nameof(SystemAccount.AccountEmail))!.GetCollation());
-        Assert.True(Assert.Single(account.GetIndexes()).IsUnique);
+        // Unique index trên email (chống trùng tài khoản).
+        Assert.True(Assert.Single(account.GetIndexes(), x => x.IsUnique).IsUnique);
+        // Filtered index cho sinh viên → giảng viên phụ trách (script 008).
+        var lecturerIndex = Assert.Single(account.GetIndexes(), x => !x.IsUnique);
+        Assert.Equal("IX_SystemAccount_LecturerId", lecturerIndex.GetDatabaseName());
+        Assert.Equal("[LecturerId] IS NOT NULL", lecturerIndex.GetFilter());
     }
 
     [Fact]
