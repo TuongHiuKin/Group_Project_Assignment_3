@@ -19,6 +19,19 @@ public sealed class VivaRealtimeSessionService(
         var state = (VivaSessionState)session.State;
         var latest = session.Turns.OrderByDescending(t => t.TurnOrdinal).ThenByDescending(t => t.CreatedAtUtc).FirstOrDefault();
         var count = session.Turns.Count;
+        // Lịch sử hội thoại đầy đủ: mỗi lượt kèm câu hỏi xoáy đã sinh (nếu có). UI dùng để dựng lại
+        // "câu hỏi chính → câu trả lời → câu hỏi xoáy → câu trả lời" thay vì chỉ hiện lượt cuối.
+        var turnHistory = session.Turns
+            .OrderBy(t => t.TurnOrdinal)
+            .Select(t => new VivaTurnDto(
+                t.TurnId,
+                t.QuestionId,
+                t.TurnOrdinal,
+                t.TranscriptText,
+                t.ConfidenceScore,
+                t.FollowUpQuestionText,
+                t.FollowUpAudioUrl))
+            .ToList();
         var ordered = (await questions.GetQuestionsByExamAsync(session.ExamId, ct) ?? new())
             .OrderBy(q => q.QuestionId, StringComparer.Ordinal).ToList();
         var question = latest is null ? ordered.FirstOrDefault() : await questions.GetByIdAsync(latest.QuestionId, ct);
@@ -33,7 +46,11 @@ public sealed class VivaRealtimeSessionService(
                 nextQuestion.Content, nextQuestion.TimeLimitSeconds, nextQuestion.AudioUrl);
             var nextStatus = new VivaSessionStatusDto(sessionId, session.ExamId, session.StudentId, state, count,
                 VivaSessionOrchestrator.SessionMaxTurns(ordered.Count), latest!.CompletedAtUtc ?? latest.CreatedAtUtc);
-            return new(nextStatus, nextCurrent, null, null, state == VivaSessionState.Answering ? timers.GetRemaining(sessionId) : null);
+            return new(nextStatus, nextCurrent, null, null,
+                state == VivaSessionState.Answering ? timers.GetRemaining(sessionId) : null)
+            {
+                Turns = turnHistory
+            };
         }
         VivaFollowUpDto? followUp = null;
         if (latest?.FollowUpQuestionText is { Length: > 0 } text)
@@ -51,7 +68,11 @@ public sealed class VivaRealtimeSessionService(
         var status = new VivaSessionStatusDto(sessionId, session.ExamId, session.StudentId, state,
             Math.Max(count, state is VivaSessionState.QuestionDelivered or VivaSessionState.Answering ? 1 : 0),
             VivaSessionOrchestrator.SessionMaxTurns(ordered.Count), updated);
-        return new(status, current, transcript, followUp, state == VivaSessionState.Answering ? timers.GetRemaining(sessionId) : null);
+        return new(status, current, transcript, followUp,
+            state == VivaSessionState.Answering ? timers.GetRemaining(sessionId) : null)
+        {
+            Turns = turnHistory
+        };
     }
 
     public async Task<VivaSessionSnapshotDto> PrepareJoinAsync(Guid sessionId, string userId, CancellationToken ct = default)

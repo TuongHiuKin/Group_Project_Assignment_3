@@ -80,6 +80,7 @@ class VivaExamClient {
 
             // Completed Section
             completedCard: document.getElementById('completedCard'),
+            conversationHistoryCard: document.getElementById('conversationHistoryCard'),
 
             // Alerts and modals
             errorToast: document.getElementById('vivaErrorToast'),
@@ -602,7 +603,9 @@ class VivaExamClient {
             this.el.transcriptionSpinner.classList.add('d-none');
         }
 
-        if (this.el.transcriptCard) {
+        // Server đánh dấu data-server-hidden="true" khi phiên đã xong: panel STT phải giữ ẩn,
+        // vì lịch sử hội thoại đầy đủ đã hiển thị ở bảng "Diễn biến buổi thi".
+        if (this.el.transcriptCard && this.el.transcriptCard.dataset.serverHidden !== 'true') {
             this.el.transcriptCard.classList.remove('d-none');
         }
 
@@ -717,6 +720,17 @@ class VivaExamClient {
         if (this.el.questionCard) this.el.questionCard.classList.add('d-none');
         if (this.el.followUpCard) this.el.followUpCard.classList.add('d-none');
         if (this.el.answeringSection) this.el.answeringSection.classList.add('d-none');
+
+        // Panel STT của lượt cuối là thông tin thừa khi phiên đã xong — diễn biến đầy đủ đã ở bảng dưới.
+        if (this.el.transcriptCard) {
+            this.el.transcriptCard.classList.add('d-none');
+            this.el.transcriptCard.dataset.serverHidden = 'true';
+        }
+
+        // Bảng "Diễn biến buổi thi" chỉ có nghĩa khi đã kết thúc; server đã render sẵn nội dung.
+        if (this.el.conversationHistoryCard) {
+            this.el.conversationHistoryCard.classList.remove('d-none');
+        }
 
         if (this.el.completedCard) {
             this.el.completedCard.classList.remove('d-none');

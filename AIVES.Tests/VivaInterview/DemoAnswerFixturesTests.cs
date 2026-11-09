@@ -75,7 +75,9 @@ public class DemoAnswerFixturesTests
     public void DemoAnswer_is_long_enough_to_generate_follow_up(string questionId, string question, string answer)
     {
         // Cổng chất lượng yêu cầu tối thiểu 4 từ có nội dung; câu trả lời demo phải dài hơn nhiều
-        // để LLM sinh được câu hỏi xoáy có ý nghĩa.
+        // để LLM sinh được câu hỏi xoáy có ý nghĩa. `question` không dùng trực tiếp ở đây nhưng
+        // phải giữ trong TheoryData để dùng chung nguồn dữ liệu với hai test còn lại.
+        Assert.False(string.IsNullOrWhiteSpace(question));
         var wordCount = answer.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
         _out.WriteLine($"{questionId}: {wordCount} từ");
         Assert.True(wordCount >= 30, $"{questionId} chỉ có {wordCount} từ — quá ngắn để hỏi xoáy.");

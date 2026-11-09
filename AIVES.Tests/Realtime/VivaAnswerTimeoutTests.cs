@@ -115,7 +115,7 @@ public sealed class VivaAnswerTimeoutTests
         // Còn câu sau: không được kết thúc sớm, phải chuyển sang câu kế tiếp.
         Assert.NotEqual((byte)VivaSessionState.Completed, _data.Sessions[id].State);
         Assert.NotEqual((byte)VivaSessionState.TimedOut, _data.Sessions[id].State);
-        Assert.Single(_data.Turns.Values.Where(t => t.SessionId == id));
+        Assert.Single(_data.Turns.Values, t => t.SessionId == id);
     }
 
     [Fact]
@@ -149,7 +149,7 @@ public sealed class VivaAnswerTimeoutTests
 
         await Orchestrator().HandleAnswerTimeoutAsync(id, _data.Question.QuestionId);
 
-        Assert.Empty(_data.Turns.Values.Where(t => t.SessionId == id));
+        Assert.DoesNotContain(_data.Turns.Values, t => t.SessionId == id);
         Assert.Equal((byte)VivaSessionState.Answering, _data.Sessions[id].State);
     }
 }
