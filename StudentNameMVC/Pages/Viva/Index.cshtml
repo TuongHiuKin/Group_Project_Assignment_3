@@ -203,12 +203,29 @@
                         </div>
                         <h6 class="fw-bold text-dark mb-1">Kiến trúc ASP.NET Core & Dependency Injection</h6>
                         <small class="text-secondary">Khảo thí chuyên sâu về Transient, Scoped, Singleton và kiến trúc 3 lớp.</small>
+                        @if (Model.IsCandidate && Model.IsOrchestratorAvailable)
+                        {
+                            <div class="mt-2 pt-2 border-top">
+                                <small class="text-muted">
+                                    <i class="bi bi-layers-half me-1"></i>
+                                    Lượt thi đã dùng: <strong>@Model.AttemptsUsed / @Model.AttemptsMax</strong>
+                                </small>
+                            </div>
+                        }
                     </div>
 
                     @if (!Model.IsCandidate)
                     {
                         <div class="alert alert-secondary mb-0 rounded-4" role="note">
                             <i class="bi bi-person-lock me-2"></i>Chỉ tài khoản Sinh viên được vào thi. Quản trị viên và Giảng viên không tham gia thi vấn đáp.
+                        </div>
+                    }
+                    else if (Model.IsOrchestratorAvailable && !Model.HasAttemptsLeft)
+                    {
+                        <div class="alert alert-danger mb-0 rounded-4" role="alert">
+                            <i class="bi bi-exclamation-octagon-fill me-2"></i>
+                            Bạn đã dùng hết <strong>@Model.AttemptsMax</strong> lượt thi cho đề này
+                            (@Model.AttemptsUsed/@Model.AttemptsMax). Vui lòng liên hệ giảng viên nếu cần làm lại.
                         </div>
                     }
                     else if (Model.IsOrchestratorAvailable)

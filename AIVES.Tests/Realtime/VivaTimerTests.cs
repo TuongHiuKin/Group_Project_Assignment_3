@@ -64,7 +64,7 @@ public sealed class VivaTimerTests
         await _service.BeginAnsweringAsync(id, "student-a", _publisher);
         var transcript = await Orchestrator().SubmitAnswerAudioAsync(Answer(id));
         Assert.Null(_timer.GetDeadline(id));
-        Assert.Equal("Scoped per request.", transcript.TranscriptText);
+        Assert.Equal("DbContext is scoped so each request gets its own instance and connection.", transcript.TranscriptText);
         _clock.Advance(TimeSpan.FromMinutes(2));
         await _service.TickAsync(id, _publisher);
         Assert.Equal(0, _data.TimeoutSaves);

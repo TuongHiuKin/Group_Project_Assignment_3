@@ -119,7 +119,8 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
                     {
                         Stt = new StoredTargetModel { ProfileId = _configuration.Routing.Stt.ProfileId, Model = _configuration.Routing.Stt.Model },
                         Tts = new StoredTtsTargetModel { ProfileId = _configuration.Routing.Tts.ProfileId, Model = _configuration.Routing.Tts.Model, Voice = _configuration.Routing.Tts.Voice },
-                        Llm = new StoredTargetModel { ProfileId = _configuration.Routing.Llm.ProfileId, Model = _configuration.Routing.Llm.Model }
+                        Llm = new StoredTargetModel { ProfileId = _configuration.Routing.Llm.ProfileId, Model = _configuration.Routing.Llm.Model },
+                        Grading = new StoredTargetModel { ProfileId = _configuration.Routing.Grading.ProfileId, Model = _configuration.Routing.Grading.Model }
                     }
                 };
 
@@ -250,7 +251,8 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
                         {
                             Stt = new AiCapabilityTarget { ProfileId = stored.Routing.Stt?.ProfileId, Model = stored.Routing.Stt?.Model },
                             Tts = new AiTtsCapabilityTarget { ProfileId = stored.Routing.Tts?.ProfileId, Model = stored.Routing.Tts?.Model, Voice = stored.Routing.Tts?.Voice },
-                            Llm = new AiCapabilityTarget { ProfileId = stored.Routing.Llm?.ProfileId, Model = stored.Routing.Llm?.Model }
+                            Llm = new AiCapabilityTarget { ProfileId = stored.Routing.Llm?.ProfileId, Model = stored.Routing.Llm?.Model },
+                            Grading = new AiCapabilityTarget { ProfileId = stored.Routing.Grading?.ProfileId, Model = stored.Routing.Grading?.Model }
                         }
                     };
 
@@ -424,7 +426,8 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
             {
                 Stt = new AiCapabilityTarget { ProfileId = source.Routing.Stt.ProfileId, Model = source.Routing.Stt.Model },
                 Tts = new AiTtsCapabilityTarget { ProfileId = source.Routing.Tts.ProfileId, Model = source.Routing.Tts.Model, Voice = source.Routing.Tts.Voice },
-                Llm = new AiCapabilityTarget { ProfileId = source.Routing.Llm.ProfileId, Model = source.Routing.Llm.Model }
+                Llm = new AiCapabilityTarget { ProfileId = source.Routing.Llm.ProfileId, Model = source.Routing.Llm.Model },
+                Grading = new AiCapabilityTarget { ProfileId = source.Routing.Grading.ProfileId, Model = source.Routing.Grading.Model }
             }
         };
     }
@@ -454,6 +457,7 @@ public sealed class ProtectedAiCredentialStore : IAiCredentialStore
         public StoredTargetModel Stt { get; set; } = new();
         public StoredTtsTargetModel Tts { get; set; } = new();
         public StoredTargetModel Llm { get; set; } = new();
+        public StoredTargetModel Grading { get; set; } = new();
     }
 
     private sealed class StoredTargetModel

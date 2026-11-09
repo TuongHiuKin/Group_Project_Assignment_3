@@ -9,5 +9,5 @@ public interface IVivaRealtimeSessionService
     Task<VivaSessionSnapshotDto> PrepareJoinAsync(Guid sessionId, string userId, CancellationToken ct = default);
     Task<VivaTimeRemainingDto> BeginAnsweringAsync(Guid sessionId, string userId,
         IVivaRealtimePublisher publisher, CancellationToken ct = default);
-    Task TickAsync(Guid sessionId, IVivaRealtimePublisher publisher, CancellationToken ct = default);
+    Task<string?> TickAsync(Guid sessionId, IVivaRealtimePublisher publisher, CancellationToken ct = default);
 }

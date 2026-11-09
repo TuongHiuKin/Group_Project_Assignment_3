@@ -150,143 +150,6 @@
                 </div>
             }
 
-            <!-- DeepSeek Quick Connect Card -->
-            <div class="card shadow-sm border-0 mb-4 border-start border-4 border-primary">
-                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <h5 class="card-title mb-0 fw-bold">
-                        <i class="bi bi-lightning-charge-fill text-primary me-2"></i>Kết nối DeepSeek
-                    </h5>
-                    @if (Model.DeepSeekProfile != null)
-                    {
-                        <div class="d-flex align-items-center gap-2 flex-wrap">
-                            <span class="badge bg-success">
-                                <i class="bi bi-check-circle-fill me-1"></i>Đã kết nối
-                            </span>
-                            @if (Model.DeepSeekGradingEnabled)
-                            {
-                                <span class="badge bg-warning text-dark">Grading đang dùng DeepSeek</span>
-                            }
-                            @if (Model.DeepSeekLlmEnabled)
-                            {
-                                <span class="badge bg-info text-dark">LLM đang dùng DeepSeek</span>
-                            }
-                        </div>
-                    }
-                    else
-                    {
-                        <span class="badge bg-secondary">Chưa kết nối</span>
-                    }
-                </div>
-                <div class="card-body">
-                    <p class="text-muted small mb-3">
-                        Dán API key DeepSeek để hệ thống tự tạo hồ sơ
-                        (<code>@AiProviderModelDefaults.DeepSeekBaseUrl</code>) và định tuyến năng lực chấm điểm.
-                        DeepSeek <strong>không có STT/TTS</strong> nên hai năng lực đó giữ nguyên cấu hình cũ.
-                    </p>
-
-                    <form method="post" asp-page-handler="SaveDeepSeek" class="row g-3 align-items-end">
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold small" for="DeepSeekApiKey">
-                                API Key DeepSeek
-                                @if (Model.DeepSeekProfile?.ApiKey != null)
-                                {
-                                    <span class="text-muted">(đang lưu: <code>@Model.DeepSeekProfile.GetKeyHint()</code>)</span>
-                                }
-                            </label>
-                            <input type="password" class="form-control font-monospace" id="DeepSeekApiKey"
-                                   name="DeepSeekInput.ApiKey" autocomplete="off"
-                                   placeholder="@(Model.DeepSeekProfile?.ApiKey != null ? "Để trống nếu giữ nguyên key hiện tại" : "sk-...")" />
-                            <div class="form-text">
-                                Lấy key tại <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">platform.deepseek.com</a>.
-                                Key được mã hoá và lưu cục bộ, không ghi vào log hay git.
-                            </div>
-                        </div>
-
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold small" for="DeepSeekModel">Model</label>
-                            <select class="form-select font-monospace" id="DeepSeekModel" name="DeepSeekInput.Model">
-                                <option value="@AiProviderModelDefaults.DeepSeekChat" selected>@AiProviderModelDefaults.DeepSeekChat</option>
-                                <option value="@AiProviderModelDefaults.DeepSeekReasoner">@AiProviderModelDefaults.DeepSeekReasoner</option>
-                            </select>
-                        </div>
-
-                        <div class="col-md-3">
-                            <label class="form-label fw-semibold small d-block">Năng lực dùng DeepSeek</label>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="checkbox" id="DeepSeekEnableLlm"
-                                       name="DeepSeekInput.EnableLlm" value="true"
-                                       @(Model.DeepSeekInput.EnableLlm ? "checked" : "") />
-                                <label class="form-check-label small" for="DeepSeekEnableLlm">LLM</label>
-                            </div>
-                            <div class="form-check form-check-inline">
-                                <input class="form-check-input" type="checkbox" id="DeepSeekEnableGrading"
-                                       name="DeepSeekInput.EnableGrading" value="true"
-                                       @(Model.DeepSeekInput.EnableGrading ? "checked" : "") />
-                                <label class="form-check-label small" for="DeepSeekEnableGrading">Grading</label>
-                            </div>
-                        </div>
-
-                        <div class="col-12 d-flex gap-2 flex-wrap">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-plug-fill me-1"></i>@(Model.DeepSeekProfile == null ? "Kết nối DeepSeek" : "Lưu thay đổi")
-                            </button>
-                            <button type="submit" class="btn btn-outline-info" asp-page-handler="TestDeepSeek"
-                                    formnovalidate>
-                                <i class="bi bi-cloud-arrow-up me-1"></i>Kiểm tra key
-                            </button>
-                            @if (Model.DeepSeekProfile != null)
-                            {
-                                <button type="submit" class="btn btn-outline-danger ms-auto" asp-page-handler="RemoveDeepSeek"
-                                        formnovalidate
-                                        onclick="return confirm('Ngắt kết nối DeepSeek? Định tuyến LLM/Grading sẽ được gỡ khỏi hồ sơ này.');">
-                                    <i class="bi bi-x-circle me-1"></i>Ngắt kết nối
-                                </button>
-                            }
-                        </div>
-                    </form>
-
-                    @if (Model.DeepSeekProfile != null)
-                    {
-                        <div class="alert alert-light border mt-3 mb-0 small">
-                            <i class="bi bi-info-circle text-primary me-1"></i>
-                            Hồ sơ: <strong>@Model.DeepSeekProfile.Name</strong>
-                            · Kind: <code>@Model.DeepSeekProfile.Kind</code>
-                            · Base URL: <code>@Model.DeepSeekProfile.BaseUrl</code>
-                            · Năng lực:
-                            @if (Model.DeepSeekProfile.CustomCapabilities.HasFlag(AiCapability.FollowUpLlm))
-                            {
-                                <span class="badge bg-info text-dark">LLM</span>
-                            }
-                            @if (Model.DeepSeekProfile.CustomCapabilities.HasFlag(AiCapability.Grading))
-                            {
-                                <span class="badge bg-warning text-dark">Grading</span>
-                            }
-                        </div>
-                    }
-
-                    @if (ViewData.ModelState.TryGetValue("DeepSeekInput.ApiKey", out var dsKeyErrors) &&
-                         dsKeyErrors.Errors.Count > 0)
-                    {
-                        <div class="alert alert-danger mt-3 mb-0 small">
-                            @foreach (var error in dsKeyErrors.Errors)
-                            {
-                                <div><i class="bi bi-exclamation-circle me-1"></i>@error.ErrorMessage</div>
-                            }
-                        </div>
-                    }
-                    @if (ViewData.ModelState.TryGetValue("DeepSeekInput.Model", out var dsModelErrors) &&
-                         dsModelErrors.Errors.Count > 0)
-                    {
-                        <div class="alert alert-warning mt-3 mb-0 small">
-                            @foreach (var error in dsModelErrors.Errors)
-                            {
-                                <div><i class="bi bi-exclamation-triangle me-1"></i>@error.ErrorMessage</div>
-                            }
-                        </div>
-                    }
-                </div>
-            </div>
-
             <!-- Capability Routing Card -->
             <div class="card shadow-sm border-0 mb-4">
                 <div class="card-header bg-white py-3">
@@ -780,7 +643,8 @@
             const grading = document.getElementById('modalEnableGrading');
             if (!stt || !tts || !llm || !grading) return;
 
-            const isDeepSeek = url.includes('deepseek');
+            const isDeepSeek = url.includes('deepseek') ||
+                ((document.getElementById('modalProfileName')?.value || '').toLowerCase().includes('deepseek'));
             const isGroq = url.includes('groq');
             const isLocal = url.includes('localhost') || url.includes('127.0.0.1') || url.includes('192.168.') || url.includes('10.');
 

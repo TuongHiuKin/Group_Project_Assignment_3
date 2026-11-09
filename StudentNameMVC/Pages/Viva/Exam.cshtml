@@ -32,8 +32,9 @@
                     <span id="sessionStateBadge" class="badge px-3 py-2 rounded-pill bg-info text-dark fw-bold">
                         Đang kết nối...
                     </span>
-                    <span id="turnProgressBadge" class="badge px-3 py-2 rounded-pill bg-light text-secondary border fw-bold">
-                        Lượt thi: @Model.CurrentTurn / @Model.MaxTurns
+                    <span id="turnProgressBadge" class="badge px-3 py-2 rounded-pill bg-light text-secondary border fw-bold"
+                          title="Số lượt trả lời đã dùng trên tổng số lượt của buổi thi (mỗi câu có thể có 1 câu hỏi xoáy)">
+                        Lượt trả lời: @Model.CurrentTurn / @Model.MaxTurns
                     </span>
                 </div>
             </div>
@@ -43,7 +44,10 @@
                 <div class="d-inline-flex flex-column align-items-end">
                     <div class="viva-timer-chip">
                         <i class="bi bi-stopwatch-fill"></i>
-                        <span id="countdownTimerDisplay">00:00</span>
+                        @* Hiển thị giới hạn thời gian của câu hỏi trước khi bắt đầu, thay vì 00:00
+                           (00:00 trông như đã hết giờ). Khi bấm bắt đầu, server gửi mốc thật và
+                           client ghi đè bằng giá trị đếm ngược. *@
+                        <span id="countdownTimerDisplay">@TimeSpan.FromSeconds(Model.InitialTimeLimitSeconds).ToString(@"mm\:ss")</span>
                     </div>
                     <div class="viva-progress-track">
                         <div id="timerProgressBar" class="viva-progress-fill" style="width: 100%;"></div>

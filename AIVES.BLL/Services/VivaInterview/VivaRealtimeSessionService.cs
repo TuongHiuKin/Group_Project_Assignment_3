@@ -87,28 +87,31 @@ public sealed class VivaRealtimeSessionService(
         return remaining;
     }
 
-    public async Task TickAsync(Guid sessionId, IVivaRealtimePublisher publisher, CancellationToken ct = default)
+    public async Task<string?> TickAsync(Guid sessionId, IVivaRealtimePublisher publisher, CancellationToken ct = default)
     {
         using var lease = await timers.LockSessionAsync(sessionId, ct);
         var remaining = timers.GetRemaining(sessionId);
-        if (remaining is null) return;
+        if (remaining is null) return null;
         var session = await sessions.GetByIdAsync(sessionId, ct);
         if (session is null || session.State != (byte)VivaSessionState.Answering)
         {
             timers.Stop(sessionId);
-            return;
+            return null;
         }
         if (remaining.SecondsRemaining > 0)
         {
             await publisher.PublishTimeRemainingAsync(remaining, ct);
-            return;
+            return null;
         }
+        var deadline = timers.GetDeadline(sessionId);
+        var timedOutQuestionId = deadline?.QuestionId ?? string.Empty;
         // A failed save leaves the deadline registered for a later retry; no false timeout event.
         await sessions.UpdateStateAsync(sessionId, (byte)VivaSessionState.TimedOut, ct);
         timers.Stop(sessionId);
         await publisher.PublishTimeRemainingAsync(remaining, ct);
         var snapshot = await GetSnapshotAsync(sessionId, ct);
         await publisher.PublishStatusChangedAsync(snapshot.Status with { UpdatedAtUtc = clock.GetUtcNow().UtcDateTime }, ct);
+        return timedOutQuestionId;
     }
 
     private async Task<VivaSessionSnapshotDto> GetOwnedSnapshotAsync(Guid id, string userId, CancellationToken ct)

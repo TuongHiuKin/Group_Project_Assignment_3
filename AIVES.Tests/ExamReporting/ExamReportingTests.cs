@@ -1057,6 +1057,14 @@ public class ExamReportingTests
             Task.FromResult(questions.Select(q => q.ExamId).Distinct().ToList());
         public Task<VivaQuestion?> GetByIdAsync(string questionId, CancellationToken ct = default) =>
             Task.FromResult(questions.FirstOrDefault(q => q.QuestionId == questionId));
+
+        public Task<bool> SaveAudioUrlAsync(string questionId, string audioUrl, CancellationToken ct = default)
+        {
+            var q = questions.FirstOrDefault(x => x.QuestionId == questionId);
+            if (q is null) return Task.FromResult(false);
+            q.AudioUrl = audioUrl;
+            return Task.FromResult(true);
+        }
     }
 
     private sealed class StubAccountRepo(List<SystemAccount> accounts) : ISystemAccountRepository
