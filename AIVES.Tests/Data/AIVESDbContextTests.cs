@@ -24,10 +24,8 @@ public class AIVESDbContextTests
         // News (Category/Tag/NewsArticle/NewsTag) đã bị bỏ — không thuộc 3 nhóm chức năng 3, 4, 6.
         using var context = CreateContext();
         var tables = context.Model.GetEntityTypes().ToArray();
-        // VivaRubricCriterion bị Ignore() trong chế độ model-only (xem AIVESDbContext.OnModelCreating):
-        // bảng này chỉ được map khi có connection string thật, nên không xuất hiện ở đây.
         Assert.Equal(
-            new[] { "SystemAccount", "VivaGradeChangeLog", "VivaGradingResult", "VivaQuestion", "VivaSession", "VivaSessionTurn" },
+            new[] { "SystemAccount", "VivaGradeChangeLog", "VivaGradingResult", "VivaQuestion", "VivaRubricCriteria", "VivaSession", "VivaSessionTurn" },
             tables.Select(x => x.GetTableName()).OrderBy(x => x));
         Assert.All(tables, table =>
         {

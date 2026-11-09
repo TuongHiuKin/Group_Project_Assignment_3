@@ -148,15 +148,6 @@ public class AIVESDbContext : DbContext
                 .HasDatabaseName("IX_VivaGradeChangeLog_GradingResultId_ChangedAtUtc");
         });
 
-        var isModelOnlyTest = _options?.Extensions.Any(e =>
-            e.GetType().GetProperty("ConnectionString")?.GetValue(e)?.ToString()?.Contains("Database=ModelOnly", StringComparison.OrdinalIgnoreCase) == true) == true;
-
-        if (isModelOnlyTest)
-        {
-            modelBuilder.Ignore<VivaRubricCriterion>();
-            return;
-        }
-
         modelBuilder.Entity<VivaRubricCriterion>(entity =>
         {
             entity.ToTable("VivaRubricCriteria");

@@ -73,12 +73,23 @@ public sealed class RepositorySqlServerTests(TemporarySqlServerDatabase database
         Assert.True(await repo.IsReferencedAsync(student));
         Assert.Equal(DeleteResult.InUse, await repo.HardDeleteAsync(student));
 
-        var sessionId = Guid.NewGuid();
+        // VivaGradingResult có FK tới VivaSession nên cần một phiên tồn tại trước.
+        var gradedSessionId = Guid.NewGuid();
+        db.VivaSessions.Add(new VivaSession
+        {
+            SessionId = gradedSessionId,
+            ExamId = "EXAM01",
+            StudentId = teacher.ToString(),
+            State = 8,
+            StartedAtUtc = DateTime.UtcNow,
+            CompletedAtUtc = DateTime.UtcNow
+        });
+
         var gradingId = Guid.NewGuid();
         db.VivaGradingResults.Add(new VivaGradingResult
         {
             Id = gradingId,
-            SessionId = sessionId,
+            SessionId = gradedSessionId,
             QuestionId = "EXAM01-Q01",
             AiScore = 7.5m,
             FinalizedBy = teacher.ToString(),

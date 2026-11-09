@@ -130,7 +130,11 @@ public static class AnswerQualityGate
             var answered = questionKeywords.Count(k => substantive.Any(w => w.Contains(k, StringComparison.Ordinal) || k.Contains(w, StringComparison.Ordinal)));
             var overlap = (double)answered / questionKeywords.Count;
 
-            if (answered == 0 && LooksLikeDifferentLanguage(questionContent, raw))
+            // Nếu câu hỏi và câu trả lời khác ngôn ngữ thì không thể kết luận lạc đề bằng cách đếm
+            // từ khoá: bản dịch tiếng Anh của một câu trả lời đúng vẫn chỉ khớp được vài thuật ngữ
+            // ("dbcontext"), đủ để answered > 0 nhưng không đủ ngưỡng trùng khớp. Phải kiểm tra
+            // ngôn ngữ TRƯỚC khi so tỷ lệ, không chỉ khi answered == 0.
+            if (overlap < MinTopicOverlap && LooksLikeDifferentLanguage(questionContent, raw))
             {
                 // Không kết luận lạc đề khi hai bên khác ngôn ngữ: nội dung đã đủ dài và không phải câu đệm.
                 return AnswerQuality.Accepted(
