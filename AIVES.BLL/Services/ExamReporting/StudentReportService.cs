@@ -97,10 +97,10 @@ public class StudentReportService : IStudentReportService
             AverageScore = averageScore,
             PassThresholdScore = settings.PassThresholdScore,
             PassRatePercentage = passRatePercentage,
-            // Hiển thị theo thứ tự thi: lượt 1 trước, lượt mới nhất sau cùng.
-            // Trước đây OrderByDescending nên báo cáo mở ra là thấy lượt gần nhất,
-            // người xem tưởng nhầm đó là lượt 1 và mất dấu các lượt trước.
-            Attempts = attempts.OrderBy(a => a.AttemptOrdinal).ToList()
+            // Báo cáo cá nhân của sinh viên: lượt MỚI NHẤT lên đầu để mở ra là thấy ngay kết quả
+            // gần nhất. Trang chi tiết của giảng viên (ClassReportService) vẫn sắp tăng dần theo
+            // thứ tự thi — hai nơi phục vụ hai mục đích khác nhau.
+            Attempts = attempts.OrderByDescending(a => a.AttemptOrdinal).ToList()
         };
     }
 
