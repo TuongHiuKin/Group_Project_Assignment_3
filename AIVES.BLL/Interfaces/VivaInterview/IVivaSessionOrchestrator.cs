@@ -22,6 +22,14 @@ public interface IVivaSessionOrchestrator
     Task<(int Used, int Max, bool CanStart)> GetAttemptAllowanceAsync(
         string examId, string studentId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Id các phiên đang chờ trả lời (QuestionDelivered / Answering / FollowUpDelivered) nhưng
+    /// CHƯA hoàn tất. Worker dùng danh sách này để bắt các phiên không còn deadline trong RAM —
+    /// sau restart hoặc khi client không gọi BeginAnswering — tránh treo vĩnh viễn.
+    /// Chỉ đọc dữ liệu, không đổi trạng thái.
+    /// </summary>
+    Task<List<Guid>> GetWaitingSessionIdsAsync(CancellationToken ct = default);
+
     Task<VivaQuestionDto> StartSessionAsync(Guid sessionId, CancellationToken ct = default);
     Task<VivaTranscriptDto> SubmitAnswerAudioAsync(VivaAnswerSubmissionDto submission, CancellationToken ct = default);
     Task<VivaFollowUpDto?> GenerateFollowUpAsync(Guid sessionId, Guid turnId, CancellationToken ct = default);

@@ -236,8 +236,10 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         await _sessionRepo.UpdateStateAsync(sessionId, (byte)VivaSessionState.QuestionDelivered, ct);
 
         // Đồng hồ KHÔNG chạy ở đây: nó chỉ bắt đầu khi AI đọc xong câu hỏi và client gọi
-        // BeginAnswering. Nhờ vậy thời gian 1p30s là thời gian trả lời thật, không bị trừ
-        // bởi thời gian TTS đọc câu hỏi.
+        // BeginAnswering. Nhưng phải ĐÁNH DẤU là câu đang được đọc, nếu không thì khi client
+        // chết (autoplay bị chặn, audio không bắn 'ended') sẽ không còn dấu vết nào để worker
+        // biết mà tự chạy đồng hồ — phiên kẹt vĩnh viễn ở QuestionDelivered.
+        _timers?.MarkQuestionBeingRead(sessionId, initialQuestion.QuestionId, initialQuestion.TimeLimitSeconds);
 
         var questionDto = new VivaQuestionDto(
             QuestionId: initialQuestion.QuestionId,
@@ -600,10 +602,9 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         // 1. Persistence First
         await _sessionRepo.UpdateStateAsync(session.SessionId, (byte)VivaSessionState.QuestionDelivered, ct);
 
-        // Câu cũ đã xong: KHÔNG khởi động đồng hồ ở đây. Đồng hồ chạy từ lúc AI đọc xong câu hỏi
-        // (client gọi BeginAnswering sau khi TTS kết thúc), nên thời gian đọc câu hỏi không bị trừ.
-        // Deadline cũ được Stop để câu mới có thể Start sạch.
-        _timers?.Stop(session.SessionId);
+        // Câu cũ đã xong: đánh dấu câu mới "đang đọc" thay vì chạy đồng hồ.
+        // Worker sẽ tự chạy đồng hồ nếu client không gọi BeginAnswering trong thời gian chờ đọc.
+        _timers?.MarkQuestionBeingRead(session.SessionId, next.QuestionId, next.TimeLimitSeconds);
 
         // 2. Realtime Broadcast — kèm câu hỏi đầy đủ để client phát audio ngay, không phải tải lại trang.
         await _publisher.PublishStatusChangedAsync(new VivaSessionStatusDto(
@@ -770,6 +771,25 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         await _publisher.PublishStatusChangedAsync(statusDto, ct);
 
         return statusDto;
+    }
+
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetWaitingSessionIdsAsync(CancellationToken ct = default)
+    {
+        // Chỉ các trạng thái "đang chờ sinh viên trả lời". Completed/TimedOut/Failed không thuộc
+        // phạm vi nên không đưa vào — chúng có đường xử lý riêng.
+        var waitingStates = new[]
+        {
+            (byte)VivaSessionState.QuestionDelivered,
+            (byte)VivaSessionState.Answering,
+            (byte)VivaSessionState.FollowUpDelivered
+        };
+
+        var sessions = await _sessionRepo.GetSessionsWithDetailsAsync(ct: ct);
+        return sessions?
+            .Where(s => waitingStates.Contains(s.State))
+            .Select(s => s.SessionId)
+            .ToList() ?? new List<Guid>();
     }
 
     /// <inheritdoc />

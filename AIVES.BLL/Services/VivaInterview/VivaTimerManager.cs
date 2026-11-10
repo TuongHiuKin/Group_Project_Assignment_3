@@ -16,7 +16,20 @@ public sealed class VivaTimerManager(TimeProvider clock)
     public sealed record Deadline(Guid SessionId, string QuestionId, DateTimeOffset EndsAtUtc, int TotalSecondsAllowed);
 
     /// <summary>Mốc tạm dừng: chỉ giữ số giây còn lại, không có EndsAtUtc vì đồng hồ đang đứng yên.</summary>
-    public sealed record PausedDeadline(Guid SessionId, string QuestionId, int SecondsRemaining, int TotalSecondsAllowed);
+    public sealed record PausedDeadline(
+        Guid SessionId,
+        string QuestionId,
+        int SecondsRemaining,
+        int TotalSecondsAllowed,
+        DateTimeOffset PausedAtUtc);
+
+    /// <summary>
+    /// Số giây tối đa cho phép AI đọc câu hỏi. Câu hỏi được đánh dấu "đang đọc" bằng một mốc
+    /// tạm dừng; nếu quá ngưỡng này mà client không gọi <c>BeginAnswering</c> (autoplay bị chặn,
+    /// tab bị đóng, audio không bắn <c>ended</c>), hệ thống tự chạy đồng hồ để phiên không kẹt.
+    /// 60 giây đủ cho câu hỏi dài nhất của đề hiện tại, vẫn đủ ngắn để không treo buổi thi.
+    /// </summary>
+    public const int QuestionReadGraceSeconds = 60;
 
     public async Task<IDisposable> LockSessionAsync(Guid sessionId, CancellationToken ct = default)
     {
@@ -83,7 +96,22 @@ public sealed class VivaTimerManager(TimeProvider clock)
     {
         if (!_deadlines.TryRemove(sessionId, out var deadline)) return null;
         var paused = new PausedDeadline(deadline.SessionId, deadline.QuestionId,
-            SecondsRemaining(deadline), deadline.TotalSecondsAllowed);
+            SecondsRemaining(deadline), deadline.TotalSecondsAllowed, clock.GetUtcNow());
+        _paused[sessionId] = paused;
+        return paused;
+    }
+
+    /// <summary>
+    /// Đánh dấu "AI đang đọc câu hỏi" cho một câu chưa từng chạy đồng hồ: tạo mốc tạm dừng với
+    /// đủ thời gian của câu. Nhờ vậy <see cref="TickAsync"/> thấy có mốc, và nếu client không bao
+    /// giờ gọi <c>BeginAnswering</c> thì sau <see cref="QuestionReadGraceSeconds"/> giây hệ thống
+    /// tự chuyển sang chạy đồng hồ thật thay vì treo phiên.
+    /// </summary>
+    public PausedDeadline MarkQuestionBeingRead(Guid sessionId, string questionId, int seconds)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(questionId);
+        if (seconds <= 0) throw new ArgumentOutOfRangeException(nameof(seconds));
+        var paused = new PausedDeadline(sessionId, questionId, seconds, seconds, clock.GetUtcNow());
         _paused[sessionId] = paused;
         return paused;
     }
@@ -102,6 +130,17 @@ public sealed class VivaTimerManager(TimeProvider clock)
             clock.GetUtcNow().AddSeconds(paused.SecondsRemaining), paused.TotalSecondsAllowed);
         _deadlines[sessionId] = deadline;
         return deadline;
+    }
+
+    /// <summary>
+    /// Đã quá <see cref="QuestionReadGraceSeconds"/> giây kể từ lúc giao câu mà vẫn chưa có ai
+    /// gọi <c>BeginAnswering</c>? Dùng để quyết định có tự chạy đồng hồ hay chờ TTS đọc xong.
+    /// </summary>
+    public bool IsQuestionReadGraceExpired(Guid sessionId, int graceSeconds = QuestionReadGraceSeconds)
+    {
+        var paused = GetPaused(sessionId);
+        return paused is not null &&
+            (clock.GetUtcNow() - paused.PausedAtUtc).TotalSeconds >= Math.Max(1, graceSeconds);
     }
 
     /// <summary>

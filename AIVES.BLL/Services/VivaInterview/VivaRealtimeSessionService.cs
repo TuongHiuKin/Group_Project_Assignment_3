@@ -100,9 +100,8 @@ public sealed class VivaRealtimeSessionService(
         if (question.TimeLimitSeconds <= 0) throw new InvalidOperationException("Question time limit is invalid.");
         await sessions.UpdateStateAsync(sessionId, (byte)VivaSessionState.Answering, ct);
 
-        // Đồng hồ CHỈ bắt đầu ở đây, sau khi AI đã đọc xong câu hỏi và micro mở.
-        // Trước đây StartSessionAsync khởi động đồng hồ ngay lúc giao câu, nên thời gian AI đọc
-        // câu hỏi bị trừ vào thời gian trả lời và sinh viên luôn thiếu giờ.
+        // Đồng hồ chạy từ lúc AI đọc xong câu hỏi: client gọi BeginAnswering sau khi TTS kết thúc,
+        // nên thời gian đọc câu hỏi không bị trừ vào giờ thi.
         //
         // Ba trường hợp:
         //  1. Câu mới hoàn toàn  -> Start với TimeLimitSeconds đầy đủ.
@@ -124,6 +123,50 @@ public sealed class VivaRealtimeSessionService(
         await publisher.PublishStatusChangedAsync(snapshot.Status with { State = VivaSessionState.Answering, UpdatedAtUtc = clock.GetUtcNow().UtcDateTime }, ct);
         await publisher.PublishTimeRemainingAsync(remaining, ct);
         return remaining;
+    }
+
+    /// <summary>
+    /// Bảo hiểm cho trường hợp client không bao giờ gọi <c>BeginAnswering</c> — ví dụ trình duyệt
+    /// chặn autoplay nên <c>audio.onended</c> không chạy, hoặc sinh viên đóng tab rồi mở lại.
+    /// Khi đó không có deadline nào trong bộ nhớ, <see cref="TickAsync"/> trả về ngay và phiên
+    /// nằm ở <c>QuestionDelivered</c> vĩnh viễn — đúng lỗi "hết giờ mà không đổi câu hỏi".
+    ///
+    /// Hàm này khởi động đồng hồ cho câu đang hỏi nếu chưa có, tính từ thời điểm gọi. Gọi từ
+    /// worker mỗi giây nên nó cũng là lưới an toàn sau khi app restart (deadline chỉ nằm trong RAM).
+    /// Trả về true nếu vừa khởi động đồng hồ mới.
+    /// </summary>
+    /// <inheritdoc />
+    public async Task<bool> EnsureTimerStartedAsync(Guid sessionId, CancellationToken ct = default)
+    {
+        // Đang chạy hoặc đã pause hợp lệ (đang chờ TTS đọc) thì không can thiệp, trừ khi
+        // quá thời gian chờ đọc — lúc đó client coi như chết, phải tự chạy đồng hồ.
+        if (timers.GetDeadline(sessionId) is not null) return false;
+        var paused = timers.GetPaused(sessionId);
+        if (paused is not null && !timers.IsQuestionReadGraceExpired(sessionId)) return false;
+
+        var session = await sessions.GetByIdAsync(sessionId, ct);
+        if (session is null) return false;
+        if (session.State is not ((byte)VivaSessionState.QuestionDelivered
+                or (byte)VivaSessionState.Answering or (byte)VivaSessionState.FollowUpDelivered))
+        {
+            return false;
+        }
+
+        var snapshot = await GetSnapshotAsync(sessionId, ct);
+        var question = snapshot.CurrentQuestion;
+        if (question is null || question.TimeLimitSeconds <= 0) return false;
+
+        if (paused is not null)
+        {
+            // Hết thời gian chờ đọc: chạy tiếp phần còn lại, không cấp lại nguyên TimeLimitSeconds.
+            timers.ResumePaused(sessionId, question.QuestionId);
+        }
+        else
+        {
+            // App restart làm mất deadline trong RAM: phiên đang Answering/FU mà không có mốc nào.
+            timers.Start(sessionId, question.QuestionId, question.TimeLimitSeconds);
+        }
+        return true;
     }
 
     public async Task<string?> TickAsync(Guid sessionId, IVivaRealtimePublisher publisher, CancellationToken ct = default)

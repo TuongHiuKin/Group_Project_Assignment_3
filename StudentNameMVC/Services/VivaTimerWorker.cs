@@ -19,6 +19,9 @@ public sealed class VivaTimerWorker(
         {
             while (await ticks.WaitForNextTickAsync(stoppingToken))
             {
+                // Chỉ phiên có deadline trong RAM mới được liệt kê ở đây. Phiên đang chờ TTS đọc
+                // (pause) hoặc phiên mất deadline sau restart không có mặt → phải quét thêm để
+                // không kẹt vĩnh viễn. Xem EnsureTimerStartedAsync.
                 foreach (var id in timers.GetActiveSessionIds())
                 {
                     try
@@ -38,9 +41,45 @@ public sealed class VivaTimerWorker(
                     catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { throw; }
                     catch (Exception ex) { logger.LogError(ex, "Viva timer update failed for {SessionId}.", id); }
                 }
+
+                await SweepWaitingSessionsAsync(stoppingToken);
             }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+    }
+
+    /// <summary>
+    /// Quét các phiên đang chờ trả lời nhưng KHÔNG có deadline trong RAM — chúng vô hình với vòng
+    /// lặp trên. Hai nguồn: (a) câu đang được TTS đọc, client chưa gọi BeginAnswering;
+    /// (b) app vừa restart nên mất toàn bộ deadline. Không quét thì phiên nằm im mãi ở
+    /// QuestionDelivered/Answering và sinh viên thấy "hết giờ mà không đổi câu hỏi".
+    /// </summary>
+    private async Task SweepWaitingSessionsAsync(CancellationToken ct)
+    {
+        try
+        {
+            await using var scope = scopes.CreateAsyncScope();
+            var orchestrator = scope.ServiceProvider.GetService<IVivaSessionOrchestrator>();
+            var realtime = scope.ServiceProvider.GetRequiredService<IVivaRealtimeSessionService>();
+            if (orchestrator is null) return;
+
+            var waiting = await orchestrator.GetWaitingSessionIdsAsync(ct);
+            foreach (var id in waiting)
+            {
+                try
+                {
+                    await realtime.EnsureTimerStartedAsync(id, ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (Exception ex) { logger.LogError(ex, "Timer safety net failed for {SessionId}.", id); }
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            // Không được làm chết worker: timer realtime vẫn phải chạy dù bước quét lỗi.
+            logger.LogError(ex, "Waiting-session sweep failed; realtime timer continues.");
+        }
     }
 
     /// <summary>
