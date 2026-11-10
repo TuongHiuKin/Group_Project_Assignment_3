@@ -235,6 +235,10 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         // 1. Persistence First: Transition to QuestionDelivered
         await _sessionRepo.UpdateStateAsync(sessionId, (byte)VivaSessionState.QuestionDelivered, ct);
 
+        // Đồng hồ chạy NGAY khi câu hỏi được giao, không chờ client bấm ghi âm.
+        // Nhờ vậy sinh viên im lặng hết thời gian thì timer worker tự chuyển sang câu tiếp theo.
+        _timers?.Restart(sessionId, initialQuestion.QuestionId, initialQuestion.TimeLimitSeconds);
+
         var questionDto = new VivaQuestionDto(
             QuestionId: initialQuestion.QuestionId,
             ExamId: initialQuestion.ExamId,
@@ -593,6 +597,10 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
 
         // 1. Persistence First
         await _sessionRepo.UpdateStateAsync(session.SessionId, (byte)VivaSessionState.QuestionDelivered, ct);
+
+        // Câu cũ đã xong: đồng hồ của câu mới bắt đầu ngay, không chờ client bấm ghi âm.
+        // Đây là "thời gian chung" theo yêu cầu: mỗi câu có TimeLimitSeconds riêng, chạy từ lúc giao.
+        _timers?.Restart(session.SessionId, next.QuestionId, next.TimeLimitSeconds);
 
         // 2. Realtime Broadcast — kèm câu hỏi đầy đủ để client phát audio ngay, không phải tải lại trang.
         await _publisher.PublishStatusChangedAsync(new VivaSessionStatusDto(

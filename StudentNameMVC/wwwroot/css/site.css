@@ -1579,32 +1579,51 @@ body {
 }
 
 .aives-transcript-flow {
-  background: #fafbfe;
-  border: 1px solid var(--border-subtle);
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
   border-radius: 18px;
   padding: 20px;
 }
 
+/* Ba khối hội thoại dùng ba màu nền đậm hơn + viền trái dày để phân biệt bằng mắt,
+   không phụ thuộc vào màu chữ (màu chữ đổi theo theme nên dễ chìm vào nền). */
 .aives-answer-box {
   background: #ffffff;
   border-radius: 14px;
   padding: 14px 18px;
-  border-left: 4px solid var(--primary-purple);
+  border-left: 5px solid var(--primary-purple);
+  border-top: 1px solid #e2e8f0;
+  border-right: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 }
 
 .aives-followup-box {
-  background: #fdf2f8;
+  background: #fce7f3;
   border-radius: 14px;
   padding: 14px 18px;
-  border-left: 4px solid #db2777;
+  border-left: 5px solid #be185d;
+  border-top: 1px solid #fbcfe8;
+  border-right: 1px solid #fbcfe8;
+  border-bottom: 1px solid #fbcfe8;
 }
 
 .aives-followup-answer-box {
-  background: #f0fdf4;
+  background: #d1fae5;
   border-radius: 14px;
   padding: 14px 18px;
-  border-left: 4px solid #10b981;
+  border-left: 5px solid #047857;
+  border-top: 1px solid #a7f3d0;
+  border-right: 1px solid #a7f3d0;
+  border-bottom: 1px solid #a7f3d0;
+}
+
+/* Chữ trong ba khối trên luôn là màu tối đậm, không phụ thuộc biến theme,
+   để đọc được trên nền sáng của chính khối đó. */
+.aives-answer-box p,
+.aives-followup-box p,
+.aives-followup-answer-box p {
+  color: #111827 !important;
 }
 
 .aives-teacher-notes-box {

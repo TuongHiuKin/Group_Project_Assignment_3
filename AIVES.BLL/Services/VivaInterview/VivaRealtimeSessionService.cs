@@ -98,10 +98,17 @@ public sealed class VivaRealtimeSessionService(
             throw new InvalidOperationException("This session cannot begin answering in its current state.");
         var question = snapshot.CurrentQuestion ?? throw new InvalidOperationException("Current question is unavailable.");
         if (question.TimeLimitSeconds <= 0) throw new InvalidOperationException("Question time limit is invalid.");
-        // Never replace an existing deadline or extend it on a repeated request.
-        if (timers.GetDeadline(sessionId) is not null) throw new InvalidOperationException("An answering timer already exists.");
         await sessions.UpdateStateAsync(sessionId, (byte)VivaSessionState.Answering, ct);
-        timers.Start(sessionId, question.QuestionId, question.TimeLimitSeconds);
+
+        // Đồng hồ đã chạy từ lúc giao câu hỏi (xem VivaSessionOrchestrator). Bấm ghi âm chỉ mở micro,
+        // KHÔNG reset thời gian — nếu reset ở đây thì sinh viên chờ hết giờ rồi bấm ghi âm sẽ có
+        // thêm một lượt đầy đủ, và câu hỏi xoáy cũng làm mới đồng hồ trái với yêu cầu "thời gian chung".
+        // Chỉ khi chưa có deadline nào (ví dụ phiên cũ trước khi bật tự chạy) mới khởi động.
+        var existing = timers.GetDeadline(sessionId);
+        if (existing is null || !string.Equals(existing.QuestionId, question.QuestionId, StringComparison.Ordinal))
+        {
+            timers.Restart(sessionId, question.QuestionId, question.TimeLimitSeconds);
+        }
         var remaining = timers.GetRemaining(sessionId)!;
         await publisher.PublishStatusChangedAsync(snapshot.Status with { State = VivaSessionState.Answering, UpdatedAtUtc = clock.GetUtcNow().UtcDateTime }, ct);
         await publisher.PublishTimeRemainingAsync(remaining, ct);
@@ -114,7 +121,10 @@ public sealed class VivaRealtimeSessionService(
         var remaining = timers.GetRemaining(sessionId);
         if (remaining is null) return null;
         var session = await sessions.GetByIdAsync(sessionId, ct);
-        if (session is null || session.State != (byte)VivaSessionState.Answering)
+        // Đồng hồ chạy từ lúc GIAO câu hỏi, nên phải tick cả khi sinh viên chưa bấm ghi âm.
+        // Chỉ dừng khi phiên đã rời khỏi hai trạng thái "đang chờ trả lời" này.
+        if (session is null || session.State is not ((byte)VivaSessionState.Answering
+                or (byte)VivaSessionState.QuestionDelivered or (byte)VivaSessionState.FollowUpDelivered))
         {
             timers.Stop(sessionId);
             return null;

@@ -33,6 +33,22 @@ public sealed class VivaTimerManager(TimeProvider clock)
         return deadline;
     }
 
+    /// <summary>
+    /// Bắt đầu lại đồng hồ cho câu hỏi mới, ghi đè deadline cũ nếu có.
+    /// Dùng khi chuyển câu hoặc khi câu hỏi xoáy được giao: mỗi câu hỏi có thời gian riêng của nó,
+    /// không cộng dồn thời gian còn lại của câu trước. <see cref="Start"/> vẫn giữ nguyên hành vi
+    /// ném lỗi khi đã có deadline, vì đó là chốt chặn chống client gọi BeginAnswering hai lần.
+    /// </summary>
+    public Deadline Restart(Guid sessionId, string questionId, int seconds)
+    {
+        if (sessionId == Guid.Empty) throw new ArgumentException("Session ID is required.", nameof(sessionId));
+        ArgumentException.ThrowIfNullOrWhiteSpace(questionId);
+        if (seconds <= 0) throw new ArgumentOutOfRangeException(nameof(seconds));
+        var deadline = new Deadline(sessionId, questionId, clock.GetUtcNow().AddSeconds(seconds), seconds);
+        _deadlines[sessionId] = deadline;
+        return deadline;
+    }
+
     public Deadline? GetDeadline(Guid sessionId) => _deadlines.GetValueOrDefault(sessionId);
     public int SecondsRemaining(Deadline deadline) => Math.Clamp(
         (int)Math.Ceiling((deadline.EndsAtUtc - clock.GetUtcNow()).TotalSeconds), 0, deadline.TotalSecondsAllowed);
