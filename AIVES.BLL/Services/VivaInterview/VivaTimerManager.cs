@@ -10,9 +10,13 @@ namespace AIVES.BLL.Services.VivaInterview;
 public sealed class VivaTimerManager(TimeProvider clock)
 {
     private readonly ConcurrentDictionary<Guid, Deadline> _deadlines = new();
+    private readonly ConcurrentDictionary<Guid, PausedDeadline> _paused = new();
     private readonly SemaphoreSlim[] _gates = Enumerable.Range(0, 64).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
 
     public sealed record Deadline(Guid SessionId, string QuestionId, DateTimeOffset EndsAtUtc, int TotalSecondsAllowed);
+
+    /// <summary>Mốc tạm dừng: chỉ giữ số giây còn lại, không có EndsAtUtc vì đồng hồ đang đứng yên.</summary>
+    public sealed record PausedDeadline(Guid SessionId, string QuestionId, int SecondsRemaining, int TotalSecondsAllowed);
 
     public async Task<IDisposable> LockSessionAsync(Guid sessionId, CancellationToken ct = default)
     {
@@ -69,8 +73,61 @@ public sealed class VivaTimerManager(TimeProvider clock)
         Restore(resumed);
         return resumed;
     }
+    /// <summary>
+    /// Tạm dừng đồng hồ và GHI NHỚ số giây còn lại. Dùng khi sinh viên nộp bài (STT đang chạy)
+    /// và khi AI đang sinh/đọc câu hỏi xoáy — thời gian xử lý của server không bị trừ vào giờ thi.
+    /// Khác <see cref="Stop"/>: Stop xoá hẳn, còn Pause giữ lại để <see cref="ResumePaused"/> trả
+    /// đúng phần thời gian còn dở thay vì cấp lại nguyên TimeLimitSeconds.
+    /// </summary>
+    public PausedDeadline? Pause(Guid sessionId)
+    {
+        if (!_deadlines.TryRemove(sessionId, out var deadline)) return null;
+        var paused = new PausedDeadline(deadline.SessionId, deadline.QuestionId,
+            SecondsRemaining(deadline), deadline.TotalSecondsAllowed);
+        _paused[sessionId] = paused;
+        return paused;
+    }
+
+    /// <summary>
+    /// Chạy tiếp đồng hồ đã tạm dừng với đúng số giây còn lại. Trả null khi không có mốc tạm dừng
+    /// (câu mới hoàn toàn) hoặc đã hết giờ — lúc đó tầng gọi dùng <see cref="Start"/> với thời gian đầy đủ.
+    /// <paramref name="questionId"/> cho phép gắn lại mốc vào câu đang hỏi: câu hỏi xoáy có
+    /// QuestionId riêng (dạng ...-FU1) nhưng vẫn dùng chung quỹ thời gian của câu chính.
+    /// </summary>
+    public Deadline? ResumePaused(Guid sessionId, string? questionId = null)
+    {
+        if (!_paused.TryRemove(sessionId, out var paused)) return null;
+        if (paused.SecondsRemaining <= 0) return null;
+        var deadline = new Deadline(paused.SessionId, questionId ?? paused.QuestionId,
+            clock.GetUtcNow().AddSeconds(paused.SecondsRemaining), paused.TotalSecondsAllowed);
+        _deadlines[sessionId] = deadline;
+        return deadline;
+    }
+
+    /// <summary>
+    /// Gắn lại deadline đang chạy sang câu hỏi khác mà KHÔNG đụng tới thời gian còn lại.
+    /// Dùng khi chuyển từ câu chính sang câu hỏi xoáy: hai câu có QuestionId khác nhau nhưng
+    /// chung một quỹ 1p30s, nên chỉ đổi nhãn câu chứ không reset đồng hồ.
+    /// </summary>
+    public Deadline? Rebind(Guid sessionId, string questionId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(questionId);
+        if (!_deadlines.TryGetValue(sessionId, out var deadline)) return null;
+        var rebound = deadline with { QuestionId = questionId };
+        _deadlines[sessionId] = rebound;
+        return rebound;
+    }
+
+    public PausedDeadline? GetPaused(Guid sessionId) => _paused.GetValueOrDefault(sessionId);
+
     public Guid[] GetActiveSessionIds() => _deadlines.Keys.ToArray();
-    public void Stop(Guid sessionId) => _deadlines.TryRemove(sessionId, out _);
+
+    /// <summary>Xoá cả mốc đang chạy lẫn mốc tạm dừng — dùng khi câu/phiên đã kết thúc hẳn.</summary>
+    public void Stop(Guid sessionId)
+    {
+        _deadlines.TryRemove(sessionId, out _);
+        _paused.TryRemove(sessionId, out _);
+    }
 
     public VivaTimeRemainingDto? GetRemaining(Guid sessionId)
     {

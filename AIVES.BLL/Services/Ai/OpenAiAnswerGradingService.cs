@@ -95,7 +95,10 @@ public sealed class OpenAiAnswerGradingService : IAnswerGradingService
             },
             response_format = new { type = "json_object" },
             temperature = 0.2,
-            max_tokens = 2048
+            // 2048 quá thấp cho model có reasoning: phần suy luận ăn hết ngân sách, JSON trả về bị
+            // cắt giữa chừng ("Expected depth to be zero at the end of the JSON payload") hoặc rỗng.
+            // Rubric 3 tiêu chí + nhận xét + điểm mạnh/yếu cần khoảng 800-1200 token đầu ra.
+            max_tokens = 4096
         };
 
         request.Content = new StringContent(

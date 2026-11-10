@@ -235,9 +235,9 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         // 1. Persistence First: Transition to QuestionDelivered
         await _sessionRepo.UpdateStateAsync(sessionId, (byte)VivaSessionState.QuestionDelivered, ct);
 
-        // Đồng hồ chạy NGAY khi câu hỏi được giao, không chờ client bấm ghi âm.
-        // Nhờ vậy sinh viên im lặng hết thời gian thì timer worker tự chuyển sang câu tiếp theo.
-        _timers?.Restart(sessionId, initialQuestion.QuestionId, initialQuestion.TimeLimitSeconds);
+        // Đồng hồ KHÔNG chạy ở đây: nó chỉ bắt đầu khi AI đọc xong câu hỏi và client gọi
+        // BeginAnswering. Nhờ vậy thời gian 1p30s là thời gian trả lời thật, không bị trừ
+        // bởi thời gian TTS đọc câu hỏi.
 
         var questionDto = new VivaQuestionDto(
             QuestionId: initialQuestion.QuestionId,
@@ -303,9 +303,11 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
                 var latest = details.Turns.OrderByDescending(t => t.TurnOrdinal).FirstOrDefault();
                 if (latest?.FollowUpQuestionText is { Length: > 0 }) persistedQuestionId = latest.QuestionId;
             }
-            // Only stop the timer after the answering transition is persisted.
+            // Only pause the timer after the answering transition is persisted.
+            // Pause (không Stop) để khi AI sinh xong câu xoáy, ResumePaused trả lại đúng số giây
+            // còn dở thay vì cấp lại nguyên 1p30s.
             await _sessionRepo.UpdateStateAsync(submission.SessionId, (byte)VivaSessionState.Transcribing, ct);
-            _timers?.Stop(submission.SessionId);
+            _timers?.Pause(submission.SessionId);
         }
         var maxTurns = await GetSessionMaxTurnsAsync(session.ExamId, ct);
         await _publisher.PublishStatusChangedAsync(new VivaSessionStatusDto(
@@ -598,9 +600,10 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         // 1. Persistence First
         await _sessionRepo.UpdateStateAsync(session.SessionId, (byte)VivaSessionState.QuestionDelivered, ct);
 
-        // Câu cũ đã xong: đồng hồ của câu mới bắt đầu ngay, không chờ client bấm ghi âm.
-        // Đây là "thời gian chung" theo yêu cầu: mỗi câu có TimeLimitSeconds riêng, chạy từ lúc giao.
-        _timers?.Restart(session.SessionId, next.QuestionId, next.TimeLimitSeconds);
+        // Câu cũ đã xong: KHÔNG khởi động đồng hồ ở đây. Đồng hồ chạy từ lúc AI đọc xong câu hỏi
+        // (client gọi BeginAnswering sau khi TTS kết thúc), nên thời gian đọc câu hỏi không bị trừ.
+        // Deadline cũ được Stop để câu mới có thể Start sạch.
+        _timers?.Stop(session.SessionId);
 
         // 2. Realtime Broadcast — kèm câu hỏi đầy đủ để client phát audio ngay, không phải tải lại trang.
         await _publisher.PublishStatusChangedAsync(new VivaSessionStatusDto(

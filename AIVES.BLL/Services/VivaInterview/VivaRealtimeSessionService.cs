@@ -100,14 +100,25 @@ public sealed class VivaRealtimeSessionService(
         if (question.TimeLimitSeconds <= 0) throw new InvalidOperationException("Question time limit is invalid.");
         await sessions.UpdateStateAsync(sessionId, (byte)VivaSessionState.Answering, ct);
 
-        // Đồng hồ đã chạy từ lúc giao câu hỏi (xem VivaSessionOrchestrator). Bấm ghi âm chỉ mở micro,
-        // KHÔNG reset thời gian — nếu reset ở đây thì sinh viên chờ hết giờ rồi bấm ghi âm sẽ có
-        // thêm một lượt đầy đủ, và câu hỏi xoáy cũng làm mới đồng hồ trái với yêu cầu "thời gian chung".
-        // Chỉ khi chưa có deadline nào (ví dụ phiên cũ trước khi bật tự chạy) mới khởi động.
-        var existing = timers.GetDeadline(sessionId);
-        if (existing is null || !string.Equals(existing.QuestionId, question.QuestionId, StringComparison.Ordinal))
+        // Đồng hồ CHỈ bắt đầu ở đây, sau khi AI đã đọc xong câu hỏi và micro mở.
+        // Trước đây StartSessionAsync khởi động đồng hồ ngay lúc giao câu, nên thời gian AI đọc
+        // câu hỏi bị trừ vào thời gian trả lời và sinh viên luôn thiếu giờ.
+        //
+        // Ba trường hợp:
+        //  1. Câu mới hoàn toàn  -> Start với TimeLimitSeconds đầy đủ.
+        //  2. Đang trả lời, AI sinh + đọc câu xoáy -> đồng hồ đã được Pause, giờ ResumePaused
+        //     trả lại đúng số giây còn dở và gắn sang QuestionId của câu xoáy, để lượt nộp
+        //     theo followUpQuestionId khớp mốc đang chạy. Quỹ thời gian vẫn là 1p30s liên tục.
+        //  3. BeginAnswering lặp lại khi đồng hồ đang chạy -> giữ nguyên, không reset.
+        if (timers.GetDeadline(sessionId) is null && timers.ResumePaused(sessionId, question.QuestionId) is null)
         {
-            timers.Restart(sessionId, question.QuestionId, question.TimeLimitSeconds);
+            timers.Start(sessionId, question.QuestionId, question.TimeLimitSeconds);
+        }
+        else
+        {
+            // Đang có deadline (câu chính hoặc câu xoáy vừa resume) nhưng QuestionId có thể lệch
+            // với câu đang hiển thị; rebind để lượt nộp khớp đúng câu, không đổi thời gian.
+            timers.Rebind(sessionId, question.QuestionId);
         }
         var remaining = timers.GetRemaining(sessionId)!;
         await publisher.PublishStatusChangedAsync(snapshot.Status with { State = VivaSessionState.Answering, UpdatedAtUtc = clock.GetUtcNow().UtcDateTime }, ct);
