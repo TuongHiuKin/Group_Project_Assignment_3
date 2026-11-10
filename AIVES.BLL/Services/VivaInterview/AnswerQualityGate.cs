@@ -111,14 +111,18 @@ public static class AnswerQualityGate
             residual = residual.Replace(phrase, " ", StringComparison.Ordinal);
         }
 
+        // Chỉ đếm từ CÓ CHỮ CÁI là nội dung thực chất. Chuỗi số thuần ("123 467 89", số điện thoại,
+        // mã số) không phải câu trả lời chuyên môn, nhưng WordSplit vẫn tách chúng thành token nên
+        // trước đây "Alo, alo, 123-467-89" đếm được 3 token và lọt qua bước này.
         var substantive = WordSplit.Split(residual)
             .Where(w => w.Length > 0)
+            .Where(HasLetter)
             .ToList();
 
         if (substantive.Count < MinSubstantiveWords)
         {
             return AnswerQuality.NoContent(
-                $"Câu trả lời chỉ gồm câu đệm ({substantive.Count} từ có nội dung).");
+                $"Câu trả lời chỉ gồm câu đệm hoặc dãy số ({substantive.Count} từ có nội dung).");
         }
 
         // 4. Đúng trọng tâm: câu trả lời phải chạm vào từ khoá của câu hỏi.
@@ -173,6 +177,12 @@ public static class AnswerQualityGate
     }
 
     private static bool IsFillerWord(string word) => FillerPhrases.Contains(word, StringComparer.Ordinal);
+
+    /// <summary>
+    /// Token có ít nhất một chữ cái không? Dùng để loại dãy số thuần ("123", "467", "0909123456")
+    /// khỏi phần nội dung thực chất — đọc số điện thoại không phải câu trả lời chuyên môn.
+    /// </summary>
+    private static bool HasLetter(string token) => token.Any(char.IsLetter);
 
     /// <summary>
     /// Ước lượng câu hỏi và câu trả lời có dùng ngôn ngữ khác nhau không, dựa trên sự có mặt
