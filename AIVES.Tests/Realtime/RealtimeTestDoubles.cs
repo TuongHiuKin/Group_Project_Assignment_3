@@ -100,6 +100,15 @@ internal sealed class RealtimeData : IVivaSessionRepository, IVivaQuestionReposi
         ct.ThrowIfCancellationRequested();
         return Task.FromResult(id == Question.QuestionId ? Question : ExtraQuestions.FirstOrDefault(q => q.QuestionId == id));
     }
+
+    Task<bool> IVivaQuestionRepository.SaveAudioUrlAsync(string questionId, string audioUrl, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        var q = questionId == Question.QuestionId ? Question : ExtraQuestions.FirstOrDefault(x => x.QuestionId == questionId);
+        if (q is null) return Task.FromResult(false);
+        q.AudioUrl = audioUrl;
+        return Task.FromResult(true);
+    }
     public Task<Guid> CreateTurnAsync(VivaSessionTurn turn, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
@@ -138,7 +147,9 @@ internal sealed class RealtimeAi : ISpeechToTextService, ITextToSpeechService, I
         Interlocked.Increment(ref Transcriptions);
         DuringTranscription?.Invoke();
         return Task.FromResult(TranscriptionSucceeds
-            ? new SpeechToTextResult(true, "Scoped per request.", .95m)
+            // Câu trả lời phải có nội dung đúng chủ đề DbContext/Scoped để cổng chất lượng
+            // (AnswerQualityGate) cho phép sinh câu hỏi xoáy — đây cũng là hành vi thật của hệ thống.
+            ? new SpeechToTextResult(true, "DbContext is scoped so each request gets its own instance and connection.", .95m)
             : new SpeechToTextResult(false, "", 0, "Fixture STT failure"));
     }
     public Task<TextToSpeechResult> SynthesizeAsync(string text, string voiceLocale = "vi-VN", CancellationToken ct = default) =>

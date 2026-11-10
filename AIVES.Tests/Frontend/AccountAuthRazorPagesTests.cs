@@ -470,15 +470,14 @@ public sealed class AccountAuthRazorPagesTests
             => Task.FromResult(Accounts.FirstOrDefault(a => a.AccountId == id));
 
         public Task<int> CreateAccountAsync(string name, string email, string password, byte role, CancellationToken ct = default) => Task.FromResult(1);
+        public Task<int> RegisterStudentAsync(string name, string email, string password, int? defaultLecturerId = null, CancellationToken ct = default)
+            => Task.FromResult(1);
         public Task<bool> UpdateAccountAsync(int id, string name, string email, byte role, string? newPassword = null, CancellationToken ct = default) => Task.FromResult(true);
         public Task<bool> SoftDeleteAccountAsync(int id, CancellationToken ct = default) => Task.FromResult(true);
         public Task<AccountDeleteResult> HardDeleteAccountAsync(int id, CancellationToken ct = default) => Task.FromResult(AccountDeleteResult.Deleted);
         public Task<bool> IsAccountReferencedAsync(int id, CancellationToken ct = default) => Task.FromResult(false);
         public Task<bool> UpdateProfileAsync(int id, string name, string email, string? newPassword = null, CancellationToken ct = default) => Task.FromResult(true);
         public Task<SystemAccount?> AuthenticateAsync(string email, string password, CancellationToken ct = default) => Task.FromResult<SystemAccount?>(null);
-        public Task<List<NewsArticle>> GetNewsArticlesFromUserAsync(int accountId, CancellationToken ct = default) => Task.FromResult(new List<NewsArticle>());
-        public Task<List<NewsArticle>> GetNewsArticlesPublicAsync(CancellationToken ct = default) => Task.FromResult(new List<NewsArticle>());
-        public Task<List<NewsArticle>> GetNewsArticlesLecturerAsync(int accountId, CancellationToken ct = default) => Task.FromResult(new List<NewsArticle>());
     }
 
     private sealed class StubDashboardStudentReportService : IStudentReportService

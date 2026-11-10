@@ -100,6 +100,14 @@ public class VivaSessionOrchestratorTests
             var result = Questions.FirstOrDefault(q => q.QuestionId == questionId);
             return Task.FromResult(result);
         }
+
+        public Task<bool> SaveAudioUrlAsync(string questionId, string audioUrl, CancellationToken ct = default)
+        {
+            var q = Questions.FirstOrDefault(x => x.QuestionId == questionId);
+            if (q is null) return Task.FromResult(false);
+            q.AudioUrl = audioUrl;
+            return Task.FromResult(true);
+        }
     }
 
     private sealed class FakeVivaTurnRepository : IVivaTurnRepository

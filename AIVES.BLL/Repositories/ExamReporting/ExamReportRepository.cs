@@ -303,7 +303,7 @@ public sealed class ExamReportRepository : IExamReportRepository
                     EarnedScore = 0m,
                     MaxScore = 10.0m,
                     PassThresholdScore = DefaultPassThresholdScore,
-                    GradingState = examState == ExamState.Abandoned ? GradingState.Failed : GradingState.Pending,
+                    GradingState = examState == ExamState.Abandoned ? ReportGradingState.Failed : ReportGradingState.Pending,
                     IsPassed = false,
                     StudentInitialAnswerTranscript = turn1.TranscriptText ?? string.Empty,
                     AiFollowUpQuestion = turn1.FollowUpQuestionText ?? string.Empty,
@@ -315,23 +315,16 @@ public sealed class ExamReportRepository : IExamReportRepository
                 {
                     ApplyPersistedGrading(questionResult, persistedResult, examState);
                 }
-                else
+                else if (examState == ExamState.Completed)
                 {
-                    // Fallback chấm runtime bằng RubricGradingService (tương thích Nhóm 6)
-                    var answerTranscript = string.Join(" ", qGroup
-                        .Select(t => t.TranscriptText)
-                        .Where(t => !string.IsNullOrWhiteSpace(t)));
-
-                    if (examState == ExamState.Completed && !string.IsNullOrWhiteSpace(answerTranscript))
-                    {
-                        var questionText = string.Join(" ",
-                            qEntity?.Title, qEntity?.Content, turn1.FollowUpQuestionText);
-                        var grading = _gradingService.Grade(qGroup.Key, questionText, answerTranscript, DefaultPassThresholdScore);
-                        if (grading != null)
-                        {
-                            ApplyGrading(questionResult, grading);
-                        }
-                    }
+                    // Báo cáo KHÔNG tự chấm. Trước đây chỗ này gọi RubricGradingService để chấm
+                    // từ khóa ngay lúc xem báo cáo, khiến điểm hiển thị khác với điểm AI thật và
+                    // không có trong VivaGradingResult để giảng viên duyệt. Nay để Pending và chờ
+                    // GradingOrchestrator chấm nền; nhãn hiển thị là "Đang chờ chấm".
+                    questionResult.GradingState = ReportGradingState.Pending;
+                    questionResult.EarnedScore = 0m;
+                    questionResult.AiSuggestedScore = 0m;
+                    questionResult.IsPassed = false;
                 }
 
                 questionResults.Add(questionResult);
@@ -358,7 +351,7 @@ public sealed class ExamReportRepository : IExamReportRepository
                     EarnedScore = 0m,
                     MaxScore = 10.0m,
                     PassThresholdScore = DefaultPassThresholdScore,
-                    GradingState = examState == ExamState.Abandoned ? GradingState.Failed : GradingState.Pending,
+                    GradingState = examState == ExamState.Abandoned ? ReportGradingState.Failed : ReportGradingState.Pending,
                     IsPassed = false
                 };
 
@@ -368,10 +361,10 @@ public sealed class ExamReportRepository : IExamReportRepository
 
             var gradingState = examState switch
             {
-                ExamState.Abandoned => GradingState.Failed,
-                ExamState.Completed when questionResults.Count > 0 && questionResults.All(q => q.GradingState == GradingState.Graded) => GradingState.Graded,
-                ExamState.Completed when questionResults.Any(q => q.GradingState == GradingState.Failed) => GradingState.Failed,
-                _ => GradingState.Pending
+                ExamState.Abandoned => ReportGradingState.Failed,
+                ExamState.Completed when questionResults.Count > 0 && questionResults.All(q => q.GradingState == ReportGradingState.Graded) => ReportGradingState.Graded,
+                ExamState.Completed when questionResults.Any(q => q.GradingState == ReportGradingState.Failed) => ReportGradingState.Failed,
+                _ => ReportGradingState.Pending
             };
 
             var attempt = new AttemptSnapshotDto
@@ -387,7 +380,7 @@ public sealed class ExamReportRepository : IExamReportRepository
                 CompletedAt = session.CompletedAtUtc ?? session.StartedAtUtc,
                 QuestionResults = questionResults
             };
-            attempt.IsPassed = gradingState == GradingState.Graded && attempt.NormalizedScore >= DefaultPassThresholdScore;
+            attempt.IsPassed = gradingState == ReportGradingState.Graded && attempt.NormalizedScore >= DefaultPassThresholdScore;
 
             result.Add(attempt);
         }
@@ -422,6 +415,7 @@ public sealed class ExamReportRepository : IExamReportRepository
         if (entity.AiScore.HasValue)
         {
             questionResult.AiSuggestedScore = entity.AiScore.Value;
+            questionResult.AiScore = entity.AiScore.Value;
         }
 
         questionResult.TeacherNotes = entity.TeacherNotes ?? string.Empty;
@@ -436,17 +430,17 @@ public sealed class ExamReportRepository : IExamReportRepository
         // Trạng thái chấm của câu
         if (examState == ExamState.Abandoned || entity.GradingState == 3)
         {
-            questionResult.GradingState = GradingState.Failed;
+            questionResult.GradingState = ReportGradingState.Failed;
             questionResult.IsPassed = false;
         }
         else if (entity.TeacherFinalScore.HasValue || entity.AiScore.HasValue || entity.GradingState == 1 || entity.GradingState == 2)
         {
-            questionResult.GradingState = GradingState.Graded;
+            questionResult.GradingState = ReportGradingState.Graded;
             questionResult.IsPassed = questionResult.EarnedScore >= questionResult.PassThresholdScore;
         }
         else
         {
-            questionResult.GradingState = GradingState.Pending;
+            questionResult.GradingState = ReportGradingState.Pending;
             questionResult.IsPassed = false;
         }
 
@@ -461,6 +455,18 @@ public sealed class ExamReportRepository : IExamReportRepository
                         c => !string.IsNullOrWhiteSpace(c.CriterionName) ? c.CriterionName : c.CriterionCode,
                         c => c.IsMet,
                         StringComparer.OrdinalIgnoreCase);
+
+                    // Giữ nguyên điểm đạt / tối đa và giải thích của từng tiêu chí để trang chi tiết
+                    // hiển thị được bảng rubric đầy đủ (CriteriaOutcomes chỉ có Đạt/Không đạt).
+                    questionResult.RubricDetails = criteriaList.Select(c => new RubricCriterionDetailDto
+                    {
+                        CriterionCode = c.CriterionCode ?? string.Empty,
+                        CriterionName = string.IsNullOrWhiteSpace(c.CriterionName) ? c.CriterionCode ?? string.Empty : c.CriterionName,
+                        MaxPoints = c.MaxPoints,
+                        AwardedPoints = c.AwardedPoints,
+                        IsMet = c.IsMet,
+                        Explanation = c.Explanation ?? string.Empty
+                    }).ToList();
                 }
             }
             catch
@@ -486,11 +492,23 @@ public sealed class ExamReportRepository : IExamReportRepository
         questionResult.EarnedScore = grading.EarnedScore;
         questionResult.MaxScore = grading.MaxScore;
         questionResult.AiSuggestedScore = grading.EarnedScore;
+        questionResult.AiScore = grading.EarnedScore;
         questionResult.PassThresholdScore = grading.PassThresholdScore;
-        questionResult.GradingState = GradingState.Graded;
+        questionResult.GradingState = ReportGradingState.Graded;
         questionResult.IsPassed = grading.IsPassed;
         questionResult.RubricCriteria = grading.RubricDescription;
         questionResult.CriteriaOutcomes = grading.Outcomes.ToDictionary(o => o.Name, o => o.IsMet);
+        questionResult.RubricDetails = grading.Outcomes.Select(o => new RubricCriterionDetailDto
+        {
+            CriterionCode = o.CriterionId,
+            CriterionName = o.Name,
+            MaxPoints = 0m,          // RubricGradingResult chỉ có tổng điểm, không có thang từng tiêu chí
+            AwardedPoints = 0m,
+            IsMet = o.IsMet,
+            Explanation = o.MatchedKeywords.Count > 0
+                ? "Từ khoá khớp: " + string.Join(", ", o.MatchedKeywords)
+                : string.Empty
+        }).ToList();
         questionResult.Strengths = grading.Strengths;
         questionResult.Weaknesses = grading.Weaknesses;
         questionResult.AiFeedback = grading.Feedback;

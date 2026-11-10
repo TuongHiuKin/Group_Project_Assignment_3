@@ -296,10 +296,34 @@ public sealed class VivaHubIntegrationTests
         await student.InvokeAsync<VivaTimeRemainingDto>("BeginAnswering", id);
         Assert.Equal(VivaSessionState.Answering, (await Next(statuses)).State);
         await student.StopAsync();
+
+        // Persistence-first: TimedOut phải được broadcast (bằng chứng hệ thống đã phát hiện hết giờ).
         Assert.Equal(VivaSessionState.TimedOut, (await Next(statuses)).State);
-        Assert.Equal((byte)VivaSessionState.TimedOut, factory.Data.Sessions[id].State);
         Assert.Equal(1, factory.Data.TimeoutSaves);
+
+        // Sau đó phiên KHÔNG được kẹt ở TimedOut: worker gọi HandleAnswerTimeoutAsync, ghi một lượt
+        // rỗng 0 điểm rồi đưa phiên đi tiếp. Trước đây assert state == TimedOut ngay tại đây, nhưng
+        // điều đó biến test thành đua với bước recovery và khoá cứng đúng cái bug cần sửa.
+        var recovered = await WaitUntilAsync(
+            () => factory.Data.Sessions[id].State != (byte)VivaSessionState.TimedOut,
+            TimeSpan.FromSeconds(5));
+        Assert.True(recovered,
+            $"Phiên vẫn kẹt ở TimedOut (state={factory.Data.Sessions[id].State}) — học viên không thể nộp/chấm/báo cáo.");
+
+        Assert.Contains(factory.Data.Turns.Values,
+            t => t.SessionId == id && string.IsNullOrEmpty(t.TranscriptText));
         Assert.Empty(factory.Services.GetRequiredService<AIVES.BLL.Services.VivaInterview.VivaTimerManager>().GetActiveSessionIds());
+    }
+
+    private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (condition()) return true;
+            await Task.Delay(50);
+        }
+        return condition();
     }
 
     [Fact]

@@ -114,7 +114,7 @@
             </div>
         </div>
 
-        <!-- 2.5. Thiết lập chấm điểm cho AI theo Rubric (dữ liệu mô phỏng: RubricCatalog trong BLL) -->
+        <!-- 2.5. Thiết lập chấm điểm cho AI theo Rubric (rubric đọc từ bảng VivaRubricCriteria) -->
         <div class="viva-panel-card p-4 mb-4 border-0 shadow-sm" style="background: #ffffff; border-radius: 18px; border: 1px solid #e2e8f0;">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3 pb-3 border-bottom">
                 <div>
@@ -128,8 +128,11 @@
                     <p class="text-secondary small mb-0">AI chấm gợi ý từng câu theo các tiêu chí, trọng số dưới đây; điểm câu = tổng trọng số tiêu chí đạt quy về thang 10. Giảng viên là người chốt điểm cuối cùng.</p>
                 </div>
                 <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-3 py-2 fw-semibold" title="Nhóm 1 (ngân hàng câu hỏi & rubric) và Nhóm 4 (AI chấm điểm) chưa triển khai: thiết lập và điểm AI là dữ liệu mô phỏng">
-                        <i class="bi bi-info-circle me-1"></i> Dữ liệu mô phỏng
+                    <a href="/Grading/Index" class="btn btn-sm btn-primary rounded-pill px-3 fw-semibold">
+                        <i class="bi bi-clipboard-check me-1"></i>Duyệt điểm
+                    </a>
+                    <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle rounded-pill px-3 py-2 fw-semibold" title="Rubric đọc từ bảng VivaRubricCriteria trong SQL Server; điểm do AI chấm và giảng viên duyệt hoặc ghi đè">
+                        <i class="bi bi-database-check me-1"></i> Rubric từ DB
                     </span>
                 </div>
             </div>

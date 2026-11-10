@@ -22,4 +22,14 @@ public sealed class VivaQuestionRepository(AIVESDbContext context) : IVivaQuesti
             .Distinct()
             .OrderBy(x => x)
             .ToListAsync(ct);
+
+    public async Task<bool> SaveAudioUrlAsync(string questionId, string audioUrl, CancellationToken ct = default)
+    {
+        var entity = await context.VivaQuestions.FirstOrDefaultAsync(x => x.QuestionId == questionId, ct);
+        if (entity is null) return false;
+
+        entity.AudioUrl = audioUrl;
+        await context.SaveChangesAsync(ct);
+        return true;
+    }
 }

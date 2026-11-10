@@ -119,6 +119,12 @@ public sealed class AccountManagementRazorPagesTests
             return Task.FromResult(10);
         }
 
+        public Task<int> RegisterStudentAsync(string name, string email, string password, int? defaultLecturerId = null, CancellationToken ct = default)
+        {
+            CreatedName = name;
+            return Task.FromResult(10);
+        }
+
         public Task<bool> UpdateAccountAsync(int id, string name, string email, byte role, string? newPassword = null, CancellationToken ct = default) =>
             Task.FromResult(true);
 
@@ -137,13 +143,7 @@ public sealed class AccountManagementRazorPagesTests
         public Task<SystemAccount?> AuthenticateAsync(string email, string password, CancellationToken ct = default) =>
             Task.FromResult<SystemAccount?>(null);
 
-        public Task<List<NewsArticle>> GetNewsArticlesFromUserAsync(int accountId, CancellationToken ct = default) =>
-            Task.FromResult(new List<NewsArticle>());
 
-        public Task<List<NewsArticle>> GetNewsArticlesPublicAsync(CancellationToken ct = default) =>
-            Task.FromResult(new List<NewsArticle>());
 
-        public Task<List<NewsArticle>> GetNewsArticlesLecturerAsync(int accountId, CancellationToken ct = default) =>
-            Task.FromResult(new List<NewsArticle>());
     }
 }

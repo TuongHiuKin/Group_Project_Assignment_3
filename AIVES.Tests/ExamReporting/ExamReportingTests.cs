@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Xunit;
 using CriterionOutcomeDto = AIVES.BLL.Models.Grading.CriterionOutcomeDto;
+using GradingState = AIVES.BLL.Models.ExamReporting.ReportGradingState;
 
 namespace AIVES.Tests.ExamReporting;
 
@@ -520,38 +521,95 @@ public class ExamReportingTests
             new RubricGradingService());
     }
 
-    [Fact]
-    public async Task ExamReportRepository_TranscriptThatOnlyRepeatsQuestion_IsGradedZeroNotHardcodedScore()
+    /// <summary>
+    /// Repo có sẵn một bản ghi VivaGradingResult (mô phỏng GradingOrchestrator đã chấm nền).
+    /// Đây là nguồn điểm duy nhất của báo cáo từ nay.
+    /// </summary>
+    private static ExamReportRepository CreateRepoWithGrading(Guid sessionId, string transcript, decimal aiScore)
     {
+        var session = new VivaSession
+        {
+            SessionId = sessionId,
+            ExamId = "EXAM01",
+            StudentId = "1",
+            State = (byte)VivaSessionState.Completed,
+            StartedAtUtc = DateTime.UtcNow.AddMinutes(-5),
+            CompletedAtUtc = DateTime.UtcNow,
+            Turns = new List<VivaSessionTurn>
+            {
+                new() { TurnId = Guid.NewGuid(), SessionId = sessionId, QuestionId = "EXAM01-Q01", TurnOrdinal = 1, TranscriptText = transcript }
+            }
+        };
+
+        var gradingResults = new List<VivaGradingResult>
+        {
+            new()
+            {
+                Id = Guid.NewGuid(),
+                SessionId = sessionId,
+                QuestionId = "EXAM01-Q01",
+                AiScore = aiScore,
+                AiProvider = "Stub",
+                AiModel = "stub-model",
+                GradingState = (byte)AIVES.BLL.Models.Grading.GradingState.AiGraded,
+                CriteriaOutcomesJson = "[]",
+                RowVersion = new byte[] { 1 }
+            }
+        };
+
+        return new ExamReportRepository(
+            new StubSessionRepo([session]),
+            new StubQuestionRepo([new VivaQuestion { QuestionId = "EXAM01-Q01", ExamId = "EXAM01", Title = "DbContext Lifetime", Content = Exam01Q01Content }]),
+            new StubAccountRepo([new SystemAccount { AccountId = 1, AccountName = "Kieen", AccountEmail = "kin@gmail.com", AccountRole = 2 }]),
+            new RubricGradingService(),
+            new StubGradingRepo(gradingResults));
+    }
+
+    [Fact]
+    public async Task ExamReportRepository_CompletedSessionWithoutPersistedGrading_StaysPendingNotGradedAtRuntime()
+    {
+        // Hành vi mới (Nhóm 6 sửa lệch #2): báo cáo KHÔNG tự chấm bằng RubricGradingService.
+        // Phiên đã Completed nhưng chưa có VivaGradingResult thì để Pending và chờ
+        // GradingOrchestrator chấm nền; nếu chấm runtime ở đây, sinh viên sẽ thấy một điểm
+        // khác với điểm AI thật và giảng viên không có gì để duyệt.
         var repo = CreateRubricRepo(Exam01Q01Content);
 
         var attempt = Assert.Single(await repo.GetStudentAttemptsAsync("1", "EXAM01"));
         var q = Assert.Single(attempt.QuestionResults);
 
-        Assert.Equal(GradingState.Graded, attempt.GradingState);
+        Assert.Equal(GradingState.Pending, attempt.GradingState);
         Assert.Equal(0m, q.EarnedScore);
         Assert.False(q.IsPassed);
         Assert.False(attempt.IsPassed);
-        Assert.All(q.CriteriaOutcomes.Values, met => Assert.False(met));
-        Assert.Equal(RubricGradingService.NoRelevantAnswerFeedback, q.AiFeedback);
-        Assert.Empty(q.Strengths);
+        Assert.Equal(GradingState.Pending, q.GradingState);
+        Assert.True(string.IsNullOrEmpty(q.AiFeedback));
     }
 
     [Fact]
-    public async Task ExamReportRepository_ScoreChangesWithAnswerContent()
+    public async Task ExamReportRepository_ScoreChangesWithAnswerContent_OnlyWhenPersistedGradingExists()
     {
-        const string full = "DbContext là Scoped vì mỗi HTTP request có một instance riêng. Nếu giữ trong Singleton thì ChangeTracker tích lũy entity gây rò rỉ bộ nhớ, và DbContext không thread-safe nên nhiều luồng dùng đồng thời sẽ lỗi.";
-        const string partial = "Vì mỗi request cần một instance riêng, tạo mới và hủy theo vòng đời của request đó.";
+        // Điểm giờ lấy từ VivaGradingResult đã lưu (do GradingOrchestrator chấm), không chấm lại
+        // lúc xem báo cáo. Hai câu trả lời khác nhau vẫn ra điểm khác nhau, nhưng vì bản ghi
+        // grading khác nhau — đây mới là nguồn sự thật.
+        const string full = "DbContext là Scoped vì mỗi HTTP request có một instance riêng.";
 
-        var fullAttempt = Assert.Single(await CreateRubricRepo(full).GetStudentAttemptsAsync("1", "EXAM01"));
-        var partialAttempt = Assert.Single(await CreateRubricRepo(partial).GetStudentAttemptsAsync("1", "EXAM01"));
+        var fullSessionId = Guid.NewGuid();
+        var fullAttempt = Assert.Single(await CreateRepoWithGrading(fullSessionId, full, aiScore: 10m)
+            .GetStudentAttemptsAsync("1", "EXAM01"));
+
+        var partialSessionId = Guid.NewGuid();
+        var partialAttempt = Assert.Single(await CreateRepoWithGrading(partialSessionId, "Vì mỗi request cần một instance riêng.", aiScore: 3.5m)
+            .GetStudentAttemptsAsync("1", "EXAM01"));
+
+        // Cùng một input transcript nhưng KHÔNG có bản ghi grading -> Pending, 0 điểm.
+        var noGradingAttempt = Assert.Single(await CreateRubricRepo(full).GetStudentAttemptsAsync("1", "EXAM01"));
 
         Assert.Equal(10m, fullAttempt.NormalizedScore);
         Assert.True(fullAttempt.IsPassed);
         Assert.Equal(3.5m, partialAttempt.NormalizedScore);
         Assert.False(partialAttempt.IsPassed);
-        Assert.NotEqual(8.5m, fullAttempt.NormalizedScore);
-        Assert.NotEqual(8.5m, partialAttempt.NormalizedScore);
+        Assert.Equal(0m, noGradingAttempt.NormalizedScore);
+        Assert.Equal(GradingState.Pending, noGradingAttempt.GradingState);
     }
 
     [Fact]
@@ -567,12 +625,14 @@ public class ExamReportingTests
     }
 
     [Theory]
-    [InlineData("DbContext là Scoped vì mỗi HTTP request có một instance riêng. Nếu giữ trong Singleton thì ChangeTracker tích lũy entity gây rò rỉ bộ nhớ, và DbContext không thread-safe nên nhiều luồng dùng đồng thời sẽ lỗi.", true)]
-    [InlineData("Vì mỗi request cần một instance riêng, tạo mới và hủy theo vòng đời của request đó.", false)]
-    [InlineData(Exam01Q01Content, false)]
-    public async Task StudentAndTeacherViews_AgreeOnPassResultAndThreshold(string transcript, bool expectedPassed)
+    [InlineData(8.0, true)]   // trên ngưỡng 6.0 -> đạt
+    [InlineData(3.5, false)]  // dưới ngưỡng -> không đạt
+    [InlineData(6.0, true)]   // đúng ngưỡng -> đạt (so sánh >=)
+    public async Task StudentAndTeacherViews_AgreeOnPassResultAndThreshold(decimal aiScore, bool expectedPassed)
     {
-        var repo = CreateRubricRepo(transcript);
+        // Sinh viên và giảng viên phải thấy cùng một kết quả trên cùng một bản ghi grading.
+        const string transcript = "DbContext là Scoped vì mỗi HTTP request có một instance riêng.";
+        var repo = CreateRepoWithGrading(Guid.NewGuid(), transcript, aiScore);
 
         var studentReport = await new StudentReportService(repo).GetStudentReportAsync("1", "EXAM01");
         var teacherReport = await new ClassReportService(repo).GetStudentExamDetailForTeacherAsync("GV01", "EXAM01", "EXAM01", "1");
@@ -1057,6 +1117,14 @@ public class ExamReportingTests
             Task.FromResult(questions.Select(q => q.ExamId).Distinct().ToList());
         public Task<VivaQuestion?> GetByIdAsync(string questionId, CancellationToken ct = default) =>
             Task.FromResult(questions.FirstOrDefault(q => q.QuestionId == questionId));
+
+        public Task<bool> SaveAudioUrlAsync(string questionId, string audioUrl, CancellationToken ct = default)
+        {
+            var q = questions.FirstOrDefault(x => x.QuestionId == questionId);
+            if (q is null) return Task.FromResult(false);
+            q.AudioUrl = audioUrl;
+            return Task.FromResult(true);
+        }
     }
 
     private sealed class StubAccountRepo(List<SystemAccount> accounts) : ISystemAccountRepository

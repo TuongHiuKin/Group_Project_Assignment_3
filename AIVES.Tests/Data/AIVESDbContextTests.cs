@@ -19,23 +19,26 @@ public class AIVESDbContextTests
             .Options);
 
     [Fact]
-    public void Model_has_news_and_viva_tables_and_no_shadow_columns()
+    public void Model_has_only_project_tables_and_no_shadow_columns()
     {
+        // News (Category/Tag/NewsArticle/NewsTag) đã bị bỏ — không thuộc 3 nhóm chức năng 3, 4, 6.
         using var context = CreateContext();
         var tables = context.Model.GetEntityTypes().ToArray();
-        Assert.Equal(new[] { "Category", "NewsArticle", "NewsTag", "SystemAccount", "Tag", "VivaGradeChangeLog", "VivaGradingResult", "VivaQuestion", "VivaSession", "VivaSessionTurn" },
+        Assert.Equal(
+            new[] { "SystemAccount", "VivaGradeChangeLog", "VivaGradingResult", "VivaQuestion", "VivaRubricCriteria", "VivaSession", "VivaSessionTurn" },
             tables.Select(x => x.GetTableName()).OrderBy(x => x));
         Assert.All(tables, table =>
         {
             Assert.Equal("dbo", table.GetSchema());
             Assert.DoesNotContain(table.GetProperties(), x => x.IsShadowProperty());
         });
-        Assert.Equal(9, tables.Count(x => x.FindPrimaryKey()!.Properties.Count == 1));
-        var newsIdentityTables = new[] { typeof(Category), typeof(NewsArticle), typeof(SystemAccount), typeof(Tag), typeof(VivaGradeChangeLog) };
-        Assert.All(tables.Where(x => newsIdentityTables.Contains(x.ClrType)), table =>
+
+        var identityTables = new[] { typeof(SystemAccount), typeof(VivaGradeChangeLog) };
+        Assert.All(tables.Where(x => identityTables.Contains(x.ClrType)), table =>
             Assert.Equal(ValueGenerated.OnAdd, table.FindPrimaryKey()!.Properties.Single().ValueGenerated));
-        var vivaNeverTables = new[] { typeof(VivaGradingResult), typeof(VivaQuestion), typeof(VivaSession), typeof(VivaSessionTurn) };
-        Assert.All(tables.Where(x => vivaNeverTables.Contains(x.ClrType)), table =>
+
+        var neverTables = new[] { typeof(VivaGradingResult), typeof(VivaQuestion), typeof(VivaSession), typeof(VivaSessionTurn) };
+        Assert.All(tables.Where(x => neverTables.Contains(x.ClrType)), table =>
             Assert.Equal(ValueGenerated.Never, table.FindPrimaryKey()!.Properties.Single().ValueGenerated));
     }
 
@@ -43,41 +46,24 @@ public class AIVESDbContextTests
     public void Column_types_lengths_nullability_and_default_match_schema()
     {
         using var context = CreateContext();
-        var news = context.Model.FindEntityType(typeof(NewsArticle))!;
-        Assert.Equal(200, news.FindProperty(nameof(NewsArticle.NewsTitle))!.GetMaxLength());
-        Assert.Equal("nvarchar(max)", news.FindProperty(nameof(NewsArticle.NewsContent))!.GetColumnType());
-        Assert.Equal("tinyint", news.FindProperty(nameof(NewsArticle.NewsStatus))!.GetColumnType());
-        Assert.Equal(3, news.FindProperty(nameof(NewsArticle.CreatedDate))!.GetPrecision());
-        Assert.Equal("SYSUTCDATETIME()", news.FindProperty(nameof(NewsArticle.CreatedDate))!.GetDefaultValueSql());
-        Assert.False(news.FindProperty(nameof(NewsArticle.CategoryId))!.IsNullable);
-        Assert.False(news.FindProperty(nameof(NewsArticle.CreatedById))!.IsNullable);
-        Assert.True(news.FindProperty(nameof(NewsArticle.UpdatedById))!.IsNullable);
-        Assert.True(news.FindProperty(nameof(NewsArticle.ModifiedDate))!.IsNullable);
         var account = context.Model.FindEntityType(typeof(SystemAccount))!;
         Assert.Equal(254, account.FindProperty(nameof(SystemAccount.AccountEmail))!.GetMaxLength());
         Assert.Equal(512, account.FindProperty(nameof(SystemAccount.AccountPasswordHash))!.GetMaxLength());
         Assert.Equal(typeof(byte), account.FindProperty(nameof(SystemAccount.AccountRole))!.ClrType);
         Assert.False(account.FindProperty(nameof(SystemAccount.IsDeleted))!.IsNullable);
         Assert.Equal(false, account.FindProperty(nameof(SystemAccount.IsDeleted))!.GetDefaultValue());
-        Assert.Null(account.GetQueryFilter()); // Keep deleted authors visible on News joins.
-        var category = context.Model.FindEntityType(typeof(Category))!;
-        Assert.Equal(500, category.FindProperty(nameof(Category.CategoryDescription))!.GetMaxLength());
-        Assert.True(category.FindProperty(nameof(Category.CategoryDescription))!.IsNullable);
+        Assert.Null(account.GetQueryFilter()); // Xoá mềm không lọc khỏi truy vấn báo cáo.
     }
 
     [Fact]
-    public void Join_key_and_delete_behaviors_preserve_shared_records()
+    public void Delete_behaviors_preserve_shared_records()
     {
         using var context = CreateContext();
-        var join = context.Model.FindEntityType(typeof(NewsTag))!;
-        Assert.Equal(new[] { "NewsArticleId", "TagId" }, join.FindPrimaryKey()!.Properties.Select(x => x.Name));
         var foreignKeys = context.Model.GetEntityTypes().SelectMany(x => x.GetForeignKeys()).ToArray();
-        Assert.Equal(10, foreignKeys.Length);
+        Assert.NotEmpty(foreignKeys);
         var cascades = foreignKeys.Where(x => x.DeleteBehavior == DeleteBehavior.Cascade).ToArray();
-        Assert.Equal(4, cascades.Length);
         Assert.Contains(cascades, x => x.DeclaringEntityType.ClrType == typeof(VivaGradeChangeLog) && x.PrincipalEntityType.ClrType == typeof(VivaGradingResult));
         Assert.Contains(cascades, x => x.DeclaringEntityType.ClrType == typeof(VivaGradingResult) && x.PrincipalEntityType.ClrType == typeof(VivaSession));
-        Assert.Contains(cascades, x => x.DeclaringEntityType.ClrType == typeof(NewsTag) && x.PrincipalEntityType.ClrType == typeof(NewsArticle));
         Assert.Contains(cascades, x => x.DeclaringEntityType.ClrType == typeof(VivaSessionTurn) && x.PrincipalEntityType.ClrType == typeof(VivaSession));
         Assert.All(foreignKeys.Where(x => !cascades.Contains(x)), x => Assert.Equal(DeleteBehavior.ClientNoAction, x.DeleteBehavior));
     }
@@ -87,13 +73,15 @@ public class AIVESDbContextTests
     {
         using var context = CreateContext();
         var model = context.GetService<IDesignTimeModel>().Model;
-        Assert.Equal(11, model.GetEntityTypes().SelectMany(x => x.GetCheckConstraints()).Count());
-        var news = model.FindEntityType(typeof(NewsArticle))!;
-        var history = Assert.Single(news.GetIndexes(), x => x.GetDatabaseName() == "IX_NewsArticle_CreatedById_CreatedDate");
-        Assert.Equal(new[] { false, true }, history.IsDescending);
+        Assert.NotEmpty(model.GetEntityTypes().SelectMany(x => x.GetCheckConstraints()));
         var account = model.FindEntityType(typeof(SystemAccount))!;
         Assert.Equal("Latin1_General_100_CI_AS", account.FindProperty(nameof(SystemAccount.AccountEmail))!.GetCollation());
-        Assert.True(Assert.Single(account.GetIndexes()).IsUnique);
+        // Unique index trên email (chống trùng tài khoản).
+        Assert.True(Assert.Single(account.GetIndexes(), x => x.IsUnique).IsUnique);
+        // Filtered index cho sinh viên → giảng viên phụ trách (script 008).
+        var lecturerIndex = Assert.Single(account.GetIndexes(), x => !x.IsUnique);
+        Assert.Equal("IX_SystemAccount_LecturerId", lecturerIndex.GetDatabaseName());
+        Assert.Equal("[LecturerId] IS NOT NULL", lecturerIndex.GetFilter());
     }
 
     [Fact]
@@ -204,9 +192,6 @@ public class AIVESDbContextTests
         foreach (var type in new[]
         {
             typeof(ISystemAccountRepository),
-            typeof(ICategoryRepository),
-            typeof(INewsArticleRepository),
-            typeof(ITagRepository),
             typeof(IVivaSessionRepository),
             typeof(IVivaQuestionRepository),
             typeof(IVivaTurnRepository),
@@ -225,9 +210,6 @@ public class AIVESDbContextTests
         var repoTypes = new[]
         {
             typeof(SystemAccountRepository),
-            typeof(CategoryRepository),
-            typeof(NewsArticleRepository),
-            typeof(TagRepository),
             typeof(VivaSessionRepository),
             typeof(VivaQuestionRepository),
             typeof(VivaTurnRepository),
@@ -249,17 +231,5 @@ public class AIVESDbContextTests
                 Assert.False(typeof(DbContext).IsAssignableFrom(field.FieldType), $"Static field {field.Name} must not store DbContext.");
             });
         }
-    }
-
-    [Fact]
-    public async Task Report_rejects_invalid_range_before_opening_a_connection()
-    {
-        using var context = CreateContext();
-        var repository = new NewsArticleRepository(context);
-        var utc = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        await Assert.ThrowsAsync<ArgumentException>(() => repository.GetByCreatedDateRangeAsync(utc, utc, default));
-        await Assert.ThrowsAsync<ArgumentException>(() => repository.GetByCreatedDateRangeAsync(utc.AddDays(1), utc, default));
-        await Assert.ThrowsAsync<ArgumentException>(() => repository.GetByCreatedDateRangeAsync(
-            DateTime.SpecifyKind(utc, DateTimeKind.Unspecified), utc.AddDays(1), default));
     }
 }

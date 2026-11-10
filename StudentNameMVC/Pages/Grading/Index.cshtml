@@ -212,28 +212,39 @@
                                     </div>
                                 </td>
                                 <td class="text-center" data-cell="state">
-                                    @switch (item.OverallState)
+                                    @if (item.IsInProgress)
                                     {
-                                        case GradingState.Pending:
-                                            <span data-grading-badge class="badge bg-secondary px-3 py-2 rounded-pill">
-                                                <i class="bi bi-hourglass-split me-1"></i>Chờ chấm điểm
-                                            </span>
-                                            break;
-                                        case GradingState.AiGraded:
-                                            <span data-grading-badge class="badge bg-warning text-dark px-3 py-2 rounded-pill">
-                                                <i class="bi bi-robot me-1"></i>AI chấm, chờ giảng viên duyệt
-                                            </span>
-                                            break;
-                                        case GradingState.Finalized:
-                                            <span data-grading-badge class="badge bg-success px-3 py-2 rounded-pill">
-                                                <i class="bi bi-check-circle-fill me-1"></i>Điểm chính thức
-                                            </span>
-                                            break;
-                                        case GradingState.Failed:
-                                            <span data-grading-badge class="badge bg-danger px-3 py-2 rounded-pill">
-                                                <i class="bi bi-exclamation-triangle-fill me-1"></i>Cần chấm lại
-                                            </span>
-                                            break;
+                                        @* Phiên đang thi: OverallState = Pending nên nếu chỉ hiện "Chờ chấm điểm"
+                                           thì giảng viên tưởng sinh viên đã nộp. Hiện rõ trạng thái thật. *@
+                                        <span data-grading-badge class="badge bg-info text-dark px-3 py-2 rounded-pill">
+                                            <i class="bi bi-broadcast me-1"></i>Đang diễn ra: @item.SessionStateLabel
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        @switch (item.OverallState)
+                                        {
+                                            case GradingState.Pending:
+                                                <span data-grading-badge class="badge bg-secondary px-3 py-2 rounded-pill">
+                                                    <i class="bi bi-hourglass-split me-1"></i>Chờ chấm điểm
+                                                </span>
+                                                break;
+                                            case GradingState.AiGraded:
+                                                <span data-grading-badge class="badge bg-warning text-dark px-3 py-2 rounded-pill">
+                                                    <i class="bi bi-robot me-1"></i>AI chấm, chờ giảng viên duyệt
+                                                </span>
+                                                break;
+                                            case GradingState.Finalized:
+                                                <span data-grading-badge class="badge bg-success px-3 py-2 rounded-pill">
+                                                    <i class="bi bi-check-circle-fill me-1"></i>Điểm chính thức
+                                                </span>
+                                                break;
+                                            case GradingState.Failed:
+                                                <span data-grading-badge class="badge bg-danger px-3 py-2 rounded-pill">
+                                                    <i class="bi bi-exclamation-triangle-fill me-1"></i>Cần chấm lại
+                                                </span>
+                                                break;
+                                        }
                                     }
                                 </td>
                                 <td class="text-center" data-cell="ai-score">

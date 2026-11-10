@@ -28,10 +28,13 @@ public interface ISystemAccountService
     // --- 5. Xác thực đăng nhập Staff / Lecturer ---
     Task<SystemAccount?> AuthenticateAsync(string email, string password, CancellationToken ct = default);
 
-    // --- 6. TV4 News queries for Staff/Lecturer/Public ---
-    Task<List<NewsArticle>> GetNewsArticlesFromUserAsync(int accountId, CancellationToken ct = default);
-    Task<List<NewsArticle>> GetNewsArticlesPublicAsync(CancellationToken ct = default);
-    Task<List<NewsArticle>> GetNewsArticlesLecturerAsync(int accountId, CancellationToken ct = default);
+    // --- 6. Sinh viên tự đăng ký (role luôn là Staff) ---
+    Task<int> RegisterStudentAsync(
+        string name,
+        string email,
+        string password,
+        int? defaultLecturerId = null,
+        CancellationToken ct = default);
 }
 
 public interface ISystemAccountServices : ISystemAccountService

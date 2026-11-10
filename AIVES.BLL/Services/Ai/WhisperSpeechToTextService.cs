@@ -208,27 +208,49 @@ public class WhisperSpeechToTextService : ISpeechToTextService
     {
         if (root.TryGetProperty("segments", out var segments) && segments.GetArrayLength() > 0)
         {
-            decimal totalProb = 0m;
+            // Độ tin cậy phải phản ánh CHẤT LƯỢNG NHẬN DẠNG, không phải "có tiếng hay không".
+            // Trước đây dùng (1 - no_speech_prob): khi sinh viên nói bất kỳ điều gì, kể cả đọc quảng cáo,
+            // no_speech_prob ≈ 0 nên điểm luôn ra 0.90–1.00 và không phân biệt được bản ghi tốt với bản ghi rác.
+            // avg_logprob là log-xác suất trung bình của các token Whisper đã chọn: gần 0 = rất chắc,
+            // -1.0 trở xuống = mô hình đang đoán mò. Ánh xạ tuyến tính [-1.0, 0] -> [0, 1].
+            decimal logProbTotal = 0m;
+            decimal noSpeechTotal = 0m;
             int count = 0;
 
             foreach (var segment in segments.EnumerateArray())
             {
+                if (!segment.TryGetProperty("avg_logprob", out var logProbProp) ||
+                    !logProbProp.TryGetDecimal(out var avgLogProb))
+                {
+                    continue;
+                }
+
+                // clamp(-1.0 .. 0.0) rồi chuẩn hoá về [0, 1]
+                var clamped = Math.Clamp(avgLogProb, -1.0m, 0.0m);
+                logProbTotal += clamped + 1.0m;
+
                 if (segment.TryGetProperty("no_speech_prob", out var noSpeechProp) &&
                     noSpeechProp.TryGetDecimal(out var noSpeechProb))
                 {
-                    decimal segmentConfidence = Math.Clamp(1.0m - noSpeechProb, 0.0m, 1.0m);
-                    totalProb += segmentConfidence;
-                    count++;
+                    noSpeechTotal += Math.Clamp(noSpeechProb, 0.0m, 1.0m);
                 }
+
+                count++;
             }
 
             if (count > 0)
             {
-                return Math.Round(totalProb / count, 2);
+                var recognitionConfidence = logProbTotal / count;          // 0..1 theo avg_logprob
+                var speechConfidence = 1.0m - (noSpeechTotal / count);      // 0..1 theo no_speech_prob
+
+                // Trọng số nghiêng về chất lượng nhận dạng; no_speech_prob chỉ hạ điểm khi gần như im lặng.
+                var combined = (recognitionConfidence * 0.75m) + (speechConfidence * 0.25m);
+                return Math.Round(Math.Clamp(combined, 0.0m, 1.0m), 2);
             }
         }
 
-        return 0.95m;
+        // Không có segments để tính: trả về giá trị trung tính thay vì 0.95 gây hiểu nhầm là "gần như chắc chắn".
+        return 0.5m;
     }
 
     private static string ResolveFileExtension(string mediaType)

@@ -104,6 +104,27 @@ public sealed class GeminiTextToSpeechService : ITextToSpeechService
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
         request.Headers.Add("x-goog-api-key", _profile.ApiKey);
 
+        // Gemini TTS tự nhận diện ngôn ngữ khi KHÔNG có languageCode, và đây là chế độ duy nhất
+        // xử lý đúng câu trộn Việt + Anh (thuật ngữ "DbContext", "Singleton"...). Chỉ gửi
+        // languageCode khi câu hoàn toàn một ngôn ngữ — ép vi-VN cho câu có tiếng Anh sẽ khiến
+        // model đọc từ tiếng Anh theo quy tắc tiếng Việt, đúng lỗi người dùng đã báo.
+        var languageCode = ResolveLanguageCode(text, voiceLocale);
+
+        var speechConfig = new Dictionary<string, object?>
+        {
+            ["voiceConfig"] = new
+            {
+                prebuiltVoiceConfig = new
+                {
+                    voiceName = _voice
+                }
+            }
+        };
+        if (languageCode is not null)
+        {
+            speechConfig["languageCode"] = languageCode;
+        }
+
         var payload = new
         {
             contents = new[]
@@ -119,16 +140,7 @@ public sealed class GeminiTextToSpeechService : ITextToSpeechService
             generationConfig = new
             {
                 responseModalities = new[] { "AUDIO" },
-                speechConfig = new
-                {
-                    voiceConfig = new
-                    {
-                        prebuiltVoiceConfig = new
-                        {
-                            voiceName = _voice
-                        }
-                    }
-                }
+                speechConfig
             }
         };
 
@@ -251,6 +263,54 @@ public sealed class GeminiTextToSpeechService : ITextToSpeechService
             }
             return new TextToSpeechResult(false, null, null, "Failed to parse Gemini TTS response.");
         }
+    }
+
+    /// <summary>
+    /// Quyết định có gửi <c>languageCode</c> cho Gemini TTS hay không.
+    ///
+    /// Gemini tự nhận diện ngôn ngữ khi trường này vắng mặt — và đó là chế độ DUY NHẤT xử lý đúng
+    /// câu trộn Việt + Anh. Câu hỏi vấn đáp của AIVES luôn trộn thuật ngữ tiếng Anh ("DbContext",
+    /// "Scoped lifetime", "Entity Tracker"), nên gần như luôn trả về null. Chỉ gửi mã ngôn ngữ khi
+    /// câu hoàn toàn thuần một ngôn ngữ, để giọng đọc ổn định hơn.
+    /// </summary>
+    private static string? ResolveLanguageCode(string text, string voiceLocale)
+    {
+        if (string.IsNullOrWhiteSpace(text) || string.IsNullOrWhiteSpace(voiceLocale))
+        {
+            return null;
+        }
+
+        var hasVietnamese = HasVietnameseDiacritics(text);
+        var hasAsciiLatinWords = ContainsEnglishWord(text);
+
+        // Trộn ngôn ngữ -> để Gemini tự nhận diện.
+        if (hasVietnamese && hasAsciiLatinWords)
+        {
+            return null;
+        }
+
+        return voiceLocale;
+    }
+
+    /// <summary>Ký tự có dấu tiếng Việt (ngoài ASCII) là dấu hiệu chắc chắn của tiếng Việt.</summary>
+    private static bool HasVietnameseDiacritics(string text) => text.Any(ch => ch > 127);
+
+    /// <summary>
+    /// Có ít nhất một từ thuần ASCII đủ dài để coi là thuật ngữ tiếng Anh.
+    /// Bỏ qua các từ tiếng Việt không dấu ngắn và số.
+    /// </summary>
+    private static bool ContainsEnglishWord(string text)
+    {
+        foreach (var token in text.Split([' ', ',', '.', ';', ':', '!', '?', '(', ')', '[', ']', '"', '\'', '/', '-'],
+                     StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (token.Length >= 4 && token.All(ch => ch < 128) && token.Any(char.IsAsciiLetter))
+            {
+                // "va", "la", "cua" (tiếng Việt không dấu) ngắn nên đã bị loại bởi Length >= 4.
+                return true;
+            }
+        }
+        return false;
     }
 
     private static string ComputeHash(string input)

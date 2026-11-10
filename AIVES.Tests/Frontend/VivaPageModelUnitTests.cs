@@ -106,6 +106,15 @@ public sealed class VivaPageModelUnitTests
         }
 
         public Task<bool> AuthorizeUserForSessionAsync(Guid sessionId, string userId, CancellationToken ct = default) => Task.FromResult(true);
+        public Task<bool> ExamExistsAsync(string examId, CancellationToken ct = default)
+            => Task.FromResult(!string.IsNullOrWhiteSpace(examId));
+        public Task HandleAnswerTimeoutAsync(Guid sessionId, string questionId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task<(int Used, int Max, bool CanStart)> GetAttemptAllowanceAsync(string examId, string studentId, CancellationToken ct = default)
+            => Task.FromResult((0, 3, true));
+        public Task<List<Guid>> GetWaitingSessionIdsAsync(CancellationToken ct = default)
+            => Task.FromResult(new List<Guid>());
+        public Task<int> RecoverInterruptedTimeoutsAsync(CancellationToken ct = default)
+            => Task.FromResult(0);
         public Task<VivaQuestionDto> StartSessionAsync(Guid sessionId, CancellationToken ct = default) => throw new NotImplementedException();
 
         public Task<VivaTranscriptDto> SubmitAnswerAudioAsync(VivaAnswerSubmissionDto submission, CancellationToken ct = default)
@@ -119,6 +128,9 @@ public sealed class VivaPageModelUnitTests
                 DateTime.UtcNow
             ));
         }
+
+        public Task<string?> EnsureFollowUpAudioAsync(Guid sessionId, Guid turnId, CancellationToken ct = default)
+            => Task.FromResult<string?>("/audio/cache/tts-followup.wav");
 
         public Task<VivaFollowUpDto?> GenerateFollowUpAsync(Guid sessionId, Guid turnId, CancellationToken ct = default)
         {

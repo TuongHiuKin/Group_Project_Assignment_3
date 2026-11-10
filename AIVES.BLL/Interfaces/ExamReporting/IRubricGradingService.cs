@@ -4,7 +4,8 @@ namespace AIVES.BLL.Interfaces.ExamReporting;
 
 /// <summary>
 /// Chấm điểm tự động theo Rubric từ khóa (rule-based, không gọi mạng hay AI).
-/// Chấm điểm AI nâng cao (Nhóm 4) nằm ngoài phạm vi ASM2.
+/// Đây là phương án DỰ PHÒNG khi AI chấm điểm (Nhóm 4, <c>GradingOrchestrator</c>) lỗi hoặc
+/// timeout; điểm chính thức vẫn do AI chấm và giảng viên duyệt.
 /// </summary>
 public interface IRubricGradingService
 {

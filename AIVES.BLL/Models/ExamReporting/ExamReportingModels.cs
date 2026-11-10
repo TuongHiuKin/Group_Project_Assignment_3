@@ -14,7 +14,13 @@ public enum ExamState
     Cancelled = 4
 }
 
-public enum GradingState
+/// <summary>
+/// Trạng thái chấm điểm dùng riêng cho BÁO CÁO (Nhóm 6). Tách khỏi
+/// <see cref="Grading.GradingState"/> của Nhóm 4 (Pending/AiGraded/Finalized/Failed) để hai enum
+/// không trùng tên và không ai nhầm giá trị byte. Giá trị ở đây là của DTO báo cáo,
+/// KHÔNG phải giá trị lưu trong cột VivaGradingResult.GradingState.
+/// </summary>
+public enum ReportGradingState
 {
     Pending = 1,
     Graded = 2,
@@ -49,7 +55,7 @@ public class QuestionResultDto
 
     public bool IsPassed { get; set; }
     public decimal PassThresholdScore { get; set; } = 6.0m;
-    public GradingState GradingState { get; set; } = GradingState.Graded;
+    public ReportGradingState GradingState { get; set; } = ReportGradingState.Graded;
     public ExamEvaluationMode EvaluationMode { get; set; } = ExamEvaluationMode.Score;
 
     // Trạng thái phê duyệt điểm (Nhóm 4 - HITL)
@@ -67,6 +73,27 @@ public class QuestionResultDto
     public string Weaknesses { get; set; } = string.Empty; // Điểm yếu / ý còn thiếu
     public string RubricCriteria { get; set; } = string.Empty;
     public Dictionary<string, bool> CriteriaOutcomes { get; set; } = new();
+
+    /// <summary>
+    /// Chi tiết từng tiêu chí rubric: điểm đạt / điểm tối đa và giải thích của AI.
+    /// <see cref="CriteriaOutcomes"/> chỉ giữ Đạt/Không đạt nên không đủ để giảng viên đối chiếu;
+    /// danh sách này là nguồn cho bảng rubric ở trang chi tiết bài thi.
+    /// </summary>
+    public List<RubricCriterionDetailDto> RubricDetails { get; set; } = new();
+
+    /// <summary>Điểm AI đề xuất (nullable: null khi chưa chấm, khác với 0 điểm thật).</summary>
+    public decimal? AiScore { get; set; }
+}
+
+/// <summary>Một tiêu chí rubric kèm kết quả chấm.</summary>
+public class RubricCriterionDetailDto
+{
+    public string CriterionCode { get; set; } = string.Empty;
+    public string CriterionName { get; set; } = string.Empty;
+    public decimal MaxPoints { get; set; }
+    public decimal AwardedPoints { get; set; }
+    public bool IsMet { get; set; }
+    public string Explanation { get; set; } = string.Empty;
 }
 
 public class AttemptSnapshotDto
@@ -78,7 +105,7 @@ public class AttemptSnapshotDto
     public string ExamId { get; set; } = string.Empty;
     public int AttemptOrdinal { get; set; } = 1;
     public ExamState ExamState { get; set; } = ExamState.Completed;
-    public GradingState GradingState { get; set; } = GradingState.Graded;
+    public ReportGradingState GradingState { get; set; } = ReportGradingState.Graded;
     public ExamEvaluationMode EvaluationMode { get; set; } = ExamEvaluationMode.Score;
     public DateTime? CompletedAt { get; set; }
     public string SettingsVersion { get; set; } = "1.0";

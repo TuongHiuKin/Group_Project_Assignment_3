@@ -4,7 +4,7 @@
 
 Mục tiêu mới: nhóm 6 — báo cáo từng lượt, tổng hợp cá nhân, thống kê lớp/biểu đồ. Nguồn nghiệp vụ là [business-rules.md](business-rules.md); đầu việc ở [TASKS.md](TASKS.md); contract/phạm vi triển khai ở [G6-IMPLEMENTATION-HANDOFF.md](G6-IMPLEMENTATION-HANDOFF.md).
 
-Source đang có nền News; cập nhật docs không có nghĩa báo cáo thi đã được xây. Khi review phải ghi nhánh/commit, không dùng tiến độ của nhánh local để suy ra code teammate trên nhánh khác. Chưa có xác nhận mapping/schema thi dùng được trong lượt đồng bộ tài liệu này.
+News module (Category/Tag/NewsArticle/NewsTag) đã bị **xoá khỏi source và DB** (script `007`); hệ thống chỉ còn 3 nhóm chức năng 3, 4, 6. Cập nhật docs không có nghĩa báo cáo thi đã được xây. Khi review phải ghi nhánh/commit, không dùng tiến độ của nhánh local để suy ra code teammate trên nhánh khác. Chưa có xác nhận mapping/schema thi dùng được trong lượt đồng bộ tài liệu này.
 
 ## 2. Project thực hiện có
 

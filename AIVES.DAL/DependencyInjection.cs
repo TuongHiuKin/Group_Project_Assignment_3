@@ -13,9 +13,6 @@ public static class DependencyInjection
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         services.AddDbContext<AIVESDbContext>(options => options.UseSqlServer(connectionString));
         services.AddScoped<ISystemAccountRepository, SystemAccountRepository>();
-        services.AddScoped<ICategoryRepository, CategoryRepository>();
-        services.AddScoped<INewsArticleRepository, NewsArticleRepository>();
-        services.AddScoped<ITagRepository, TagRepository>();
         services.AddScoped<IVivaSessionRepository, VivaSessionRepository>();
         services.AddScoped<IVivaQuestionRepository, VivaQuestionRepository>();
         services.AddScoped<IVivaTurnRepository, VivaTurnRepository>();

@@ -15,6 +15,7 @@ class VivaExamClient {
         this.submitAudioUrl = config.submitAudioUrl || '/Viva/Exam?handler=SubmitAudio';
         this.startSessionUrl = config.startSessionUrl || '/Viva/Exam?handler=StartSession';
         this.retryFollowUpUrl = config.retryFollowUpUrl || '/Viva/Exam?handler=RetryFollowUp';
+        this.followUpAudioUrl = config.followUpAudioUrl || '/Viva/Exam?handler=FollowUpAudio';
         this.finishSessionUrl = config.finishSessionUrl || '/Viva/Exam?handler=FinishSession';
         // AiServices:UseBrowserSpeechSynthesis: questions are always read by speechSynthesis, never by AI audio files.
         this.useBrowserTts = config.useBrowserTts === true;
@@ -79,6 +80,7 @@ class VivaExamClient {
 
             // Completed Section
             completedCard: document.getElementById('completedCard'),
+            conversationHistoryCard: document.getElementById('conversationHistoryCard'),
 
             // Alerts and modals
             errorToast: document.getElementById('vivaErrorToast'),
@@ -601,7 +603,9 @@ class VivaExamClient {
             this.el.transcriptionSpinner.classList.add('d-none');
         }
 
-        if (this.el.transcriptCard) {
+        // Server đánh dấu data-server-hidden="true" khi phiên đã xong: panel STT phải giữ ẩn,
+        // vì lịch sử hội thoại đầy đủ đã hiển thị ở bảng "Diễn biến buổi thi".
+        if (this.el.transcriptCard && this.el.transcriptCard.dataset.serverHidden !== 'true') {
             this.el.transcriptCard.classList.remove('d-none');
         }
 
@@ -616,6 +620,44 @@ class VivaExamClient {
             this.el.transcriptConfidence.textContent = `Độ tin cậy (ước lượng): ${pct}%`;
             this.el.transcriptConfidence.className = 'badge ' + (pct >= 80 ? 'bg-success' : (pct >= 50 ? 'bg-warning text-dark' : 'bg-danger'));
         }
+    }
+
+    /**
+     * Đọc câu hỏi xoáy bằng ĐÚNG giọng của câu hỏi chính.
+     *
+     * Câu hỏi chính luôn có file audio do Gemini TTS sinh sẵn. Câu hỏi xoáy sinh ra lúc chạy nên
+     * có thể thiếu file (TTS lỗi/timeout lúc sinh), khi đó playTts sẽ rơi về speechSynthesis của
+     * trình duyệt — giọng khác hoàn toàn và phụ thuộc máy người dùng. Trước khi chấp nhận fallback,
+     * xin server sinh lại audio để giọng luôn thống nhất.
+     */
+    async playFollowUpTts(followUp) {
+        const onDone = () => this.requestBeginAnswering('Mời bạn bắt đầu ghi âm trả lời câu hỏi phụ.');
+        let audioUrl = followUp.audioUrl;
+
+        if (!audioUrl && !this.useBrowserTts && this.followUpAudioUrl && followUp.turnId) {
+            try {
+                const body = new URLSearchParams({ sessionId: this.sessionId, turnId: followUp.turnId });
+                const resp = await fetch(this.followUpAudioUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'RequestVerificationToken': this.antiForgeryToken
+                    },
+                    body
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data && data.audioUrl) {
+                        audioUrl = data.audioUrl;
+                        followUp.audioUrl = audioUrl;
+                    }
+                }
+            } catch (err) {
+                console.warn('Could not fetch follow-up audio from the server:', err);
+            }
+        }
+
+        this.playTts(followUp.followUpContent, this.el.followUpAudio, audioUrl, onDone);
     }
 
     handleFollowUpGenerated(followUp) {
@@ -640,9 +682,7 @@ class VivaExamClient {
         // Follow-up TTS Playback (UI-05); the mic unlocks only after BeginAnswering succeeds.
         if (this.el.btnPlayFollowUpAudio) this.el.btnPlayFollowUpAudio.classList.remove('d-none');
         this.setRecordingUiState('disabled', 'Đang đọc câu hỏi phụ, vui lòng nghe hết rồi ghi âm.');
-        this.playTts(followUp.followUpContent, this.el.followUpAudio, followUp.audioUrl, () => {
-            this.requestBeginAnswering('Mời bạn bắt đầu ghi âm trả lời câu hỏi phụ.');
-        });
+        this.playFollowUpTts(followUp);
 
         this.showToast('AI đã tạo câu hỏi phụ cho bạn!', 'info');
     }
@@ -680,6 +720,17 @@ class VivaExamClient {
         if (this.el.questionCard) this.el.questionCard.classList.add('d-none');
         if (this.el.followUpCard) this.el.followUpCard.classList.add('d-none');
         if (this.el.answeringSection) this.el.answeringSection.classList.add('d-none');
+
+        // Panel STT của lượt cuối là thông tin thừa khi phiên đã xong — diễn biến đầy đủ đã ở bảng dưới.
+        if (this.el.transcriptCard) {
+            this.el.transcriptCard.classList.add('d-none');
+            this.el.transcriptCard.dataset.serverHidden = 'true';
+        }
+
+        // Bảng "Diễn biến buổi thi" chỉ có nghĩa khi đã kết thúc; server đã render sẵn nội dung.
+        if (this.el.conversationHistoryCard) {
+            this.el.conversationHistoryCard.classList.remove('d-none');
+        }
 
         if (this.el.completedCard) {
             this.el.completedCard.classList.remove('d-none');

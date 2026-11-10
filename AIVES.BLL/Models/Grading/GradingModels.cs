@@ -1,3 +1,5 @@
+using AIVES.BLL.Models.VivaInterview;
+
 namespace AIVES.BLL.Models.Grading;
 
 public enum GradingState : byte
@@ -100,6 +102,36 @@ public sealed class SessionGradingSummaryDto
     public GradingState OverallState { get; set; }
     public bool IsFullyFinalized { get; set; }
     public List<QuestionGradingResultDto> QuestionResults { get; set; } = new();
+
+    /// <summary>
+    /// Trạng thái của buổi thi (VivaSessionState dạng byte), tách khỏi <see cref="OverallState"/>.
+    /// Cần riêng vì một phiên đang thi chưa có kết quả chấm nào nên OverallState = Pending, trùng với
+    /// phiên đã nộp nhưng chưa chấm — giảng viên không phân biệt được hai thứ rất khác nhau này.
+    /// </summary>
+    public VivaSessionState SessionState { get; set; }
+
+    /// <summary>True khi sinh viên còn đang làm bài (chưa nộp).</summary>
+    public bool IsInProgress => SessionState is VivaSessionState.Created or VivaSessionState.Ready
+        or VivaSessionState.QuestionDelivered or VivaSessionState.Answering
+        or VivaSessionState.Transcribing or VivaSessionState.TranscriptReady
+        or VivaSessionState.FollowUpGenerating or VivaSessionState.FollowUpDelivered
+        or VivaSessionState.TimedOut;
+
+    /// <summary>Nhãn tiếng Việt cho trạng thái buổi thi, dùng trên bảng chấm điểm.</summary>
+    public string SessionStateLabel => SessionState switch
+    {
+        VivaSessionState.Created or VivaSessionState.Ready => "Chưa bắt đầu",
+        VivaSessionState.QuestionDelivered => "Đang đọc câu hỏi",
+        VivaSessionState.Answering => "Đang trả lời",
+        VivaSessionState.Transcribing => "Đang chuyển giọng nói",
+        VivaSessionState.TranscriptReady => "Đã có bản ghi",
+        VivaSessionState.FollowUpGenerating => "Đang tạo câu hỏi xoáy",
+        VivaSessionState.FollowUpDelivered => "Đang hỏi xoáy",
+        VivaSessionState.Completed => "Đã nộp bài",
+        VivaSessionState.Failed => "Lỗi",
+        VivaSessionState.TimedOut => "Hết giờ",
+        _ => "Không rõ"
+    };
 
     public List<GradeChangeLogDto> AllChangeLogs => QuestionResults.SelectMany(q => q.ChangeLogs).OrderByDescending(l => l.ChangedAtUtc).ToList();
 }

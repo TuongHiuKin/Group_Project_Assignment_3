@@ -23,6 +23,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using StudentNameMVC.Pages;
 using Xunit;
+using GradingState = AIVES.BLL.Models.ExamReporting.ReportGradingState;
 
 namespace AIVES.Tests.Frontend;
 

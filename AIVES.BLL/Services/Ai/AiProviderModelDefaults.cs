@@ -23,6 +23,15 @@ public static class AiProviderModelDefaults
         (string.Equals(kind, AiProviderKinds.OpenAiCompatible, StringComparison.OrdinalIgnoreCase) &&
          Contains(baseUrl, "deepseek"));
 
+    /// <summary>
+    /// Same detection, also matching the profile name. A multi-model router
+    /// (e.g. https://api.deploy.com/api/v1) serves DeepSeek models from a base URL that contains no
+    /// "deepseek" substring, so the admin-supplied profile name is the only available signal that
+    /// this profile is chat-only and must never be routed for audio.
+    /// </summary>
+    public static bool IsDeepSeek(string? kind, string? baseUrl, string? name) =>
+        IsDeepSeek(kind, baseUrl) || Contains(name, "deepseek");
+
     /// <summary>Groq does expose Whisper STT but no TTS.</summary>
     public static bool IsGroq(string? baseUrl) => Contains(baseUrl, "groq");
 

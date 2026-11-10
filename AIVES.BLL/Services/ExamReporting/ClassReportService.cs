@@ -1,6 +1,7 @@
 using System.Text;
 using AIVES.BLL.Interfaces.ExamReporting;
 using AIVES.BLL.Models.ExamReporting;
+using GradingState = AIVES.BLL.Models.ExamReporting.ReportGradingState;
 
 namespace AIVES.BLL.Services.ExamReporting;
 
@@ -364,7 +365,9 @@ public class ClassReportService : IClassReportService
             AverageScore = averageScore,
             PassThresholdScore = settings.PassThresholdScore,
             PassRatePercentage = passRate,
-            Attempts = classAttempts.OrderByDescending(a => a.AttemptOrdinal).ToList()
+            // Sắp theo thứ tự thi: lượt 1 trước, mới nhất sau cùng — giống StudentReportService,
+            // để báo cáo mở ra luôn thấy lượt đầu tiên chứ không nhảy sang lượt gần nhất.
+            Attempts = classAttempts.OrderBy(a => a.AttemptOrdinal).ToList()
         };
     }
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
@@ -186,7 +186,7 @@ public sealed class AdminAiSettingsTests : IClassFixture<AdminAiSettingsTests.Ad
     }
 
     [Fact]
-    public async Task Get_AiSettings_RendersDeepSeekConnectCard()
+    public async Task Get_AiSettings_DoesNotRenderDeepSeekConnectCard()
     {
         using var factory = new RenderFactory();
         var client = factory.CreateClient();
@@ -196,13 +196,9 @@ public sealed class AdminAiSettingsTests : IClassFixture<AdminAiSettingsTests.Ad
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var html = WebUtility.HtmlDecode(await response.Content.ReadAsStringAsync());
 
-        Assert.Contains("Kết nối DeepSeek", html);
-        Assert.Contains("DeepSeekInput.ApiKey", html);
-        Assert.Contains("https://api.deepseek.com/v1", html);
-        Assert.Contains("deepseek-chat", html);
-        // The dedicated card must not let the admin route audio through DeepSeek.
-        Assert.DoesNotContain("DeepSeekInput.EnableStt", html);
-        Assert.DoesNotContain("DeepSeekInput.EnableTts", html);
+        Assert.DoesNotContain("Kết nối DeepSeek", html);
+        Assert.DoesNotContain("DeepSeekInput.ApiKey", html);
+        Assert.Contains("Định tuyến năng lực (Capability Routing)", html);
     }
 
     /// <summary>
@@ -584,6 +580,45 @@ public sealed class AdminAiSettingsTests : IClassFixture<AdminAiSettingsTests.Ad
         Assert.IsType<PageResult>(result);
         Assert.False(model.ModelState.IsValid);
         Assert.True(model.ModelState.ContainsKey("RoutingInput.SttProfileId"));
+    }
+
+    [Fact]
+    public async Task OnPostSaveRouting_DeepSeekProfile_RejectsReasonerGradingModel()
+    {
+        var config = new AIVES.BLL.Models.Ai.AiConfigurationModel
+        {
+            UseRealAi = true,
+            Profiles =
+            [
+                new AIVES.BLL.Models.Ai.AiProviderProfile
+                {
+                    Id = "deepseek",
+                    Name = "DeepSeek",
+                    Kind = AIVES.BLL.Models.Ai.AiProviderKinds.OpenAiCompatible,
+                    ApiKey = "sk-deepseek-1234567890",
+                    BaseUrl = "https://api.deepseek.com/v1",
+                    CustomCapabilities = AIVES.BLL.Models.Ai.AiCapability.Grading
+                }
+            ]
+        };
+
+        var fakeStore = new InMemoryCredentialStore("sk-deepseek-1234567890", useRealAi: true, config);
+        var model = CreatePageModel(fakeStore, new DummyConnectionTester(true, "OK"));
+
+        model.RoutingInput = new AiSettingsModel.RoutingInputModel
+        {
+            UseRealAi = true,
+            GradingProfileId = "deepseek",
+            GradingModel = AIVES.BLL.Services.Ai.AiProviderModelDefaults.DeepSeekReasoner
+        };
+
+        var result = await model.OnPostSaveRoutingAsync();
+
+        Assert.IsType<PageResult>(result);
+        Assert.False(model.ModelState.IsValid);
+        Assert.True(model.ModelState.ContainsKey("RoutingInput.GradingModel"));
+        Assert.Contains("deepseek-reasoner không hỗ trợ JSON output có cấu trúc cho chấm điểm",
+            model.ModelState["RoutingInput.GradingModel"]!.Errors[0].ErrorMessage);
     }
 
     private static AiSettingsModel CreatePageModel(IAiCredentialStore store, IAiConnectionTester tester)

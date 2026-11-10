@@ -189,7 +189,7 @@ public sealed class GradingE2ETests
             Assert.True(report.AverageScore.Value >= 6.0m);
 
             var attempt = Assert.Single(report.Attempts);
-            Assert.Equal(AIVES.BLL.Models.ExamReporting.GradingState.Graded, attempt.GradingState);
+            Assert.Equal(AIVES.BLL.Models.ExamReporting.ReportGradingState.Graded, attempt.GradingState);
             Assert.Equal(2, attempt.QuestionResults.Count);
 
             // Cả 2 câu hỏi đều có điểm AI gợi ý

@@ -70,8 +70,40 @@ public class IndexModel : PageModel
         }
     }
 
-    public void OnGet()
+    /// <summary>Số lượt đã dùng / tối đa của sinh viên hiện tại cho đề mặc định.</summary>
+    public int AttemptsUsed { get; private set; }
+
+    /// <summary>Tổng số lượt được phép làm cho đề mặc định.</summary>
+    public int AttemptsMax { get; private set; } = AIVES.BLL.Services.VivaInterview.VivaSessionOrchestrator.MaxAttemptsPerExam;
+
+    /// <summary>Sinh viên đã dùng hết lượt: ẩn nút bắt đầu thay vì để bấm rồi báo lỗi.</summary>
+    public bool HasAttemptsLeft { get; private set; } = true;
+
+    public async Task OnGetAsync(CancellationToken ct = default)
     {
+        if (_orchestrator == null || !IsCandidate)
+        {
+            return;
+        }
+
+        var studentId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(studentId))
+        {
+            return;
+        }
+
+        try
+        {
+            var allowance = await _orchestrator.GetAttemptAllowanceAsync(ExamIdInput, studentId, ct);
+            AttemptsUsed = allowance.Used;
+            AttemptsMax = allowance.Max;
+            HasAttemptsLeft = allowance.CanStart;
+        }
+        catch (Exception ex)
+        {
+            // Không chặn oan sinh viên chỉ vì bước đếm lượt lỗi; server vẫn có chốt chặn ở OnPostCreateAsync.
+            _logger.LogWarning(ex, "Could not load attempt allowance for student {StudentId}", studentId);
+        }
     }
 
     public IActionResult OnPost()
@@ -126,6 +158,27 @@ public class IndexModel : PageModel
         if (string.IsNullOrWhiteSpace(ExamIdInput))
         {
             ErrorMessage = "Vui lòng nhập mã đề thi (Exam ID).";
+            return Page();
+        }
+
+        // Reject an unknown exam before creating anything: a typo would otherwise persist a
+        // phantom session that can never start (no questions) yet still shows in the grading queue.
+        if (!await _orchestrator.ExamExistsAsync(ExamIdInput.Trim(), ct))
+        {
+            ErrorMessage = $"Mã đề thi '{ExamIdInput.Trim()}' không tồn tại hoặc chưa có câu hỏi. Vui lòng kiểm tra lại mã đề.";
+            return Page();
+        }
+
+        // Chốt chặn số lượt thi. Trước đây không có: sinh viên bấm nút là tạo được lượt mới vô hạn,
+        // dù trang báo cáo vẫn ghi giới hạn 3 lượt. Đã gặp thực tế một tài khoản có 18 lượt.
+        var allowance = await _orchestrator.GetAttemptAllowanceAsync(ExamIdInput.Trim(), studentId, ct);
+        if (!allowance.CanStart)
+        {
+            ErrorMessage = $"Bạn đã dùng hết {allowance.Max} lượt thi cho đề '{ExamIdInput.Trim()}'. " +
+                           "Vui lòng liên hệ giảng viên nếu cần làm lại.";
+            _logger.LogWarning(
+                "Student {StudentId} blocked from creating attempt {Used}/{Max} for exam {ExamId}",
+                studentId, allowance.Used, allowance.Max, ExamIdInput);
             return Page();
         }
 

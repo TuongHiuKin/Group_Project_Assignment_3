@@ -166,9 +166,15 @@
         else
         {
             <div class="accordion" id="attemptsAccordion">
+                @{
+                    // Danh sách đã sắp lượt mới nhất lên đầu, nên mở sẵn phần tử ĐẦU TIÊN của danh
+                    // sách. Trước đây mở cứng theo attempt.AttemptOrdinal == 1 — sau khi đảo thứ tự
+                    // thì lượt 1 nằm cuối, không còn khớp với lượt hiển thị trên cùng.
+                    var firstAttemptId = report.Attempts.First().AttemptId;
+                }
                 @foreach (var attempt in report.Attempts)
                 {
-                    bool isExpanded = attempt.AttemptOrdinal == 1;
+                    bool isExpanded = attempt.AttemptId == firstAttemptId;
                     string collapseId = $"collapseAttempt_{attempt.AttemptId}";
                     string headingId = $"headingAttempt_{attempt.AttemptId}";
 
@@ -189,7 +195,7 @@
                                         {
                                             <span class="badge bg-danger rounded-pill px-3">Bỏ dở (DEC-01)</span>
                                         }
-                                        else if (attempt.GradingState == AIVES.BLL.Models.ExamReporting.GradingState.Pending)
+                                        else if (attempt.GradingState == AIVES.BLL.Models.ExamReporting.ReportGradingState.Pending)
                                         {
                                             <span class="badge tag-pink rounded-pill px-3"><i class="bi bi-hourglass-split me-1"></i>Chưa chấm</span>
                                         }

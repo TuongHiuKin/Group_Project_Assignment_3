@@ -5,6 +5,7 @@ using AIVES.BLL.Interfaces.ExamReporting;
 using AIVES.BLL.Models.ExamReporting;
 using AIVES.DAL.Entities;
 using AIVES.DAL.Repositories.Interfaces;
+using Microsoft.Extensions.Logging;
 
 namespace AIVES.BLL.Services.ExamReporting;
 
@@ -21,13 +22,14 @@ public sealed class RubricGradingService : IRubricGradingService
 
     public const string NoRelevantAnswerFeedback = "Chưa có câu trả lời phù hợp (câu trả lời rỗng hoặc chỉ lặp lại câu hỏi).";
 
-    /// <summary>Nhóm 4 (AI chấm điểm) chưa triển khai: nhận xét là mô phỏng theo Rubric của giảng viên.</summary>
+    /// <summary>Nhận xét dự phòng khi AI lỗi: mô phỏng theo Rubric của giảng viên. Điểm và nhận xét chính thức do GradingOrchestrator (Nhóm 4) tạo.</summary>
     public const string FeedbackPrefix = "AI chấm gợi ý (mô phỏng theo Rubric của giảng viên): ";
 
     private static readonly JsonSerializerOptions KeywordsJsonOptions = new() { PropertyNameCaseInsensitive = true };
 
     private readonly IVivaRubricRepository? _rubricRepo;
     private readonly IReadOnlyList<QuestionRubric> _rubrics;
+    private readonly ILogger<RubricGradingService>? _logger;
 
     public RubricGradingService() : this(RubricCatalog.All)
     {
@@ -44,9 +46,18 @@ public sealed class RubricGradingService : IRubricGradingService
     }
 
     public RubricGradingService(IVivaRubricRepository rubricRepo, IReadOnlyList<QuestionRubric> fallbacks)
+        : this(rubricRepo, fallbacks, logger: null)
+    {
+    }
+
+    public RubricGradingService(
+        IVivaRubricRepository rubricRepo,
+        IReadOnlyList<QuestionRubric> fallbacks,
+        ILogger<RubricGradingService>? logger)
     {
         _rubricRepo = rubricRepo ?? throw new ArgumentNullException(nameof(rubricRepo));
         _rubrics = fallbacks ?? throw new ArgumentNullException(nameof(fallbacks));
+        _logger = logger;
     }
 
     public IReadOnlyList<QuestionRubric> GetRubrics(string examId) =>
@@ -63,11 +74,18 @@ public sealed class RubricGradingService : IRubricGradingService
         {
             var criteria = await _rubricRepo.GetCriteriaByExamAsync(examId, ct);
             var mapped = MapCriteria(criteria, examId);
-            return mapped.Count > 0 ? mapped : GetRubrics(examId);
+            if (mapped.Count > 0)
+            {
+                return mapped;
+            }
+
+            LogFallback(examId);
+            return GetRubrics(examId);
         }
         catch (Exception) when (_rubrics.Count > 0)
         {
             // A database that has not run 006 yet must not break grading or reporting.
+            LogFallback(examId);
             return GetRubrics(examId);
         }
     }
@@ -89,8 +107,16 @@ public sealed class RubricGradingService : IRubricGradingService
             // Fall through to the catalog fallback below.
         }
 
+        LogFallback(questionId);
         return GetRubric(questionId);
     }
+
+    /// <summary>Ghi cảnh báo khi rubric phải lấy từ <see cref="RubricCatalog"/> thay vì DB.</summary>
+    private void LogFallback(string key) =>
+        _logger?.LogWarning(
+            "Rubric cho {Key} không có trong VivaRubricCriteria — dùng RubricCatalog dự phòng. " +
+            "Chạy database/006-viva-rubric-criteria.sql để nạp rubric thật vào DB.",
+            key);
 
     /// <summary>Chấm theo một rubric đã resolve sẵn (từ DB hoặc catalog) thay vì tra cứu lại catalog.</summary>
     public RubricGradingResult? Grade(

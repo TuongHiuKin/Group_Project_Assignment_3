@@ -73,11 +73,15 @@ builder.Services.AddRateLimiter(options =>
         {
             PermitLimit = 5, Window = TimeSpan.FromMinutes(1), QueueLimit = 0
         }));
+    // Sinh viên tự đăng ký: chặn spam tạo tài khoản từ một IP.
+    options.AddPolicy("student-register", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5, Window = TimeSpan.FromMinutes(10), QueueLimit = 0
+        }));
 });
 builder.Services.AddScoped<ISystemAccountService, SystemAccountService>();
-builder.Services.AddScoped<ICategoryService, CategoryService>();
-builder.Services.AddScoped<INewsArticleService, NewsArticleService>();
-builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<ActiveAccountCookieEvents>();
 
 // Group 6 - Viva Exam Reporting Services (Scoped, backed by real SQL Server repositories)

@@ -118,7 +118,7 @@
                         data-bs-target="#pane-att-@att.AttemptOrdinal"
                         type="button">
                     <i class="bi bi-clock-history me-1"></i> Lượt thi số @att.AttemptOrdinal
-                    @if (att.GradingState == AIVES.BLL.Models.ExamReporting.GradingState.Graded)
+                    @if (att.GradingState == AIVES.BLL.Models.ExamReporting.ReportGradingState.Graded)
                     {
                         @if (att.IsFullyFinalized)
                         {
@@ -133,7 +133,7 @@
                             <span class="badge bg-white text-dark ms-2 border">@att.NormalizedScore / 10</span>
                         }
                     }
-                    else if (att.GradingState == AIVES.BLL.Models.ExamReporting.GradingState.Pending)
+                    else if (att.GradingState == AIVES.BLL.Models.ExamReporting.ReportGradingState.Pending)
                     {
                         <span class="badge bg-white text-secondary ms-2 border">Chưa chấm</span>
                     }
@@ -169,7 +169,7 @@
                                 {
                                     <span class="badge bg-danger fs-6 px-3 py-2 rounded-pill">Bỏ dở (DEC-01)</span>
                                 }
-                                else if (att.GradingState == AIVES.BLL.Models.ExamReporting.GradingState.Pending)
+                                else if (att.GradingState == AIVES.BLL.Models.ExamReporting.ReportGradingState.Pending)
                                 {
                                     <div class="text-end">
                                         <span class="small text-muted d-block">Điểm tổng kết</span>
@@ -217,6 +217,24 @@
                             </h5>
                             <span class="badge tag-purple">Tổng số câu: @att.QuestionResults.Count</span>
                         </div>
+
+                        @* Lối vào trang duyệt điểm. Trước đây trang này chỉ để xem, không có cách nào
+                           chốt điểm; giảng viên phải tự đoán đường dẫn /Grading/Review/{sessionId}. *@
+                        @if (att.GradingState != AIVES.BLL.Models.ExamReporting.ReportGradingState.Pending
+                             || att.QuestionResults.Any(q => q.IsAiGraded))
+                        {
+                            <div class="alert alert-info d-flex flex-wrap align-items-center justify-content-between gap-2 rounded-4 mb-3">
+                                <div class="small">
+                                    <i class="bi bi-info-circle-fill me-1"></i>
+                                    Cần xác nhận hoặc điều chỉnh điểm từng câu? Mở trang duyệt điểm để chấm lại bằng AI,
+                                    xác nhận điểm AI hoặc nhập điểm giảng viên.
+                                </div>
+                                <a class="btn btn-primary btn-sm rounded-pill px-3 fw-bold"
+                                   href="/Grading/Review/@att.AttemptId">
+                                    <i class="bi bi-pencil-square me-1"></i>Duyệt & Chấm điểm
+                                </a>
+                            </div>
+                        }
 
                         <div class="vstack gap-4">
                             @foreach (var q in att.QuestionResults)

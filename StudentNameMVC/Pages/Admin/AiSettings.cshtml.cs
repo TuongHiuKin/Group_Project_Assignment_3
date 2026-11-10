@@ -33,20 +33,6 @@ public class AiSettingsModel : PageModel
     public AiCredentialStatus Status { get; set; } = new(false, false, null, null);
     public AiConfigurationModel Configuration { get; set; } = new();
 
-    /// <summary>Hồ sơ DeepSeek hiện có (nếu đã kết nối), dùng cho khối "Kết nối DeepSeek".</summary>
-    public AiProviderProfile? DeepSeekProfile { get; set; }
-
-    public bool DeepSeekGradingEnabled { get; set; }
-    public bool DeepSeekLlmEnabled { get; set; }
-    public string DeepSeekModel => DeepSeekProfile == null
-        ? AiProviderModelDefaults.DeepSeekChat
-        : Configuration.Routing.Grading.ProfileId == DeepSeekProfile.Id && !string.IsNullOrWhiteSpace(Configuration.Routing.Grading.Model)
-            ? Configuration.Routing.Grading.Model!
-            : AiProviderModelDefaults.DeepSeekChat;
-
-    [BindProperty]
-    public DeepSeekInputModel DeepSeekInput { get; set; } = new();
-
     [BindProperty]
     public string? ApiKey { get; set; }
 
@@ -119,6 +105,20 @@ public class AiSettingsModel : PageModel
         if (ProfileInput.EnableLlm) capabilities |= AiCapability.FollowUpLlm;
         if (ProfileInput.EnableGrading) capabilities |= AiCapability.Grading;
         if (capabilities == AiCapability.None) capabilities = AiCapability.All;
+
+        // A chat-only vendor can never serve audio. Strip those flags even if the admin ticked them,
+        // otherwise the routing form accepts the profile for STT/TTS and the exam fails at runtime.
+        if (AiProviderModelDefaults.IsDeepSeek(ProfileInput.Kind, ProfileInput.BaseUrl, ProfileInput.Name))
+        {
+            capabilities &= ~(AiCapability.SpeechToText | AiCapability.TextToSpeech);
+            if (capabilities == AiCapability.None)
+            {
+                ModelState.AddModelError(string.Empty,
+                    $"Hồ sơ '{ProfileInput.Name}' là nhà cung cấp chat-only (DeepSeek): chỉ có thể chọn Hỏi thi (LLM) và/hoặc Chấm điểm (Grading).");
+                LoadViewModelData();
+                return Page();
+            }
+        }
 
         if (existing != null)
         {
@@ -261,183 +261,6 @@ public class AiSettingsModel : PageModel
         return RedirectToPage();
     }
 
-    // ============================================================
-    // DeepSeek quick-connect block (single API-key field)
-    // ============================================================
-
-    /// <summary>
-    /// Creates or updates the DeepSeek profile from the dedicated "Kết nối DeepSeek" card and routes
-    /// LLM/Grading to it. DeepSeek has no audio endpoints, so STT/TTS routing is left untouched.
-    /// </summary>
-    public async Task<IActionResult> OnPostSaveDeepSeekAsync(CancellationToken ct = default)
-    {
-        var config = _credentialStore.GetConfiguration();
-        var existing = FindDeepSeekProfile(config);
-        var isNew = existing == null;
-
-        var apiKey = (DeepSeekInput.ApiKey ?? string.Empty).Trim();
-        if (string.IsNullOrWhiteSpace(apiKey) && isNew)
-        {
-            ModelState.AddModelError("DeepSeekInput.ApiKey", "Vui lòng nhập API key DeepSeek.");
-        }
-        else if (!string.IsNullOrWhiteSpace(apiKey) && (apiKey.Length is < 10 or > 400 || apiKey.Any(char.IsWhiteSpace)))
-        {
-            ModelState.AddModelError("DeepSeekInput.ApiKey", "API key DeepSeek không hợp lệ (10–400 ký tự, không chứa khoảng trắng).");
-        }
-
-        var wantedCaps = AiCapability.None;
-        if (DeepSeekInput.EnableLlm) wantedCaps |= AiCapability.FollowUpLlm;
-        if (DeepSeekInput.EnableGrading) wantedCaps |= AiCapability.Grading;
-        if (wantedCaps == AiCapability.None)
-        {
-            ModelState.AddModelError(string.Empty, "Chọn ít nhất một năng lực (LLM hoặc Grading) cho DeepSeek.");
-        }
-
-        var model = string.IsNullOrWhiteSpace(DeepSeekInput.Model)
-            ? AiProviderModelDefaults.DeepSeekChat
-            : DeepSeekInput.Model.Trim();
-
-        if (!string.Equals(model, AiProviderModelDefaults.DeepSeekChat, StringComparison.OrdinalIgnoreCase))
-        {
-            // deepseek-reasoner streams long reasoning text: it blows the 30s grading timeout and
-            // returns JSON wrapped in prose. Only deepseek-chat is safe for structured grading.
-            ModelState.AddModelError("DeepSeekInput.Model",
-                $"Chỉ hỗ trợ '{AiProviderModelDefaults.DeepSeekChat}' cho chấm điểm. " +
-                $"'{AiProviderModelDefaults.DeepSeekReasoner}' sinh chuỗi suy luận dài, dễ vượt timeout 30 giây và hỏng định dạng JSON.");
-        }
-
-        if (!ModelState.IsValid)
-        {
-            LoadViewModelData();
-            return Page();
-        }
-
-        if (isNew)
-        {
-            existing = new AiProviderProfile
-            {
-                Id = AiProviderModelDefaults.DeepSeekProfileId,
-                Name = "DeepSeek",
-                Kind = AiProviderKinds.OpenAiCompatible,
-                BaseUrl = AiProviderModelDefaults.DeepSeekBaseUrl
-            };
-            config.Profiles.Add(existing);
-        }
-
-        var profile = existing!;
-        profile.Name = "DeepSeek";
-        profile.Kind = AiProviderKinds.OpenAiCompatible;
-        profile.BaseUrl = AiProviderModelDefaults.DeepSeekBaseUrl;
-        profile.OrganizationId = null;
-        profile.CustomCapabilities = wantedCaps;
-        if (!string.IsNullOrWhiteSpace(apiKey))
-        {
-            profile.ApiKey = apiKey;
-        }
-
-        // Route the enabled capabilities. Never touch STT/TTS: DeepSeek cannot serve audio.
-        if (wantedCaps.HasFlag(AiCapability.FollowUpLlm))
-        {
-            config.Routing.Llm.ProfileId = profile.Id;
-            config.Routing.Llm.Model = model;
-        }
-        else if (string.Equals(config.Routing.Llm.ProfileId, profile.Id, StringComparison.OrdinalIgnoreCase))
-        {
-            config.Routing.Llm.ProfileId = config.Profiles
-                .FirstOrDefault(p => !string.Equals(p.Id, profile.Id, StringComparison.OrdinalIgnoreCase) &&
-                                     p.CustomCapabilities.HasFlag(AiCapability.FollowUpLlm))?.Id;
-        }
-
-        if (wantedCaps.HasFlag(AiCapability.Grading))
-        {
-            config.Routing.Grading.ProfileId = profile.Id;
-            config.Routing.Grading.Model = model;
-        }
-        else if (string.Equals(config.Routing.Grading.ProfileId, profile.Id, StringComparison.OrdinalIgnoreCase))
-        {
-            config.Routing.Grading.ProfileId = config.Profiles
-                .FirstOrDefault(p => !string.Equals(p.Id, profile.Id, StringComparison.OrdinalIgnoreCase) &&
-                                     p.CustomCapabilities.HasFlag(AiCapability.Grading))?.Id;
-        }
-
-        config.UseRealAi = true;
-
-        await _credentialStore.SaveConfigurationAsync(config, ct);
-        TempData["SuccessMessage"] = isNew
-            ? "Đã kết nối DeepSeek và định tuyến LLM/Grading thành công."
-            : "Đã cập nhật kết nối DeepSeek thành công.";
-        return RedirectToPage();
-    }
-
-    /// <summary>Verifies a DeepSeek key against GET /v1/models without persisting anything.</summary>
-    public async Task<IActionResult> OnPostTestDeepSeekAsync(CancellationToken ct = default)
-    {
-        var config = _credentialStore.GetConfiguration();
-        var existing = FindDeepSeekProfile(config);
-
-        var probe = new AiProviderProfile
-        {
-            Id = existing?.Id ?? "deepseek-probe",
-            Name = "DeepSeek",
-            Kind = AiProviderKinds.OpenAiCompatible,
-            BaseUrl = AiProviderModelDefaults.DeepSeekBaseUrl,
-            ApiKey = string.IsNullOrWhiteSpace(DeepSeekInput.ApiKey) ? existing?.ApiKey : DeepSeekInput.ApiKey!.Trim(),
-            CustomCapabilities = AiCapability.FollowUpLlm | AiCapability.Grading
-        };
-
-        if (string.IsNullOrWhiteSpace(probe.ApiKey))
-        {
-            TempData["TestErrorMessage"] = "Vui lòng nhập API key DeepSeek trước khi kiểm tra.";
-            return RedirectToPage();
-        }
-
-        var (ok, message) = await _connectionTester.TestProfileAsync(probe, ct);
-        if (ok)
-        {
-            var models = await _connectionTester.ListModelsAsync(probe, ct);
-            var suffix = models.Count > 0 ? $" Model khả dụng: {string.Join(", ", models)}." : string.Empty;
-            TempData["TestSuccessMessage"] = $"[DeepSeek] {message}{suffix}";
-        }
-        else
-        {
-            TempData["TestErrorMessage"] = $"[DeepSeek] {message}";
-        }
-
-        return RedirectToPage();
-    }
-
-    /// <summary>Removes the DeepSeek profile and clears routing that pointed to it.</summary>
-    public async Task<IActionResult> OnPostRemoveDeepSeekAsync(CancellationToken ct = default)
-    {
-        var config = _credentialStore.GetConfiguration();
-        var existing = FindDeepSeekProfile(config);
-        if (existing == null)
-        {
-            return RedirectToPage();
-        }
-
-        config.Profiles.Remove(existing);
-        if (string.Equals(config.Routing.Llm.ProfileId, existing.Id, StringComparison.OrdinalIgnoreCase))
-        {
-            config.Routing.Llm.ProfileId = config.Profiles.FirstOrDefault(p => p.CustomCapabilities.HasFlag(AiCapability.FollowUpLlm))?.Id;
-        }
-        if (string.Equals(config.Routing.Grading.ProfileId, existing.Id, StringComparison.OrdinalIgnoreCase))
-        {
-            config.Routing.Grading.ProfileId = config.Profiles.FirstOrDefault(p => p.CustomCapabilities.HasFlag(AiCapability.Grading))?.Id;
-        }
-
-        await _credentialStore.SaveConfigurationAsync(config, ct);
-        TempData["SuccessMessage"] = "Đã ngắt kết nối DeepSeek.";
-        return RedirectToPage();
-    }
-
-    /// <summary>Finds the DeepSeek profile: fixed id first, then any OpenAI-compatible profile pointing at deepseek.</summary>
-    public static AiProviderProfile? FindDeepSeekProfile(AiConfigurationModel config) =>
-        config.FindProfile(AiProviderModelDefaults.DeepSeekProfileId)
-        ?? config.Profiles.FirstOrDefault(p =>
-            string.Equals(p.Kind, AiProviderKinds.OpenAiCompatible, StringComparison.OrdinalIgnoreCase) &&
-            p.BaseUrl.Contains("deepseek", StringComparison.OrdinalIgnoreCase));
-
     public async Task<IActionResult> OnPostSaveRoutingAsync(CancellationToken ct = default)
     {
         var config = _credentialStore.GetConfiguration();
@@ -448,6 +271,11 @@ public class AiSettingsModel : PageModel
             if (p == null)
             {
                 ModelState.AddModelError("RoutingInput.SttProfileId", "Hồ sơ Speech-to-Text (STT) đã chọn không tồn tại.");
+            }
+            else if (AiProviderModelDefaults.IsDeepSeek(p.Kind, p.BaseUrl, p.Name))
+            {
+                ModelState.AddModelError("RoutingInput.SttProfileId",
+                    $"Hồ sơ '{p.Name}' là nhà cung cấp chat-only (DeepSeek), không có endpoint Speech-to-Text. Hãy chọn hồ sơ khác (Gemini hoặc Whisper).");
             }
             else if (!p.CustomCapabilities.HasFlag(AiCapability.SpeechToText))
             {
@@ -473,6 +301,11 @@ public class AiSettingsModel : PageModel
                         ModelState.AddModelError("RoutingInput.SttModel",
                             $"Model '{modelTrimmed}' là của Google Gemini, không tương thích với nhà cung cấp OpenAI. Vui lòng sử dụng '{defaultModel}' hoặc để trống.");
                     }
+                    else if (LooksLikeChatOnlyModel(modelTrimmed))
+                    {
+                        ModelState.AddModelError("RoutingInput.SttModel",
+                            $"Model '{modelTrimmed}' là mô hình chat, không có endpoint nhận dạng giọng nói. Chọn model STT của hồ sơ '{p.Name}' (ví dụ whisper) hoặc đổi hồ sơ.");
+                    }
                 }
             }
         }
@@ -483,6 +316,11 @@ public class AiSettingsModel : PageModel
             if (p == null)
             {
                 ModelState.AddModelError("RoutingInput.TtsProfileId", "Hồ sơ Text-to-Speech (TTS) đã chọn không tồn tại.");
+            }
+            else if (AiProviderModelDefaults.IsDeepSeek(p.Kind, p.BaseUrl, p.Name))
+            {
+                ModelState.AddModelError("RoutingInput.TtsProfileId",
+                    $"Hồ sơ '{p.Name}' là nhà cung cấp chat-only (DeepSeek), không có endpoint Text-to-Speech. Hãy chọn hồ sơ khác (Gemini hoặc OpenAI).");
             }
             else if (!p.CustomCapabilities.HasFlag(AiCapability.TextToSpeech))
             {
@@ -509,6 +347,11 @@ public class AiSettingsModel : PageModel
                     {
                         ModelState.AddModelError("RoutingInput.TtsModel",
                             $"Model '{modelTrimmed}' là của Google Gemini, không tương thích với nhà cung cấp OpenAI. Vui lòng sử dụng '{defaultModel}' hoặc để trống.");
+                    }
+                    else if (LooksLikeChatOnlyModel(modelTrimmed))
+                    {
+                        ModelState.AddModelError("RoutingInput.TtsModel",
+                            $"Model '{modelTrimmed}' là mô hình chat, không có endpoint tổng hợp giọng nói. Chọn model TTS của hồ sơ '{p.Name}' hoặc đổi hồ sơ.");
                     }
                 }
 
@@ -586,6 +429,11 @@ public class AiSettingsModel : PageModel
                     {
                         ModelState.AddModelError("RoutingInput.GradingModel",
                             $"Model '{modelTrimmed}' là của Google Gemini, không tương thích với nhà cung cấp OpenAI. Vui lòng sử dụng '{defaultModel}' hoặc để trống.");
+                    }
+                    else if (IsReasoningGradingModel(modelTrimmed))
+                    {
+                        ModelState.AddModelError("RoutingInput.GradingModel",
+                            "Model deepseek-reasoner không hỗ trợ JSON output có cấu trúc cho chấm điểm. Vui lòng chọn deepseek-chat.");
                     }
                 }
             }
@@ -717,6 +565,35 @@ public class AiSettingsModel : PageModel
         return m.StartsWith("gemini-") || m.StartsWith("models/gemini-");
     }
 
+    /// <summary>
+    /// True when the model name is a chat/reasoning LLM family. An audio capability cannot be served
+    /// by one of these, so routing STT/TTS to it must be rejected even when the profile advertises the
+    /// capability: a multi-model router (api.deploy.com) exposes only chat models while its profile
+    /// can still carry an STT flag from when it was created.
+    /// </summary>
+    private static bool LooksLikeChatOnlyModel(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return false;
+        var m = model.Trim().ToLowerInvariant();
+        if (m.Contains("-tts") || m.Contains("whisper")) return false;
+
+        string[] chatFamilies =
+        [
+            "deepseek", "glm-", "llama", "gpt-oss", "mixtral", "qwen", "gemma", "phi-",
+            "claude", "command-r", "o1-", "o3-", "gpt-4", "gpt-3", "deepseek-ai/"
+        ];
+        return chatFamilies.Any(f => m.Contains(f, StringComparison.Ordinal));
+    }
+
+    private static bool IsReasoningGradingModel(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return false;
+        var m = model.Trim().ToLowerInvariant();
+        return m.EndsWith(AiProviderModelDefaults.DeepSeekReasoner, StringComparison.Ordinal)
+            || m.Contains("/" + AiProviderModelDefaults.DeepSeekReasoner, StringComparison.Ordinal)
+            || m.EndsWith(":reasoner", StringComparison.Ordinal);
+    }
+
     public async Task<IActionResult> OnPostTestProfileAsync(string profileId, CancellationToken ct = default)
     {
         var config = _credentialStore.GetConfiguration();
@@ -822,19 +699,6 @@ public class AiSettingsModel : PageModel
         UseRealAi = Configuration.UseRealAi;
         ApiKey = null;
 
-        DeepSeekProfile = FindDeepSeekProfile(Configuration);
-        DeepSeekGradingEnabled = DeepSeekProfile != null &&
-            string.Equals(Configuration.Routing.Grading.ProfileId, DeepSeekProfile.Id, StringComparison.OrdinalIgnoreCase);
-        DeepSeekLlmEnabled = DeepSeekProfile != null &&
-            string.Equals(Configuration.Routing.Llm.ProfileId, DeepSeekProfile.Id, StringComparison.OrdinalIgnoreCase);
-
-        DeepSeekInput = new DeepSeekInputModel
-        {
-            ApiKey = null,
-            Model = DeepSeekModel,
-            EnableLlm = DeepSeekProfile?.CustomCapabilities.HasFlag(AiCapability.FollowUpLlm) ?? true,
-            EnableGrading = DeepSeekProfile?.CustomCapabilities.HasFlag(AiCapability.Grading) ?? true
-        };
 
         RoutingInput = new RoutingInputModel
         {
@@ -865,14 +729,6 @@ public class AiSettingsModel : PageModel
         public bool EnableGrading { get; set; } = true;
     }
 
-    public class DeepSeekInputModel
-    {
-        /// <summary>API key DeepSeek. Để trống khi đã có key để giữ nguyên.</summary>
-        public string? ApiKey { get; set; }
-        public string Model { get; set; } = AiProviderModelDefaults.DeepSeekChat;
-        public bool EnableLlm { get; set; } = true;
-        public bool EnableGrading { get; set; } = true;
-    }
 
     public class RoutingInputModel
     {

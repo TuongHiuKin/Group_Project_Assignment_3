@@ -259,65 +259,57 @@
 
                             @if (q.Turns.Count > 0)
                             {
-                                <div class="accordion" id="accordionTurns_@q.QuestionId">
-                                    @foreach (var turn in q.Turns)
-                                    {
-                                        var turnCollapseId = $"turnCollapse_{turn.TurnId}_{turn.TurnOrdinal}";
-                                        var isMain = turn.TurnOrdinal == 1;
+                                // Hiển thị trực tiếp, không dùng accordion: người xem thấy ngay toàn bộ
+                                // hội thoại theo thứ tự đọc. Thứ tự mỗi lượt là
+                                //   câu hỏi chính -> trả lời chính -> câu hỏi xoáy -> trả lời xoáy.
+                                // Lượt đầu của câu chứa câu trả lời chính; nếu AI có sinh câu xoáy thì
+                                // câu xoáy đó hiện ngay dưới, còn lượt kế tiếp là câu trả lời cho nó.
+                                var ordinalInQuestion = 0;
+                                @foreach (var turn in q.Turns)
+                                {
+                                    ordinalInQuestion++;
+                                    var isMain = ordinalInQuestion == 1;
+                                    var transcriptBoxBackground = isMain ? "#ffffff" : "#d1fae5";
+                                    var transcriptBoxBorder = isMain ? "#7c3aed" : "#047857";
+                                    var transcriptLabelColor = isMain ? "#6d28d9" : "#065f46";
+                                    var transcriptLabel = isMain ? "Câu trả lời chính" : "Câu trả lời cho câu hỏi xoáy";
 
-                                        <div class="accordion-item border rounded-3 mb-2 overflow-hidden">
-                                            <h2 class="accordion-header" id="heading_@turnCollapseId">
-                                                <button class="accordion-button @(isMain ? "" : "collapsed") bg-light py-2 px-3 fw-semibold small" type="button" data-bs-toggle="collapse" data-bs-target="#@turnCollapseId">
-                                                    <span class="badge @(isMain ? "bg-primary" : "bg-secondary") rounded-pill me-2">
-                                                        @(isMain ? "Câu trả lời chính" : $"Hỏi phụ #{turn.TurnOrdinal - 1}")
+                                    <div class="mb-3">
+                                        <div class="p-3 rounded-3" style="background: @transcriptBoxBackground; border-left: 5px solid @transcriptBoxBorder; border-top: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
+                                            <div class="small mb-1 fw-bold d-flex align-items-center justify-content-between" style="color: @transcriptLabelColor;">
+                                                <span><i class="bi bi-person-fill me-1"></i>@transcriptLabel</span>
+                                                @if (turn.ConfidenceScore.HasValue)
+                                                {
+                                                    <span class="badge bg-white text-muted border small">
+                                                        Độ tin cậy STT: @((turn.ConfidenceScore.Value * 100).ToString("0"))%
                                                     </span>
-                                                    @if (!string.IsNullOrWhiteSpace(turn.FollowUpQuestionText))
-                                                    {
-                                                        <span class="text-truncate text-secondary me-2" style="max-width: 450px;">
-                                                            Hỏi: "@turn.FollowUpQuestionText"
-                                                        </span>
-                                                    }
-                                                    @if (turn.ConfidenceScore.HasValue)
-                                                    {
-                                                        <span class="ms-auto me-3 badge bg-white text-muted border small">
-                                                            STT Conf: @((turn.ConfidenceScore.Value * 100).ToString("0"))%
-                                                        </span>
-                                                    }
-                                                </button>
-                                            </h2>
-                                            <div id="@turnCollapseId" class="accordion-collapse collapse @(isMain ? "show" : "")" data-bs-parent="#accordionTurns_@q.QuestionId">
-                                                <div class="accordion-body p-3 bg-white">
-                                                    @if (!string.IsNullOrWhiteSpace(turn.FollowUpQuestionText))
-                                                    {
-                                                        <div class="mb-2 p-2 rounded-3 bg-info bg-opacity-10 border border-info border-opacity-25 small">
-                                                            <strong class="text-info-emphasis"><i class="bi bi-robot me-1"></i>Câu hỏi tiếp nối của AI:</strong>
-                                                            <div class="text-dark mt-1">@turn.FollowUpQuestionText</div>
-                                                        </div>
-                                                    }
-
-                                                    <div class="p-3 rounded-3 bg-light border-start border-4 border-primary">
-                                                        <div class="text-secondary small mb-1 fw-bold">
-                                                            <i class="bi bi-chat-quote me-1"></i>Lời thoại sinh viên:
-                                                        </div>
-                                                        <div class="text-dark fst-italic">
-                                                            @(string.IsNullOrWhiteSpace(turn.TranscriptText) ? "(Không nhận diện được giọng nói hoặc chưa có lời thoại)" : turn.TranscriptText)
-                                                        </div>
-                                                    </div>
-
-                                                    @if (!string.IsNullOrWhiteSpace(turn.AudioUrl))
-                                                    {
-                                                        <div class="mt-2">
-                                                            <audio controls class="w-100" style="height: 38px;">
-                                                                <source src="@turn.AudioUrl" type="audio/wav">
-                                                                Trình duyệt của bạn không hỗ trợ phát âm thanh.
-                                                            </audio>
-                                                        </div>
-                                                    }
-                                                </div>
+                                                }
                                             </div>
+                                            <div class="fst-italic lh-base" style="color: #111827;">
+                                                @(string.IsNullOrWhiteSpace(turn.TranscriptText) ? "(Không nhận diện được giọng nói hoặc chưa có lời thoại)" : turn.TranscriptText)
+                                            </div>
+                                            @if (!string.IsNullOrWhiteSpace(turn.AudioUrl))
+                                            {
+                                                <div class="mt-2">
+                                                    <audio controls class="w-100" style="height: 38px;">
+                                                        <source src="@turn.AudioUrl" type="audio/wav">
+                                                        Trình duyệt của bạn không hỗ trợ phát âm thanh.
+                                                    </audio>
+                                                </div>
+                                            }
                                         </div>
-                                    }
-                                </div>
+
+                                        @if (!string.IsNullOrWhiteSpace(turn.FollowUpQuestionText))
+                                        {
+                                            <div class="p-3 rounded-3 mt-2" style="background: #fce7f3; border-left: 5px solid #be185d; border-top: 1px solid #fbcfe8; border-right: 1px solid #fbcfe8; border-bottom: 1px solid #fbcfe8;">
+                                                <div class="small mb-1 fw-bold" style="color: #9d174d;">
+                                                    <i class="bi bi-robot me-1"></i>Câu hỏi xoáy (AI sinh ra từ câu trả lời trên)
+                                                </div>
+                                                <div style="color: #111827;">@turn.FollowUpQuestionText</div>
+                                            </div>
+                                        }
+                                    </div>
+                                }
                             }
                             else
                             {

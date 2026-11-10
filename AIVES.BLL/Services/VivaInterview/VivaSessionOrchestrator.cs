@@ -22,6 +22,12 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
 {
     /// <summary>Each question gets the primary answer plus one follow-up; then the exam moves to the next question.</summary>
     public const int MaxTurnsPerQuestion = 2;
+
+    /// <summary>
+    /// Số lượt thi tối đa một sinh viên được làm cho một đề. Khớp với <c>MaxAllowedAttempts</c>
+    /// mà trang báo cáo hiển thị, để chốt chặn và báo cáo không nói hai con số khác nhau.
+    /// </summary>
+    public const int MaxAttemptsPerExam = 3;
     private const int MaxAudioSizeBytes = 25 * 1024 * 1024; // 25 MB
 
     /// <summary>Total turns a session may take: every question of the exam times <see cref="MaxTurnsPerQuestion"/>.</summary>
@@ -106,6 +112,66 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
     }
 
     /// <inheritdoc />
+    public async Task<bool> ExamExistsAsync(string examId, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(examId))
+            return false;
+        var questions = await _questionRepo.GetQuestionsByExamAsync(examId, ct);
+        return questions is { Count: > 0 };
+    }
+
+    /// <inheritdoc />
+    public async Task<int> RecoverInterruptedTimeoutsAsync(CancellationToken ct = default)
+    {
+        var stranded = (await _sessionRepo.GetSessionsWithDetailsAsync(ct: ct))
+            .Where(s => s.State == (byte)VivaSessionState.TimedOut)
+            .Select(s => new
+            {
+                s.SessionId,
+                QuestionId = s.Turns
+                    .OrderByDescending(t => t.TurnOrdinal)
+                    .Select(t => t.QuestionId)
+                    .FirstOrDefault()
+            })
+            .ToList();
+
+        if (stranded.Count == 0) return 0;
+
+        _logger.LogInformation(
+            "Recovering {Count} session(s) left in TimedOut state by a previous run.", stranded.Count);
+
+        var recovered = 0;
+        foreach (var session in stranded)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                await HandleAnswerTimeoutAsync(session.SessionId, session.QuestionId ?? string.Empty, ct);
+                recovered++;
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Could not recover timed-out session {SessionId}.", session.SessionId);
+            }
+        }
+        return recovered;
+    }
+
+    /// <inheritdoc />
+    public async Task<(int Used, int Max, bool CanStart)> GetAttemptAllowanceAsync(
+        string examId, string studentId, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(examId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(studentId);
+
+        const int max = MaxAttemptsPerExam;
+        var existing = await _sessionRepo.GetSessionsWithDetailsAsync(examId, studentId, ct);
+        var used = existing?.Count ?? 0;
+        return (used, max, used < max);
+    }
+
+    /// <inheritdoc />
     public async Task<bool> AuthorizeUserForSessionAsync(Guid sessionId, string userId, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(userId))
@@ -155,6 +221,8 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
                 if (ttsResult.IsSuccess && !string.IsNullOrEmpty(ttsResult.AudioUrl))
                 {
                     audioUrl = ttsResult.AudioUrl;
+                    // Lưu lại để lần thi sau không phải gọi Gemini nữa (mất ~7 giây mỗi lần).
+                    await _questionRepo.SaveAudioUrlAsync(initialQuestion.QuestionId, audioUrl, ct);
                 }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -166,6 +234,12 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
 
         // 1. Persistence First: Transition to QuestionDelivered
         await _sessionRepo.UpdateStateAsync(sessionId, (byte)VivaSessionState.QuestionDelivered, ct);
+
+        // Đồng hồ KHÔNG chạy ở đây: nó chỉ bắt đầu khi AI đọc xong câu hỏi và client gọi
+        // BeginAnswering. Nhưng phải ĐÁNH DẤU là câu đang được đọc, nếu không thì khi client
+        // chết (autoplay bị chặn, audio không bắn 'ended') sẽ không còn dấu vết nào để worker
+        // biết mà tự chạy đồng hồ — phiên kẹt vĩnh viễn ở QuestionDelivered.
+        _timers?.MarkQuestionBeingRead(sessionId, initialQuestion.QuestionId, initialQuestion.TimeLimitSeconds);
 
         var questionDto = new VivaQuestionDto(
             QuestionId: initialQuestion.QuestionId,
@@ -231,9 +305,11 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
                 var latest = details.Turns.OrderByDescending(t => t.TurnOrdinal).FirstOrDefault();
                 if (latest?.FollowUpQuestionText is { Length: > 0 }) persistedQuestionId = latest.QuestionId;
             }
-            // Only stop the timer after the answering transition is persisted.
+            // Only pause the timer after the answering transition is persisted.
+            // Pause (không Stop) để khi AI sinh xong câu xoáy, ResumePaused trả lại đúng số giây
+            // còn dở thay vì cấp lại nguyên 1p30s.
             await _sessionRepo.UpdateStateAsync(submission.SessionId, (byte)VivaSessionState.Transcribing, ct);
-            _timers?.Stop(submission.SessionId);
+            _timers?.Pause(submission.SessionId);
         }
         var maxTurns = await GetSessionMaxTurnsAsync(session.ExamId, ct);
         await _publisher.PublishStatusChangedAsync(new VivaSessionStatusDto(
@@ -355,12 +431,41 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         {
             _logger.LogInformation("Session {SessionId} reached {MaxTurns} turns for question {QuestionId}.",
                 sessionId, MaxTurnsPerQuestion, turn.QuestionId);
-            await AdvanceToNextQuestionAsync(session, turn.QuestionId, questions, turnCount, maxTurns, ct);
+            await AdvanceToNextQuestionAsync(session, turn.QuestionId, questions, turnCount, maxTurns, lockAlreadyHeld: false, ct: ct);
             return null;
         }
 
         var question = await _questionRepo.GetByIdAsync(turn.QuestionId, ct);
         var originalQuestionContent = question?.Content ?? "Viva primary question";
+
+        // Cổng chất lượng: chỉ hỏi xoáy khi lượt ĐẦU TIÊN của câu đã trả lời đúng trọng tâm.
+        // Trước đây mọi câu trả lời (kể cả "tôi không biết", "alo alo", quảng cáo YouTube) đều
+        // nhận câu hỏi xoáy, và câu hỏi xoáy đó lại bị tính vào điểm rubric.
+        var firstTurnForQuestion = details?.Turns
+            .Where(t => string.Equals(t.QuestionId, turn.QuestionId, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(t => t.TurnOrdinal)
+            .FirstOrDefault();
+        var isPrimaryAnswer = firstTurnForQuestion is not null && firstTurnForQuestion.TurnId == turn.TurnId;
+
+        if (isPrimaryAnswer)
+        {
+            var quality = AnswerQualityGate.Evaluate(
+                turn.TranscriptText,
+                originalQuestionContent,
+                turn.ConfidenceScore);
+
+            if (!AnswerQualityGate.ShouldGenerateFollowUp(quality))
+            {
+                _logger.LogInformation(
+                    "Skipping follow-up for session {SessionId}, question {QuestionId}: {Kind} — {Reason}",
+                    sessionId, turn.QuestionId, quality.Kind, quality.Reason);
+
+                // Không lưu FollowUpQuestionText: để trống chính là dấu hiệu "không có câu hỏi xoáy",
+                // giảng viên thấy được trong trang Review và báo cáo.
+                await AdvanceToNextQuestionAsync(session, turn.QuestionId, questions, turnCount, maxTurns, lockAlreadyHeld: false, ct: ct);
+                return null;
+            }
+        }
 
         // 1. Persistence First: State transition to FollowUpGenerating
         await _sessionRepo.UpdateStateAsync(sessionId, (byte)VivaSessionState.FollowUpGenerating, ct);
@@ -404,7 +509,7 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         if (string.IsNullOrWhiteSpace(followUpResult.FollowUpQuestionText))
         {
             _logger.LogInformation("Follow-up generator returned no question for session {SessionId}.", sessionId);
-            await AdvanceToNextQuestionAsync(session, turn.QuestionId, questions, turnCount, maxTurns, ct);
+            await AdvanceToNextQuestionAsync(session, turn.QuestionId, questions, turnCount, maxTurns, lockAlreadyHeld: false, ct: ct);
             return null;
         }
 
@@ -459,20 +564,49 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
     /// The client reloads the snapshot on QuestionDelivered to read the new question.
     /// </summary>
     private async Task AdvanceToNextQuestionAsync(VivaSession session, string currentQuestionId,
-        IReadOnlyList<VivaQuestion> orderedQuestions, int turnCount, int maxTurns, CancellationToken ct)
+        IReadOnlyList<VivaQuestion> orderedQuestions, int turnCount, int maxTurns, bool lockAlreadyHeld = false, CancellationToken ct = default)
     {
         var next = orderedQuestions.FirstOrDefault(q => string.CompareOrdinal(q.QuestionId, currentQuestionId) > 0);
         if (next is null)
         {
             _logger.LogInformation("Session {SessionId} answered the last question. Concluding session.", session.SessionId);
-            await CompleteSessionAsync(session.SessionId, ct);
+            await CompleteSessionInternalAsync(session.SessionId, lockAlreadyHeld, ct);
             return;
+        }
+
+        // Sinh audio TTS cho câu hỏi tiếp theo. Trước đây chỉ StartSessionAsync mới sinh TTS,
+        // nên câu 2 và 3 không bao giờ có AudioUrl: khi thi, client không có file để phát và
+        // rơi về giọng trình duyệt — đúng triệu chứng "AI không đọc câu hỏi" ở các câu sau.
+        // Lỗi TTS ở đây KHÔNG được chặn việc chuyển câu; client vẫn có nội dung văn bản để đọc.
+        var audioUrl = next.AudioUrl;
+        if (string.IsNullOrEmpty(audioUrl))
+        {
+            try
+            {
+                var ttsResult = await _ttsService.SynthesizeAsync(next.Content, "vi-VN", ct);
+                if (ttsResult.IsSuccess && !string.IsNullOrEmpty(ttsResult.AudioUrl))
+                {
+                    audioUrl = ttsResult.AudioUrl;
+                    await _questionRepo.SaveAudioUrlAsync(next.QuestionId, audioUrl, ct);
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "TTS generation failed for next question {QuestionId}; continuing without audio.",
+                    next.QuestionId);
+            }
         }
 
         // 1. Persistence First
         await _sessionRepo.UpdateStateAsync(session.SessionId, (byte)VivaSessionState.QuestionDelivered, ct);
 
-        // 2. Realtime Broadcast
+        // Câu cũ đã xong: đánh dấu câu mới "đang đọc" thay vì chạy đồng hồ.
+        // Worker sẽ tự chạy đồng hồ nếu client không gọi BeginAnswering trong thời gian chờ đọc.
+        _timers?.MarkQuestionBeingRead(session.SessionId, next.QuestionId, next.TimeLimitSeconds);
+
+        // 2. Realtime Broadcast — kèm câu hỏi đầy đủ để client phát audio ngay, không phải tải lại trang.
         await _publisher.PublishStatusChangedAsync(new VivaSessionStatusDto(
             SessionId: session.SessionId,
             ExamId: session.ExamId,
@@ -540,16 +674,73 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
     }
 
     /// <inheritdoc />
-    public async Task<VivaSessionStatusDto> CompleteSessionAsync(Guid sessionId, CancellationToken ct = default)
+    public async Task<string?> EnsureFollowUpAudioAsync(Guid sessionId, Guid turnId, CancellationToken ct = default)
     {
-        using var lease = _timers is null ? null : await _timers.LockSessionAsync(sessionId, ct);
+        var session = await _sessionRepo.GetByIdAsync(sessionId, ct)
+            ?? throw new KeyNotFoundException($"Session {sessionId} was not found.");
+
+        if (session.State is (byte)VivaSessionState.Completed or (byte)VivaSessionState.TimedOut)
+        {
+            throw new InvalidOperationException("Phiên thi đã kết thúc, không sinh được audio câu hỏi xoáy.");
+        }
+
+        var turn = await _turnRepo.GetByIdAsync(turnId, ct)
+            ?? throw new KeyNotFoundException($"Turn {turnId} was not found.");
+
+        if (turn.SessionId != sessionId)
+        {
+            throw new InvalidOperationException("Lượt trả lời không thuộc phiên thi này.");
+        }
+
+        if (string.IsNullOrWhiteSpace(turn.FollowUpQuestionText))
+        {
+            // Lượt này không sinh câu hỏi xoáy (câu trả lời không đạt cổng chất lượng) — không có gì để đọc.
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(turn.FollowUpAudioUrl))
+        {
+            return turn.FollowUpAudioUrl;
+        }
+
+        // Sinh lại bằng đúng _ttsService mà câu hỏi chính dùng, nên giọng đọc trùng khớp.
+        string? audioUrl = null;
+        try
+        {
+            var ttsResult = await _ttsService.SynthesizeAsync(turn.FollowUpQuestionText, "vi-VN", ct);
+            if (ttsResult.IsSuccess && !string.IsNullOrWhiteSpace(ttsResult.AudioUrl))
+            {
+                audioUrl = ttsResult.AudioUrl;
+                await _turnRepo.SaveFollowUpAsync(turnId, turn.FollowUpQuestionText, audioUrl, ct);
+                _logger.LogInformation(
+                    "Generated missing follow-up audio for turn {TurnId} of session {SessionId}: {Url}",
+                    turnId, sessionId, audioUrl);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "EnsureFollowUpAudio failed for turn {TurnId} of session {SessionId}.", turnId, sessionId);
+        }
+
+        return audioUrl;
+    }
+
+    /// <inheritdoc />
+    public Task<VivaSessionStatusDto> CompleteSessionAsync(Guid sessionId, CancellationToken ct = default) =>
+        CompleteSessionInternalAsync(sessionId, lockAlreadyHeld: false, ct);
+
+    private async Task<VivaSessionStatusDto> CompleteSessionInternalAsync(Guid sessionId, bool lockAlreadyHeld, CancellationToken ct = default)
+    {
+        using var lease = (lockAlreadyHeld || _timers is null) ? null : await _timers.LockSessionAsync(sessionId, ct);
         _logger.LogInformation("Completing viva session {SessionId}", sessionId);
 
         var session = await _sessionRepo.GetByIdAsync(sessionId, ct)
             ?? throw new KeyNotFoundException($"Session {sessionId} was not found.");
 
-        if (session.State is (byte)VivaSessionState.TimedOut or (byte)VivaSessionState.Failed)
-            throw new InvalidOperationException("Cannot complete an expired or failed examination session.");
+        if (session.State is (byte)VivaSessionState.Failed)
+            throw new InvalidOperationException("Cannot complete a failed examination session.");
 
         var completedAt = DateTime.UtcNow;
 
@@ -580,6 +771,69 @@ public class VivaSessionOrchestrator : IVivaSessionOrchestrator
         await _publisher.PublishStatusChangedAsync(statusDto, ct);
 
         return statusDto;
+    }
+
+    /// <inheritdoc />
+    public async Task<List<Guid>> GetWaitingSessionIdsAsync(CancellationToken ct = default)
+    {
+        // Chỉ các trạng thái "đang chờ sinh viên trả lời". Completed/TimedOut/Failed không thuộc
+        // phạm vi nên không đưa vào — chúng có đường xử lý riêng.
+        var waitingStates = new[]
+        {
+            (byte)VivaSessionState.QuestionDelivered,
+            (byte)VivaSessionState.Answering,
+            (byte)VivaSessionState.FollowUpDelivered
+        };
+
+        var sessions = await _sessionRepo.GetSessionsWithDetailsAsync(ct: ct);
+        return sessions?
+            .Where(s => waitingStates.Contains(s.State))
+            .Select(s => s.SessionId)
+            .ToList() ?? new List<Guid>();
+    }
+
+    /// <inheritdoc />
+    public async Task HandleAnswerTimeoutAsync(Guid sessionId, string questionId, CancellationToken ct = default)
+    {
+        using var lease = _timers is null ? null : await _timers.LockSessionAsync(sessionId, ct);
+        var session = await _sessionRepo.GetByIdAsync(sessionId, ct);
+        if (session == null) return;
+        if (session.State != (byte)VivaSessionState.TimedOut) return;
+
+        var details = await _sessionRepo.GetWithDetailsAsync(sessionId, ct);
+        var questions = (await _questionRepo.GetQuestionsByExamAsync(session.ExamId, ct) ?? new())
+            .OrderBy(q => q.QuestionId, StringComparer.Ordinal).ToList();
+        var maxTurns = SessionMaxTurns(questions.Count);
+
+        var persistedQuestionId = questionId;
+        var latest = details?.Turns.OrderByDescending(t => t.TurnOrdinal).FirstOrDefault();
+        if (latest?.FollowUpQuestionText is { Length: > 0 } && details?.Turns.Count(t => t.QuestionId == latest.QuestionId) == 1)
+        {
+            persistedQuestionId = latest.QuestionId;
+        }
+        else if (string.IsNullOrWhiteSpace(persistedQuestionId))
+        {
+            persistedQuestionId = latest == null
+                ? (questions.FirstOrDefault()?.QuestionId ?? string.Empty)
+                : (questions.FirstOrDefault(q => string.CompareOrdinal(q.QuestionId, latest.QuestionId) > 0)?.QuestionId ?? latest.QuestionId);
+        }
+
+        var currentTurns = await _turnRepo.GetTurnCountForSessionAsync(sessionId, ct);
+        var turnOrdinal = currentTurns + 1;
+        var turn = new VivaSessionTurn
+        {
+            TurnId = Guid.NewGuid(),
+            SessionId = sessionId,
+            QuestionId = persistedQuestionId,
+            TurnOrdinal = turnOrdinal,
+            TranscriptText = string.Empty,
+            ConfidenceScore = 0m,
+            CreatedAtUtc = DateTime.UtcNow,
+            CompletedAtUtc = DateTime.UtcNow
+        };
+        await _turnRepo.CreateTurnAsync(turn, ct);
+
+        await AdvanceToNextQuestionAsync(session, persistedQuestionId, questions, turnOrdinal, maxTurns, lockAlreadyHeld: true, ct: ct);
     }
 
     private void EnqueueGrading(Guid sessionId, string examId)

@@ -14,10 +14,6 @@ public class AIVESDbContext : DbContext
     }
 
     public DbSet<SystemAccount> SystemAccounts => Set<SystemAccount>();
-    public DbSet<Category> Categories => Set<Category>();
-    public DbSet<NewsArticle> NewsArticles => Set<NewsArticle>();
-    public DbSet<Tag> Tags => Set<Tag>();
-    public DbSet<NewsTag> NewsTags => Set<NewsTag>();
     public DbSet<VivaQuestion> VivaQuestions => Set<VivaQuestion>();
     public DbSet<VivaSession> VivaSessions => Set<VivaSession>();
     public DbSet<VivaSessionTurn> VivaSessionTurns => Set<VivaSessionTurn>();
@@ -49,69 +45,18 @@ public class AIVESDbContext : DbContext
             entity.Property(x => x.AccountPasswordHash).HasMaxLength(512).IsRequired();
             entity.Property(x => x.AccountRole).HasColumnType("tinyint");
             entity.Property(x => x.IsDeleted).HasDefaultValue(false).IsRequired();
-        });
 
-        modelBuilder.Entity<Category>(entity =>
-        {
-            entity.ToTable("Category", table => table.HasCheckConstraint(
-                "CK_Category_CategoryName_NotBlank", "LEN(LTRIM(RTRIM([CategoryName]))) > 0"));
-            entity.HasKey(x => x.CategoryId).HasName("PK_Category");
-            entity.Property(x => x.CategoryId).UseIdentityColumn();
-            entity.Property(x => x.CategoryName).HasMaxLength(100).IsRequired();
-            entity.Property(x => x.CategoryDescription).HasMaxLength(500);
-        });
-
-        modelBuilder.Entity<Tag>(entity =>
-        {
-            entity.ToTable("Tag", table => table.HasCheckConstraint(
-                "CK_Tag_TagName_NotBlank", "LEN(LTRIM(RTRIM([TagName]))) > 0"));
-            entity.HasKey(x => x.TagId).HasName("PK_Tag");
-            entity.Property(x => x.TagId).UseIdentityColumn();
-            entity.Property(x => x.TagName).HasMaxLength(100).IsRequired();
-        });
-
-        modelBuilder.Entity<NewsArticle>(entity =>
-        {
-            entity.ToTable("NewsArticle", table =>
-            {
-                table.HasCheckConstraint("CK_NewsArticle_NewsTitle_NotBlank", "LEN(LTRIM(RTRIM([NewsTitle]))) > 0");
-                table.HasCheckConstraint("CK_NewsArticle_NewsContent_NotBlank", "LEN(LTRIM(RTRIM([NewsContent]))) > 0");
-                table.HasCheckConstraint("CK_NewsArticle_NewsStatus", "[NewsStatus] IN (0, 1)");
-                table.HasCheckConstraint("CK_NewsArticle_ModificationAudit",
-                    "([UpdatedById] IS NULL AND [ModifiedDate] IS NULL) OR ([UpdatedById] IS NOT NULL AND [ModifiedDate] IS NOT NULL AND [ModifiedDate] >= [CreatedDate])");
-            });
-            entity.HasKey(x => x.NewsArticleId).HasName("PK_NewsArticle");
-            entity.Property(x => x.NewsArticleId).UseIdentityColumn();
-            entity.Property(x => x.NewsTitle).HasMaxLength(200).IsRequired();
-            entity.Property(x => x.NewsContent).HasColumnType("nvarchar(max)").IsRequired();
-            entity.Property(x => x.NewsStatus).HasColumnType("tinyint");
-            entity.Property(x => x.CreatedDate).HasPrecision(3).HasDefaultValueSql("SYSUTCDATETIME()");
-            entity.Property(x => x.ModifiedDate).HasPrecision(3);
-            // ClientNoAction also prevents EF from silently nulling a tracked optional editor FK.
-            entity.HasOne(x => x.Category).WithMany(x => x.NewsArticles).HasForeignKey(x => x.CategoryId)
-                .OnDelete(DeleteBehavior.ClientNoAction).HasConstraintName("FK_NewsArticle_Category");
-            entity.HasOne(x => x.CreatedBy).WithMany(x => x.CreatedNewsArticles).HasForeignKey(x => x.CreatedById)
-                .OnDelete(DeleteBehavior.ClientNoAction).HasConstraintName("FK_NewsArticle_CreatedBy");
-            entity.HasOne(x => x.UpdatedBy).WithMany(x => x.UpdatedNewsArticles).HasForeignKey(x => x.UpdatedById)
-                .OnDelete(DeleteBehavior.ClientNoAction).HasConstraintName("FK_NewsArticle_UpdatedBy");
-            entity.HasIndex(x => x.CategoryId).HasDatabaseName("IX_NewsArticle_CategoryId");
-            entity.HasIndex(x => new { x.CreatedById, x.CreatedDate }).IsDescending(false, true)
-                .HasDatabaseName("IX_NewsArticle_CreatedById_CreatedDate");
-            entity.HasIndex(x => x.UpdatedById).HasDatabaseName("IX_NewsArticle_UpdatedById");
-            entity.HasIndex(x => x.CreatedDate).IsDescending().HasDatabaseName("IX_NewsArticle_CreatedDate");
-            entity.HasIndex(x => new { x.NewsStatus, x.CreatedDate }).IsDescending(false, true)
-                .HasDatabaseName("IX_NewsArticle_NewsStatus_CreatedDate");
-        });
-
-        modelBuilder.Entity<NewsTag>(entity =>
-        {
-            entity.ToTable("NewsTag");
-            entity.HasKey(x => new { x.NewsArticleId, x.TagId }).HasName("PK_NewsTag");
-            entity.HasOne(x => x.NewsArticle).WithMany(x => x.NewsTags).HasForeignKey(x => x.NewsArticleId)
-                .OnDelete(DeleteBehavior.Cascade).HasConstraintName("FK_NewsTag_NewsArticle");
-            entity.HasOne(x => x.Tag).WithMany(x => x.NewsTags).HasForeignKey(x => x.TagId)
-                .OnDelete(DeleteBehavior.ClientNoAction).HasConstraintName("FK_NewsTag_Tag");
-            entity.HasIndex(x => x.TagId).HasDatabaseName("IX_NewsTag_TagId");
+            // Sinh viên trỏ tới giảng viên phụ trách (script 008). Tự tham chiếu, không cascade:
+            // xoá giảng viên không được kéo theo sinh viên.
+            entity.HasOne(x => x.Lecturer)
+                .WithMany(x => x.Students)
+                .HasForeignKey(x => x.LecturerId)
+                .OnDelete(DeleteBehavior.ClientNoAction)
+                .HasConstraintName("FK_SystemAccount_Lecturer");
+            // Filtered index: chỉ sinh viên mới có LecturerId.
+            entity.HasIndex(x => x.LecturerId)
+                .HasDatabaseName("IX_SystemAccount_LecturerId")
+                .HasFilter("[LecturerId] IS NOT NULL");
         });
 
         modelBuilder.Entity<VivaQuestion>(entity =>
@@ -214,15 +159,6 @@ public class AIVESDbContext : DbContext
             entity.HasIndex(x => new { x.GradingResultId, x.ChangedAtUtc }).IsDescending(false, true)
                 .HasDatabaseName("IX_VivaGradeChangeLog_GradingResultId_ChangedAtUtc");
         });
-
-        var isModelOnlyTest = _options?.Extensions.Any(e =>
-            e.GetType().GetProperty("ConnectionString")?.GetValue(e)?.ToString()?.Contains("Database=ModelOnly", StringComparison.OrdinalIgnoreCase) == true) == true;
-
-        if (isModelOnlyTest)
-        {
-            modelBuilder.Ignore<VivaRubricCriterion>();
-            return;
-        }
 
         modelBuilder.Entity<VivaRubricCriterion>(entity =>
         {

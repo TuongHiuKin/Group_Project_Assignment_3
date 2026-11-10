@@ -4,6 +4,7 @@ using AIVES.DAL.Repositories.Interfaces;
 using AIVES.DAL.Repositories.Models;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 
 namespace AIVES.DAL.Repositories.Implementations;
 
@@ -82,8 +83,27 @@ public sealed class SystemAccountRepository(AIVESDbContext context) : ISystemAcc
         return context.SystemAccounts.AnyAsync(x => x.AccountEmail == normalized && (!exceptId.HasValue || x.AccountId != exceptId.Value), ct);
     }
 
-    public Task<bool> IsReferencedAsync(int id, CancellationToken ct = default) =>
-        context.NewsArticles.AnyAsync(x => x.CreatedById == id || x.UpdatedById == id, ct);
+    /// <summary>
+    /// Tài khoản đã có dữ liệu nghiệp vụ thì không cho xóa cứng. Ba nguồn tham chiếu:
+    /// là sinh viên của một <c>VivaSession</c>, là người chốt điểm (<c>VivaGradingResult.FinalizedBy</c>),
+    /// hoặc là người sửa điểm (<c>VivaGradeChangeLog.ChangedBy</c>). Ba cột này đều lưu AccountId dạng chuỗi.
+    /// </summary>
+    public async Task<bool> IsReferencedAsync(int id, CancellationToken ct = default)
+    {
+        var accountId = id.ToString(CultureInfo.InvariantCulture);
+
+        if (await context.VivaSessions.AnyAsync(x => x.StudentId == accountId, ct))
+        {
+            return true;
+        }
+
+        if (await context.VivaGradingResults.AnyAsync(x => x.FinalizedBy == accountId, ct))
+        {
+            return true;
+        }
+
+        return await context.VivaGradeChangeLogs.AnyAsync(x => x.ChangedBy == accountId, ct);
+    }
 
     public async Task<int> CreateAsync(AccountCreate input, CancellationToken ct = default)
     {
@@ -92,7 +112,8 @@ public sealed class SystemAccountRepository(AIVESDbContext context) : ISystemAcc
             AccountName = input.Name,
             AccountEmail = NormalizeEmail(input.Email),
             AccountPasswordHash = input.PasswordHash,
-            AccountRole = input.Role
+            AccountRole = input.Role,
+            LecturerId = input.LecturerId
         };
         context.SystemAccounts.Add(entity);
         await SaveChangesSafeAsync(ct);

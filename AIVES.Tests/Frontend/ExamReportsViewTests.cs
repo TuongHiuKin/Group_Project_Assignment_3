@@ -13,6 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Xunit;
+using GradingState = AIVES.BLL.Models.ExamReporting.ReportGradingState;
 
 namespace AIVES.Tests.Frontend;
 
@@ -300,7 +301,9 @@ public sealed class ExamReportsViewTests : IClassFixture<ExamReportsViewTests.Ex
 
         // Question detail card Block 4 badge
         Assert.Contains("AI CHẤM, CHỜ DUYỆT", html);
-        Assert.Contains("AI chấm, chờ giảng viên duyệt: 8.5 / 10", html);
+        // Điểm AI và điểm GV giờ hiển thị tách biệt (AI gợi ý / GV chốt).
+        Assert.Contains("Điểm AI (chờ duyệt): 8.5 / 10", html);
+        Assert.Contains("Điểm GV: chưa chốt", html);
     }
 
     [Fact]
@@ -321,7 +324,8 @@ public sealed class ExamReportsViewTests : IClassFixture<ExamReportsViewTests.Ex
 
         // Question detail card Block 4 badge
         Assert.Contains("ĐIỂM CHÍNH THỨC", html);
-        Assert.Contains("Điểm chính thức: 9 / 10", html);
+        // Điểm AI và điểm GV hiển thị riêng: AI đề xuất 8, GV chốt 9.
+        Assert.Contains("Điểm GV: 9 / 10", html);
     }
 
     [Fact]

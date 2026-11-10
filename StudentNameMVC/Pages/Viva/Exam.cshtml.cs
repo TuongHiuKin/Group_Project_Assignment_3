@@ -57,6 +57,19 @@ public class ExamModel : PageModel
     public string? InitialFollowUpAudioUrl { get; set; }
     public int? InitialSecondsRemaining { get; set; }
 
+    /// <summary>
+    /// Toàn bộ lượt đã trả lời, sắp theo thứ tự. Dùng để dựng bảng hội thoại đầy đủ trên trang thi:
+    /// câu hỏi chính → câu trả lời → câu hỏi xoáy → câu trả lời xoáy.
+    /// </summary>
+    public IReadOnlyList<VivaTurnDto> TurnHistory { get; set; } = Array.Empty<VivaTurnDto>();
+
+    /// <summary>
+    /// False khi phiên đã hoàn thành/hết giờ: panel "Bản ghi âm câu trả lời (Speech-to-Text)" của
+    /// lượt cuối không còn ý nghĩa vì lịch sử hội thoại đã hiển thị đầy đủ phía trên.
+    /// </summary>
+    public bool ShowTranscriptPanel { get; set; } = true;
+
+
     public string? ErrorMessage { get; set; }
     public bool IsOrchestratorAvailable => _orchestrator != null;
 
@@ -139,6 +152,13 @@ public class ExamModel : PageModel
                     {
                         InitialSecondsRemaining = snapshot.Timer.SecondsRemaining;
                     }
+
+                    // Lịch sử hội thoại đầy đủ, để trang thi dựng lại từng câu:
+                    // câu hỏi chính → câu trả lời → câu hỏi xoáy → câu trả lời xoáy.
+                    TurnHistory = snapshot.Turns;
+                    // Khi phiên đã xong, panel STT của lượt cuối là thông tin thừa: sinh viên đã
+                    // thấy toàn bộ hội thoại trong bảng lịch sử phía trên.
+                    ShowTranscriptPanel = snapshot.Status.State is not (VivaSessionState.Completed or VivaSessionState.TimedOut);
                 }
             }
             catch (Exception ex)
@@ -328,6 +348,50 @@ public class ExamModel : PageModel
         catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
         {
             _logger.LogWarning(ex, "FinishSession rejected for {SessionId}", sessionId);
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Sinh lại audio TTS cho một câu hỏi xoáy khi bản ghi cũ không có <c>FollowUpAudioUrl</c>.
+    /// Mục đích: câu hỏi xoáy phải được đọc bằng CÙNG giọng với câu hỏi chính. Nếu client không có
+    /// file audio, nó rơi về <c>speechSynthesis</c> của trình duyệt — giọng khác hẳn và phụ thuộc
+    /// máy người dùng. Endpoint này để client xin lại audio trước khi chấp nhận fallback.
+    /// </summary>
+    public async Task<IActionResult> OnPostFollowUpAudioAsync(
+        [FromForm] Guid sessionId,
+        [FromForm] Guid turnId,
+        CancellationToken ct = default)
+    {
+        if (sessionId == Guid.Empty || turnId == Guid.Empty)
+        {
+            return BadRequest(new { message = "Mã phiên thi hoặc mã lượt trả lời không hợp lệ." });
+        }
+
+        if (_orchestrator == null)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                message = "Hệ thống Viva Interview Orchestrator chưa được kích hoạt."
+            });
+        }
+
+        var studentId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? string.Empty;
+        if (!await _orchestrator.AuthorizeUserForSessionAsync(sessionId, studentId, ct))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            var audioUrl = await _orchestrator.EnsureFollowUpAudioAsync(sessionId, turnId, ct);
+            return audioUrl is null
+                ? new JsonResult(new { success = false, audioUrl = (string?)null })
+                : new JsonResult(new { success = true, audioUrl });
+        }
+        catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException)
+        {
+            _logger.LogWarning(ex, "FollowUpAudio rejected for {SessionId}/{TurnId}", sessionId, turnId);
             return BadRequest(new { message = ex.Message });
         }
     }

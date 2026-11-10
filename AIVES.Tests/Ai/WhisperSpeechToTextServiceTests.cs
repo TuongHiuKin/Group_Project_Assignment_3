@@ -59,7 +59,7 @@ public class WhisperSpeechToTextServiceTests
             "text": "Scoped DbContext is instantiated once per HTTP request.",
             "language": "english",
             "segments": [
-                { "no_speech_prob": 0.05 }
+                { "no_speech_prob": 0.05, "avg_logprob": -0.05 }
             ]
         }
         """;
