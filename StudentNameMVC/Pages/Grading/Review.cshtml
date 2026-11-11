@@ -507,7 +507,7 @@
                                             <strong>@q.TeacherFinalScore?.ToString("0.##")</strong>/@q.MaxPoints.ToString("0.##")
                                             @if (!string.IsNullOrWhiteSpace(q.FinalizedBy))
                                             {
-                                                <span>bởi <strong>@q.FinalizedBy</strong></span>
+                                                <span>bởi <strong>@Model.ResolveAccountName(q.FinalizedBy)</strong></span>
                                             }
                                             @if (q.FinalizedAtUtc.HasValue)
                                             {
@@ -600,7 +600,7 @@
                                                     </td>
                                                     <td>
                                                         <span class="badge bg-light text-dark border">
-                                                            <i class="bi bi-person me-1"></i>@log.ChangedBy
+                                                            <i class="bi bi-person me-1"></i>@Model.ResolveAccountName(log.ChangedBy)
                                                         </span>
                                                     </td>
                                                     <td class="small text-dark">
@@ -820,7 +820,7 @@
                                 </td>
                                 <td>
                                     <span class="badge bg-light text-dark border">
-                                        <i class="bi bi-person me-1"></i>@log.ChangedBy
+                                        <i class="bi bi-person me-1"></i>@Model.ResolveAccountName(log.ChangedBy)
                                     </span>
                                 </td>
                                 <td class="small text-dark">

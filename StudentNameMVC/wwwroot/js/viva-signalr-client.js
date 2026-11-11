@@ -455,7 +455,35 @@ class VivaExamClient {
         await this.joinAndRestoreSession();
     }
 
+    /**
+     * Dừng MỌI nguồn đọc đang chạy: file audio của câu hỏi, file audio của câu xoáy, và
+     * speechSynthesis của trình duyệt. Không có bước này thì khi câu xoáy được sinh ra trong
+     * lúc câu chính còn đang đọc, hai giọng phát chồng lên nhau.
+     */
+    stopAllPlayback() {
+        // 1. Browser speech synthesis
+        if ('speechSynthesis' in window) {
+            try { window.speechSynthesis.cancel(); } catch (e) { /* ignore */ }
+        }
+        this.currentUtterance = null;
+
+        // 2. Mọi thẻ audio có trong trang (câu chính, câu xoáy)
+        const players = [this.el.questionAudio, this.el.followUpAudio].filter(Boolean);
+        for (const player of players) {
+            try {
+                player.onended = null;
+                player.pause();
+                player.currentTime = 0;
+            } catch (e) { /* ignore */ }
+        }
+    }
+
     playTts(text, audioEl, audioUrl, onEndCallback) {
+        // Chỉ một giọng đọc tại một thời điểm. Trước đây khi câu xoáy tới trong lúc câu chính
+        // còn đang đọc, hai luồng phát chồng nhau: cả audio file lẫn speechSynthesis cùng chạy,
+        // nghe thành hai giọng. Dừng hết trước khi phát cái mới.
+        this.stopAllPlayback();
+
         // Playback via browser Web Speech API (Vietnamese voice)
         const speakBrowserTts = async () => {
             if (!('speechSynthesis' in window) || !text) {

@@ -1,11 +1,14 @@
 using System.Net;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
+using AIVES.BLL.Interfaces;
 using AIVES.BLL.Interfaces.ExamReporting;
 using AIVES.BLL.Interfaces.Grading;
+using AIVES.BLL.Models;
 using AIVES.BLL.Models.ExamReporting;
 using AIVES.BLL.Models.Grading;
 using AIVES.BLL.Security;
+using AIVES.DAL.Entities;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -497,7 +500,7 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
     {
         var fakeOrchestrator = new FakeGradingOrchestrator();
         var fakeReportService = new FakeClassReportService();
-        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance);
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, new FakeSystemAccountService(), NullLogger<ReviewModel>.Instance);
 
         var validId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var result = await model.OnGetAsync(validId);
@@ -515,7 +518,7 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
     {
         var fakeOrchestrator = new FakeGradingOrchestrator();
         var fakeReportService = new FakeClassReportService();
-        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, new FakeSystemAccountService(), NullLogger<ReviewModel>.Instance)
         {
             TempData = new TempDataDictionary(new DefaultHttpContext(), new EmptyTempDataProvider())
         };
@@ -532,7 +535,7 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
     {
         var fakeOrchestrator = new FakeGradingOrchestrator();
         var fakeReportService = new FakeClassReportService();
-        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, new FakeSystemAccountService(), NullLogger<ReviewModel>.Instance)
         {
             TempData = new TempDataDictionary(new DefaultHttpContext(), new EmptyTempDataProvider())
         };
@@ -554,7 +557,7 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
     {
         var fakeOrchestrator = new FakeGradingOrchestrator();
         var fakeReportService = new FakeClassReportService();
-        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance);
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, new FakeSystemAccountService(), NullLogger<ReviewModel>.Instance);
 
         var assessment = model.GetSpeakingSpeedAssessment(wpm);
         Assert.Equal(expected, assessment);
@@ -570,7 +573,7 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
         var fakeOrchestrator = new FakeGradingOrchestrator();
         var fakeReportService = new FakeClassReportService();
         var httpContext = new DefaultHttpContext();
-        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, new FakeSystemAccountService(), NullLogger<ReviewModel>.Instance)
         {
             SessionId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
             PageContext = new PageContext { HttpContext = httpContext },
@@ -596,7 +599,7 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
         var fakeOrchestrator = new FakeGradingOrchestrator();
         var fakeReportService = new FakeClassReportService();
         var httpContext = new DefaultHttpContext();
-        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, new FakeSystemAccountService(), NullLogger<ReviewModel>.Instance)
         {
             SessionId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
             PageContext = new PageContext { HttpContext = httpContext },
@@ -623,7 +626,7 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
         var fakeOrchestrator = new FakeGradingOrchestrator();
         var fakeReportService = new FakeClassReportService();
         var httpContext = new DefaultHttpContext();
-        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, new FakeSystemAccountService(), NullLogger<ReviewModel>.Instance)
         {
             SessionId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
             PageContext = new PageContext { HttpContext = httpContext },
@@ -643,7 +646,7 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
         var fakeOrchestrator = new FakeGradingOrchestrator();
         var fakeReportService = new FakeClassReportService();
         var httpContext = new DefaultHttpContext();
-        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, new FakeSystemAccountService(), NullLogger<ReviewModel>.Instance)
         {
             SessionId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
             PageContext = new PageContext { HttpContext = httpContext },
@@ -663,7 +666,7 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
         var fakeOrchestrator = new FakeGradingOrchestrator();
         var fakeReportService = new FakeClassReportService();
         var httpContext = new DefaultHttpContext();
-        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, new FakeSystemAccountService(), NullLogger<ReviewModel>.Instance)
         {
             SessionId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
             PageContext = new PageContext { HttpContext = httpContext },
@@ -688,7 +691,7 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
         var fakeOrchestrator = new FakeGradingOrchestrator();
         var fakeReportService = new FakeClassReportService();
         var httpContext = new DefaultHttpContext();
-        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, new FakeSystemAccountService(), NullLogger<ReviewModel>.Instance)
         {
             SessionId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
             PageContext = new PageContext { HttpContext = httpContext },
@@ -708,7 +711,7 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
         var fakeOrchestrator = new FakeGradingOrchestrator();
         var fakeReportService = new FakeClassReportService();
         var httpContext = new DefaultHttpContext();
-        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, new FakeSystemAccountService(), NullLogger<ReviewModel>.Instance)
         {
             SessionId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
             PageContext = new PageContext { HttpContext = httpContext },
@@ -733,7 +736,7 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
         var fakeOrchestrator = new FakeGradingOrchestrator();
         var fakeReportService = new FakeClassReportService();
         var httpContext = new DefaultHttpContext();
-        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, new FakeSystemAccountService(), NullLogger<ReviewModel>.Instance)
         {
             SessionId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
             PageContext = new PageContext { HttpContext = httpContext },
@@ -753,7 +756,7 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
         var fakeOrchestrator = new FakeGradingOrchestrator();
         var fakeReportService = new FakeClassReportService();
         var httpContext = new DefaultHttpContext();
-        var model = new ReviewModel(fakeOrchestrator, fakeReportService, NullLogger<ReviewModel>.Instance)
+        var model = new ReviewModel(fakeOrchestrator, fakeReportService, new FakeSystemAccountService(), NullLogger<ReviewModel>.Instance)
         {
             SessionId = null,
             PageContext = new PageContext { HttpContext = httpContext },
@@ -1374,4 +1377,51 @@ public sealed class GradingPagesTests : IClassFixture<GradingPagesTests.GradingF
         Assert.Contains("7", html);
         Assert.Contains("9", html);
     }
+}
+
+/// <summary>
+/// Stub tối thiểu cho ReviewModel: chỉ cần SearchAccountsAsync để tra tên giảng viên trong
+/// audit trail; các method còn lại không dùng tới nên ném NotImplementedException.
+/// </summary>
+internal sealed class FakeSystemAccountService : ISystemAccountService
+{
+    public List<SystemAccount> Accounts { get; } = new()
+    {
+        new SystemAccount { AccountId = 2, AccountName = "Giảng viên Demo", AccountEmail = "gv01@aives.local", AccountRole = 2 }
+    };
+
+    public Task<List<SystemAccount>> SearchAccountsAsync(string? keyword = null, byte? role = null,
+        bool includeDeleted = true, CancellationToken ct = default)
+        => Task.FromResult(Accounts);
+
+    public Task<SystemAccount?> GetAccountByIdAsync(int id, bool includeDeleted = false, CancellationToken ct = default)
+        => Task.FromResult(Accounts.FirstOrDefault(a => a.AccountId == id));
+
+    public Task<int> CreateAccountAsync(string name, string email, string password, byte role, CancellationToken ct = default)
+        => throw new NotImplementedException();
+
+    public Task<bool> UpdateAccountAsync(int id, string name, string email, byte role, string? newPassword = null, CancellationToken ct = default)
+        => throw new NotImplementedException();
+
+    public Task<bool> SoftDeleteAccountAsync(int id, CancellationToken ct = default)
+        => throw new NotImplementedException();
+
+    public Task<AccountDeleteResult> HardDeleteAccountAsync(int id, CancellationToken ct = default)
+        => throw new NotImplementedException();
+
+    public Task<bool> IsAccountReferencedAsync(int id, CancellationToken ct = default)
+        => throw new NotImplementedException();
+
+    public Task<bool> UpdateProfileAsync(int id, string name, string email, string? newPassword = null, CancellationToken ct = default)
+        => throw new NotImplementedException();
+
+    public Task<SystemAccount?> AuthenticateAsync(string email, string password, CancellationToken ct = default)
+        => throw new NotImplementedException();
+
+    public Task<bool> ResetPasswordAsync(string email, string newPassword, CancellationToken ct = default)
+        => throw new NotImplementedException();
+
+    public Task<int> RegisterStudentAsync(string name, string email, string password,
+        int? defaultLecturerId = null, CancellationToken ct = default)
+        => throw new NotImplementedException();
 }

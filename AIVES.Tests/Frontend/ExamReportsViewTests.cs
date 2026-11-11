@@ -299,11 +299,13 @@ public sealed class ExamReportsViewTests : IClassFixture<ExamReportsViewTests.Ex
         // Yellow AI-Graded Badge in Attempt row
         Assert.Contains("AI chấm, chờ giảng viên duyệt", html);
 
-        // Question detail card Block 4 badge
+        // Question detail card Block 4 badge — sinh viên chỉ thấy MỘT con số:
+        // AI chấm xong, GV chưa duyệt → nhãn chờ duyệt kèm điểm AI; không hiện "Điểm GV: chưa chốt".
         Assert.Contains("AI CHẤM, CHỜ DUYỆT", html);
-        // Điểm AI và điểm GV giờ hiển thị tách biệt (AI gợi ý / GV chốt).
-        Assert.Contains("Điểm AI (chờ duyệt): 8.5 / 10", html);
-        Assert.Contains("Điểm GV: chưa chốt", html);
+        Assert.Contains("AI chấm, chờ giảng viên duyệt: 8.5 / 10", html);
+        // Nhận xét chi tiết của AI là tài liệu nội bộ của giảng viên — không lộ ra báo cáo sinh viên.
+        Assert.DoesNotContain("Nhận xét của AI", html);
+        Assert.DoesNotContain("Điểm mạnh đạt được", html);
     }
 
     [Fact]
@@ -322,10 +324,12 @@ public sealed class ExamReportsViewTests : IClassFixture<ExamReportsViewTests.Ex
         // Green Finalized Score Badge
         Assert.Contains("Điểm chính thức", html);
 
-        // Question detail card Block 4 badge
+        // Question detail card Block 4 badge — GV đã chốt thì sinh viên CHỈ thấy điểm GV.
+        // Việc AI đề xuất 8 còn GV sửa thành 9 là thông tin nội bộ, không hiện ở báo cáo sinh viên.
         Assert.Contains("ĐIỂM CHÍNH THỨC", html);
-        // Điểm AI và điểm GV hiển thị riêng: AI đề xuất 8, GV chốt 9.
-        Assert.Contains("Điểm GV: 9 / 10", html);
+        Assert.Contains("Điểm chính thức: 9 / 10", html);
+        Assert.DoesNotContain("Điểm AI", html);
+        Assert.DoesNotContain("GV đã điều chỉnh", html);
     }
 
     [Fact]

@@ -252,7 +252,14 @@
                                     <div class="vstack gap-4">
                                         @foreach (var q in attempt.QuestionResults)
                                         {
-                                            <partial name="_QuestionDetailCardPartial" model="q" view-data="ViewData" />
+                                            @* Nhận xét chi tiết của AI (AiFeedback/Strengths/Weaknesses) là tài liệu
+                                               nội bộ của giảng viên — ẩn khỏi báo cáo sinh viên. Sinh viên vẫn thấy
+                                               điểm chính thức, rubric từng tiêu chí và nhận xét của giảng viên. *@
+                                            var studentViewData = new Microsoft.AspNetCore.Mvc.ViewFeatures.ViewDataDictionary(ViewData)
+                                            {
+                                                ["HideAiFeedback"] = true
+                                            };
+                                            <partial name="_QuestionDetailCardPartial" model="q" view-data="studentViewData" />
                                         }
                                     </div>
                                 }
