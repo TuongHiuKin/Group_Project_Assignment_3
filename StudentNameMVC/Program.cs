@@ -6,6 +6,7 @@ using AIVES.DAL;
 using AIVES.DAL.Entities;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Threading.RateLimiting;
@@ -67,22 +68,55 @@ builder.Services.AddScoped<IPasswordResetEmailSender, PasswordResetEmailSender>(
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.AddPolicy("password-reset", context => RateLimitPartition.GetFixedWindowLimiter(
-        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-        _ => new FixedWindowRateLimiterOptions
-        {
-            PermitLimit = 5, Window = TimeSpan.FromMinutes(1), QueueLimit = 0
-        }));
-    // Sinh viên tự đăng ký: chặn spam tạo tài khoản từ một IP.
-    options.AddPolicy("student-register", context => RateLimitPartition.GetFixedWindowLimiter(
-        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-        _ => new FixedWindowRateLimiterOptions
-        {
-            PermitLimit = 5, Window = TimeSpan.FromMinutes(10), QueueLimit = 0
-        }));
+    options.AddPolicy("password-reset", context =>
+        HttpMethods.IsPost(context.Request.Method)
+            ? RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 5, Window = TimeSpan.FromMinutes(1), QueueLimit = 0
+                })
+            : RateLimitPartition.GetNoLimiter("password-reset-get"));
+    // Sinh viên tự đăng ký: chặn spam TẠO tài khoản từ một IP.
+    //
+    // Attribute [EnableRateLimiting] phải gắn ở CLASS của PageModel — Razor Pages không chuyển
+    // attribute trên handler method thành endpoint metadata, nên nếu gắn ở OnPostAsync thì
+    // limiter im lặng không chạy (đã kiểm chứng: 7 POST liên tiếp đều 200).
+    //
+    // Nhưng gắn ở class thì mỗi lần MỞ form (GET) cũng ăn một lượt — xem lại form vài lần là hết
+    // 5 lượt/10 phút và trang trả 429 dù chưa gửi gì. Nên policy tự trả NoLimiter cho request
+    // không phải POST: chỉ hành động tạo tài khoản mới bị đếm.
+    //
+    // Khi chạy sau Cloudflare tunnel, RemoteIpAddress là IP của connector (127.0.0.1) nên mọi
+    // người dùng chung một bộ đếm. ForwardedHeaders ở dưới khôi phục IP thật từ CF-Connecting-IP.
+    options.AddPolicy("student-register", context =>
+        HttpMethods.IsPost(context.Request.Method)
+            ? RateLimitPartition.GetFixedWindowLimiter(
+                context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 5, Window = TimeSpan.FromMinutes(10), QueueLimit = 0
+                })
+            : RateLimitPartition.GetNoLimiter("student-register-get"));
 });
 builder.Services.AddScoped<ISystemAccountService, SystemAccountService>();
 builder.Services.AddScoped<ActiveAccountCookieEvents>();
+
+// Đứng sau Cloudflare tunnel / reverse proxy thì kết nối TCP đến từ 127.0.0.1, không phải từ
+// người dùng. Không bật ForwardedHeaders thì:
+//   - Rate limit theo IP gộp mọi người vào cùng một bộ đếm → 5 lượt đăng ký dùng chung, ai vào
+//     sau cũng bị 429.
+//   - Log và audit ghi sai IP.
+// Cloudflare gửi IP gốc qua CF-Connecting-IP và X-Forwarded-For. Chỉ tin header từ loopback
+// (chính connector cloudflared trên máy này), không tin proxy lạ trên Internet.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+    options.KnownProxies.Add(System.Net.IPAddress.Loopback);
+    options.KnownProxies.Add(System.Net.IPAddress.IPv6Loopback);
+});
 
 // Group 6 - Viva Exam Reporting Services (Scoped, backed by real SQL Server repositories)
 builder.Services.AddScoped<AIVES.BLL.Interfaces.ExamReporting.IRubricGradingService, AIVES.BLL.Services.ExamReporting.RubricGradingService>();
@@ -162,6 +196,10 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error");
     app.UseHsts();
 }
+
+// Phải đứng TRƯỚC UseRateLimiter và mọi thứ đọc Connection.RemoteIpAddress, để IP thật của
+// người dùng (từ CF-Connecting-IP) có mặt trước khi chia partition rate limit.
+app.UseForwardedHeaders();
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();

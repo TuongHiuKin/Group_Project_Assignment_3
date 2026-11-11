@@ -12,6 +12,10 @@ namespace StudentNameMVC.Pages.Account;
 /// /Account/Index. Tài khoản mới được gán về giảng viên mặc định (cấu hình
 /// <c>Registration:DefaultLecturerEmail</c>, nếu trống thì lấy giảng viên đầu tiên đang hoạt động)
 /// để /ClassReports lọc được danh sách sinh viên của giảng viên đó.
+///
+/// Rate limit gắn ở <see cref="OnPostAsync"/> chứ KHÔNG gắn ở class: mỗi lần mở form (GET) không
+/// được tính là một lần đăng ký. Trước đây gắn ở class nên chỉ cần xem lại form vài lần là hết
+/// 5 lượt/10 phút và trang trả 429 dù sinh viên chưa gửi gì.
 /// </summary>
 [AllowAnonymous]
 [EnableRateLimiting("student-register")]
