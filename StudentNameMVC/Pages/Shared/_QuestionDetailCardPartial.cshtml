@@ -3,6 +3,12 @@
     var evalMode = ViewData["EvaluationMode"] as AIVES.BLL.Models.ExamReporting.ExamEvaluationMode? 
                    ?? Model.EvaluationMode;
     bool isPassFailMode = evalMode == AIVES.BLL.Models.ExamReporting.ExamEvaluationMode.PassFail;
+
+    // Nhận xét chi tiết của AI (AiFeedback, Strengths, Weaknesses) là tài liệu làm việc nội bộ
+    // của giảng viên: nó nói thẳng chỗ sinh viên hiểu sai, dùng để GV đối chiếu khi duyệt điểm.
+    // Trang báo cáo cá nhân của sinh viên đặt cờ này để ẩn đi; trang của giảng viên
+    // (ClassReports/StudentDetail) không đặt nên vẫn thấy đầy đủ.
+    bool hideAiFeedback = ViewData["HideAiFeedback"] as bool? ?? false;
 }
 
 <div class="aives-q-card">
@@ -192,47 +198,26 @@
                 }
                 else if (!isPassFailMode)
                 {
-                    @* Tách bạch hai con số: AI đề xuất bao nhiêu, giảng viên chốt bao nhiêu.
-                       Trước đây chỉ hiện một badge "Điểm chính thức" nên không ai biết GV đã sửa hay giữ nguyên điểm AI. *@
+                    @* Sinh viên chỉ thấy MỘT con số tại một thời điểm:
+                       - AI chấm xong, GV chưa duyệt  → điểm AI kèm nhãn "chờ giảng viên duyệt".
+                       - GV đã chốt                     → CHỈ điểm GV, không hiện lại điểm AI.
+                       Việc AI đề xuất bao nhiêu và GV sửa bao nhiêu là thông tin nội bộ của
+                       giảng viên, hiển thị ở trang Review/ClassReports chứ không đưa cho sinh viên
+                       (tránh sinh viên so sánh rồi thắc mắc điểm bị hạ). *@
                     <div class="d-flex flex-wrap align-items-center gap-2">
                         @if (Model.IsFinalized)
                         {
-                            var aiScore = Model.AiScore ?? Model.AiSuggestedScore;
                             var teacherScore = Model.TeacherFinalScore;
-                            var teacherChanged = teacherScore > 0 && teacherScore != aiScore;
-
-                            <span class="badge bg-secondary-subtle text-secondary border rounded-pill px-3 py-2 fs-6"
-                                  title="Điểm do mô hình AI đề xuất trước khi giảng viên duyệt">
-                                <i class="bi bi-robot me-1"></i>Điểm AI: @(Model.AiScore.HasValue ? aiScore.ToString("0.##") : "—") / @Model.MaxScore.ToString("0.##")
-                            </span>
 
                             <span class="badge bg-success text-white rounded-pill px-3 py-2 fs-6 fw-bold"
-                                  title="Điểm giảng viên chốt — có hiệu lực học vụ">
-                                <i class="bi bi-person-workspace me-1"></i>Điểm GV: @teacherScore.ToString("0.##") / @Model.MaxScore.ToString("0.##")
+                                  title="Điểm chính thức do giảng viên chốt">
+                                <i class="bi bi-patch-check-fill me-1"></i>Điểm chính thức: @teacherScore.ToString("0.##") / @Model.MaxScore.ToString("0.##")
                             </span>
-
-                            @if (teacherChanged)
-                            {
-                                <span class="badge bg-warning text-dark rounded-pill px-2 py-1 small"
-                                      title="Giảng viên đã điều chỉnh so với điểm AI đề xuất">
-                                    <i class="bi bi-pencil-square me-1"></i>GV đã điều chỉnh (@((teacherScore - aiScore) >= 0 ? "+" : "")@((teacherScore - aiScore).ToString("0.##")))
-                                </span>
-                            }
-                            else
-                            {
-                                <span class="badge bg-light text-secondary border rounded-pill px-2 py-1 small"
-                                      title="Giảng viên xác nhận đúng điểm AI đề xuất">
-                                    <i class="bi bi-check2-circle me-1"></i>GV xác nhận điểm AI
-                                </span>
-                            }
                         }
                         else if (Model.IsAiGraded)
                         {
                             <span class="badge bg-warning text-dark rounded-pill px-3 py-2 fs-6 fw-bold" title="Điểm do AI chấm tạm thời, đang chờ giảng viên duyệt">
-                                <i class="bi bi-robot me-1"></i>Điểm AI (chờ duyệt): @Model.EarnedScore.ToString("0.##") / @Model.MaxScore.ToString("0.##")
-                            </span>
-                            <span class="badge bg-light text-secondary border rounded-pill px-3 py-2 fs-6" title="Giảng viên chưa chốt điểm">
-                                <i class="bi bi-person-workspace me-1"></i>Điểm GV: chưa chốt
+                                <i class="bi bi-robot me-1"></i>AI chấm, chờ giảng viên duyệt: @Model.EarnedScore.ToString("0.##") / @Model.MaxScore.ToString("0.##")
                             </span>
                         }
                         else
@@ -245,8 +230,8 @@
                 }
             </div>
 
-            <!-- Nhận xét chi tiết của AI -->
-            @if (!string.IsNullOrWhiteSpace(Model.AiFeedback))
+            @* Nhận xét chi tiết của AI — chỉ giảng viên thấy *@
+            @if (!hideAiFeedback && !string.IsNullOrWhiteSpace(Model.AiFeedback))
             {
                 <div class="aives-feedback-box mb-3">
                     <div class="fw-bold text-dark mb-1 d-flex align-items-center gap-1">
@@ -256,7 +241,9 @@
                 </div>
             }
 
-            <!-- Điểm mạnh & Điểm cần cải thiện -->
+            @* Điểm mạnh & Điểm cần cải thiện — cùng lý do, ẩn với sinh viên *@
+            @if (!hideAiFeedback)
+            {
             <div class="row g-3">
                 @if (!string.IsNullOrWhiteSpace(Model.Strengths))
                 {
@@ -282,6 +269,7 @@
                     </div>
                 }
             </div>
+            }
         </div>
 
         <!-- KHỐI 5: Tiêu chí Rubric chi tiết & Chuẩn đầu ra -->

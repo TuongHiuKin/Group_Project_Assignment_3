@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AIVES.BLL.Interfaces;
 using AIVES.BLL.Interfaces.ExamReporting;
 using AIVES.BLL.Interfaces.Grading;
 using AIVES.BLL.Models.ExamReporting;
@@ -19,15 +20,18 @@ public class ReviewModel : PageModel
 {
     private readonly IGradingOrchestrator _gradingOrchestrator;
     private readonly IClassReportService _classReportService;
+    private readonly ISystemAccountService _accountService;
     private readonly ILogger<ReviewModel> _logger;
 
     public ReviewModel(
         IGradingOrchestrator gradingOrchestrator,
         IClassReportService classReportService,
+        ISystemAccountService accountService,
         ILogger<ReviewModel> logger)
     {
         _gradingOrchestrator = gradingOrchestrator ?? throw new ArgumentNullException(nameof(gradingOrchestrator));
         _classReportService = classReportService ?? throw new ArgumentNullException(nameof(classReportService));
+        _accountService = accountService ?? throw new ArgumentNullException(nameof(accountService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -37,6 +41,22 @@ public class ReviewModel : PageModel
     public SessionGradingSummaryDto? Session { get; set; }
     public string ExamTitle { get; set; } = string.Empty;
     public string StudentDisplayName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Ánh xạ AccountId → tên hiển thị cho audit trail. <c>VivaGradeChangeLog.ChangedBy</c> và
+    /// <c>VivaGradingResult.FinalizedBy</c> lưu AccountId dạng chuỗi, nên trước đây trang duyệt
+    /// hiện "Giảng viên: 2" — vô nghĩa với người đọc và trông như lỗi.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> AccountNames { get; private set; } =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Hiển thị tên giảng viên từ id, rơi về id nếu không tra được.</summary>
+    public string ResolveAccountName(string? accountId) =>
+        string.IsNullOrWhiteSpace(accountId)
+            ? "—"
+            : AccountNames.TryGetValue(accountId.Trim(), out var name) && !string.IsNullOrWhiteSpace(name)
+                ? name
+                : accountId.Trim();
 
     public async Task<IActionResult> OnGetAsync(Guid? sessionId, CancellationToken ct = default)
     {
@@ -70,6 +90,8 @@ public class ReviewModel : PageModel
                 ? $"{Session.StudentName} ({Session.StudentId})"
                 : Session.StudentId;
 
+            await LoadAccountNamesAsync(Session, ct);
+
             return Page();
         }
         catch (Exception ex)
@@ -77,6 +99,44 @@ public class ReviewModel : PageModel
             _logger.LogError(ex, "Lỗi khi tải chi tiết bài thi chấm {SessionId}", targetSessionId.Value);
             SetErrorMessage("Có lỗi xảy ra khi tải dữ liệu bài thi. Vui lòng thử lại sau.");
             return RedirectToPage("/Grading/Index");
+        }
+    }
+
+    /// <summary>
+    /// Nạp tên hiển thị cho mọi AccountId xuất hiện trong audit trail của phiên này.
+    /// Chỉ tra những id thực sự có trong log để không kéo toàn bộ bảng tài khoản.
+    /// </summary>
+    private async Task LoadAccountNamesAsync(SessionGradingSummaryDto session, CancellationToken ct)
+    {
+        var ids = session.AllChangeLogs
+            .Select(l => l.ChangedBy)
+            .Concat(session.QuestionResults.Select(q => q.FinalizedBy))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Select(id => id!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (ids.Count == 0)
+        {
+            AccountNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            return;
+        }
+
+        try
+        {
+            var accounts = await _accountService.SearchAccountsAsync(
+                keyword: null, role: null, includeDeleted: true, ct: ct);
+
+            AccountNames = accounts
+                .Where(a => ids.Contains(a.AccountId.ToString(), StringComparer.OrdinalIgnoreCase))
+                .GroupBy(a => a.AccountId.ToString(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First().AccountName, StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            // Tra tên chỉ để hiển thị; lỗi ở đây không được làm hỏng trang duyệt điểm.
+            _logger.LogWarning(ex, "Không nạp được tên tài khoản cho audit trail của phiên {SessionId}.", session.SessionId);
+            AccountNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
     }
 
